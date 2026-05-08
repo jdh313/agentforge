@@ -1,15 +1,28 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, join, relative } from 'node:path';
 import matter from 'gray-matter';
+import JSZip from 'jszip';
 import { deepMerge } from './deep-merge.ts';
-import { CanonicalFrontmatter, CLAUDE_ONLY_KEYS } from './schema.ts';
-import { getTarget } from './targets/index.ts';
-import type { RenderResult, TargetName, Warning } from './types.ts';
+import { ARTIFACT_DEFS, CLAUDE_ONLY_KEYS } from './schema.ts';
+import { getArtifactConfig } from './targets/index.ts';
+import type { ArtifactType, RenderResult, TargetName, Warning } from './types.ts';
 
 export interface RenderOptions {
   sourceDir: string;
   target: TargetName;
   outDir: string;
+  artifact?: ArtifactType;
 }
 
 // biome-ignore-start lint/suspicious/noTemplateCurlyInString: labels are literal docs of Claude-only patterns
@@ -48,20 +61,27 @@ const omitKey = <T extends Record<string, unknown>>(
 };
 
 export const render = async (opts: RenderOptions): Promise<RenderResult> => {
-  const { sourceDir, target, outDir } = opts;
-  const skillFile = join(sourceDir, 'SKILL.md');
-  if (!existsSync(skillFile)) {
-    throw new Error(`SKILL.md not found at ${skillFile}`);
+  const { sourceDir, target, outDir, artifact = 'skill' } = opts;
+  const artifactDef = ARTIFACT_DEFS[artifact];
+  const canonicalFile = join(sourceDir, artifactDef.canonicalFilename);
+  if (!existsSync(canonicalFile)) {
+    throw new Error(`${artifactDef.canonicalFilename} not found at ${canonicalFile}`);
   }
 
-  const raw = readFileSync(skillFile, 'utf-8');
+  const artifactConfig = getArtifactConfig(target, artifact);
+  if (!artifactConfig) {
+    throw new Error(`target ${target} does not support artifact ${artifact}`);
+  }
+
+  const raw = readFileSync(canonicalFile, 'utf-8');
   const parsed = matter(raw);
-  const data = CanonicalFrontmatter.parse(parsed.data);
+  const data = artifactDef.canonicalSchema.parse(parsed.data) as Record<string, unknown> & {
+    targets?: Record<string, unknown>;
+  };
   const canonicalBody = parsed.content;
 
-  const adapter = getTarget(target);
   const { targets, ...canonicalFrontmatter } = data;
-  const overrideRaw = targets?.[target] ?? {};
+  const overrideRaw = (targets?.[target] as Record<string, unknown> | undefined) ?? {};
   const overrideBody =
     typeof (overrideRaw as { body?: unknown }).body === 'string'
       ? (overrideRaw as { body: string }).body
@@ -70,8 +90,8 @@ export const render = async (opts: RenderOptions): Promise<RenderResult> => {
 
   const merged = deepMerge(canonicalFrontmatter as Record<string, unknown>, overrideFields);
   const body = overrideBody ?? canonicalBody;
-  const filtered = pickKeys(merged, adapter.allowedFrontmatterKeys);
-  adapter.outputFrontmatterSchema.parse(filtered);
+  const filtered = pickKeys(merged, artifactConfig.allowedFrontmatterKeys);
+  artifactConfig.outputFrontmatterSchema.parse(filtered);
 
   const warnings: Warning[] = [];
   if (target !== 'claude') {
@@ -97,19 +117,50 @@ export const render = async (opts: RenderOptions): Promise<RenderResult> => {
     }
   }
 
-  mkdirSync(outDir, { recursive: true });
-  const outputPath = join(outDir, 'SKILL.md');
-  const rendered = matter.stringify(body, filtered);
-  writeFileSync(outputPath, rendered, 'utf-8');
+  const artifactName =
+    typeof (filtered as { name?: unknown }).name === 'string' &&
+    (filtered as { name: string }).name.length > 0
+      ? (filtered as { name: string }).name
+      : nameFromSourceDir(sourceDir);
 
+  const rendered = matter.stringify(body, filtered);
   const resourcesCopied: string[] = [];
-  for (const sub of adapter.resourceSubdirs) {
+
+  if (artifactDef.layout === 'file') {
+    mkdirSync(outDir, { recursive: true });
+    const outputPath = join(outDir, `${artifactName}.md`);
+    writeFileSync(outputPath, rendered, 'utf-8');
+    return { outputPath, resourcesCopied, warnings };
+  }
+
+  const isZip = artifactConfig.bundle === 'zip';
+  const tempRoot = isZip ? mkdtempSync(join(tmpdir(), 'agentforge-zip-')) : null;
+  const materializeDir = tempRoot ? join(tempRoot, artifactName) : outDir;
+
+  mkdirSync(materializeDir, { recursive: true });
+  const canonicalOutPath = join(materializeDir, artifactDef.canonicalFilename);
+  writeFileSync(canonicalOutPath, rendered, 'utf-8');
+
+  for (const sub of artifactConfig.resourceSubdirs) {
     const srcSub = join(sourceDir, sub);
     if (existsSync(srcSub)) {
-      const destSub = join(outDir, sub);
+      const destSub = join(materializeDir, sub);
       cpSync(srcSub, destSub, { recursive: true });
       resourcesCopied.push(sub);
     }
+  }
+
+  let outputPath = canonicalOutPath;
+  if (tempRoot) {
+    const zip = new JSZip();
+    for (const rel of walkFiles(tempRoot)) {
+      zip.file(rel, readFileSync(join(tempRoot, rel)));
+    }
+    const buf = await zip.generateAsync({ type: 'nodebuffer' });
+    mkdirSync(outDir, { recursive: true });
+    outputPath = join(outDir, `${artifactName}.zip`);
+    writeFileSync(outputPath, buf);
+    rmSync(tempRoot, { recursive: true, force: true });
   }
 
   return {
@@ -119,4 +170,20 @@ export const render = async (opts: RenderOptions): Promise<RenderResult> => {
   };
 };
 
-export const skillNameFromSourceDir = (sourceDir: string): string => basename(sourceDir);
+const walkFiles = (root: string): string[] => {
+  const out: string[] = [];
+  const visit = (dir: string) => {
+    for (const entry of readdirSync(dir)) {
+      const abs = join(dir, entry);
+      if (statSync(abs).isDirectory()) {
+        visit(abs);
+      } else {
+        out.push(relative(root, abs));
+      }
+    }
+  };
+  visit(root);
+  return out.toSorted();
+};
+
+export const nameFromSourceDir = (sourceDir: string): string => basename(sourceDir);

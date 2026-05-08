@@ -11,8 +11,12 @@ const CodexOutputFrontmatter = z.object({
 
 export const codexTarget: TargetAdapter = {
   name: 'codex',
-  outputBaseDir: () => join(homedir(), '.agents/skills'),
-  allowedFrontmatterKeys: COMMON_KEYS,
-  resourceSubdirs: new Set(['scripts', 'references', 'assets']),
-  outputFrontmatterSchema: CodexOutputFrontmatter,
+  artifacts: {
+    skill: {
+      outputBaseDir: () => join(homedir(), '.agents/skills'),
+      allowedFrontmatterKeys: COMMON_KEYS,
+      resourceSubdirs: new Set(['scripts', 'references', 'assets']),
+      outputFrontmatterSchema: CodexOutputFrontmatter,
+    },
+  },
 };

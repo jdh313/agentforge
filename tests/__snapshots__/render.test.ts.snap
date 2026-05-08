@@ -1,6 +1,6 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`render claude-rich → claude: SKILL.md 1`] = `
+exports[`render skill claude-rich → claude: canonical 1`] = `
 "---
 name: claude-rich
 description: >-
@@ -19,11 +19,11 @@ Fix GitHub issue $ARGUMENTS following the project's coding standards.
 "
 `;
 
-exports[`render claude-rich → claude: warnings 1`] = `[]`;
+exports[`render skill claude-rich → claude: warnings 1`] = `[]`;
 
-exports[`render claude-rich → claude: resources 1`] = `[]`;
+exports[`render skill claude-rich → claude: resources 1`] = `[]`;
 
-exports[`render claude-rich → opencode: SKILL.md 1`] = `
+exports[`render skill claude-rich → opencode: canonical 1`] = `
 "---
 name: claude-rich
 description: >-
@@ -39,7 +39,7 @@ Fix GitHub issue $ARGUMENTS following the project's coding standards.
 "
 `;
 
-exports[`render claude-rich → opencode: warnings 1`] = `
+exports[`render skill claude-rich → opencode: warnings 1`] = `
 [
   {
     "detail": "stripped argument-hint, disable-model-invocation, allowed-tools",
@@ -54,9 +54,9 @@ exports[`render claude-rich → opencode: warnings 1`] = `
 ]
 `;
 
-exports[`render claude-rich → opencode: resources 1`] = `[]`;
+exports[`render skill claude-rich → opencode: resources 1`] = `[]`;
 
-exports[`render claude-rich → codex: SKILL.md 1`] = `
+exports[`render skill claude-rich → codex: canonical 1`] = `
 "---
 name: claude-rich
 description: >-
@@ -72,7 +72,7 @@ Fix GitHub issue $ARGUMENTS following the project's coding standards.
 "
 `;
 
-exports[`render claude-rich → codex: warnings 1`] = `
+exports[`render skill claude-rich → codex: warnings 1`] = `
 [
   {
     "detail": "stripped argument-hint, disable-model-invocation, allowed-tools",
@@ -87,9 +87,42 @@ exports[`render claude-rich → codex: warnings 1`] = `
 ]
 `;
 
-exports[`render claude-rich → codex: resources 1`] = `[]`;
+exports[`render skill claude-rich → codex: resources 1`] = `[]`;
 
-exports[`render with-overrides → claude: SKILL.md 1`] = `
+exports[`render skill claude-rich → claude-chat: canonical 1`] = `
+"---
+name: claude-rich
+description: >-
+  Test fixture exercising Claude-only frontmatter and $ARGUMENTS body
+  substitution.
+---
+
+Fix GitHub issue $ARGUMENTS following the project's coding standards.
+
+1. Read the issue description.
+2. Implement the fix.
+3. Add tests.
+"
+`;
+
+exports[`render skill claude-rich → claude-chat: warnings 1`] = `
+[
+  {
+    "detail": "stripped argument-hint, disable-model-invocation, allowed-tools",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "claude-chat",
+  },
+  {
+    "detail": "body uses $ARGUMENTS but no targets.claude-chat.body override",
+    "kind": "claude-only-body-feature",
+    "target": "claude-chat",
+  },
+]
+`;
+
+exports[`render skill claude-rich → claude-chat: resources 1`] = `[]`;
+
+exports[`render skill with-overrides → claude: canonical 1`] = `
 "---
 name: with-overrides
 description: Test fixture for per-target body and field overrides.
@@ -101,11 +134,11 @@ Fix issue $ARGUMENTS following the project's coding standards.
 "
 `;
 
-exports[`render with-overrides → claude: warnings 1`] = `[]`;
+exports[`render skill with-overrides → claude: warnings 1`] = `[]`;
 
-exports[`render with-overrides → claude: resources 1`] = `[]`;
+exports[`render skill with-overrides → claude: resources 1`] = `[]`;
 
-exports[`render with-overrides → opencode: SKILL.md 1`] = `
+exports[`render skill with-overrides → opencode: canonical 1`] = `
 "---
 name: with-overrides
 description: Test fixture for per-target body and field overrides.
@@ -115,7 +148,7 @@ then summarize and fix it.
 "
 `;
 
-exports[`render with-overrides → opencode: warnings 1`] = `
+exports[`render skill with-overrides → opencode: warnings 1`] = `
 [
   {
     "detail": "stripped disable-model-invocation, allowed-tools",
@@ -125,9 +158,9 @@ exports[`render with-overrides → opencode: warnings 1`] = `
 ]
 `;
 
-exports[`render with-overrides → opencode: resources 1`] = `[]`;
+exports[`render skill with-overrides → opencode: resources 1`] = `[]`;
 
-exports[`render with-overrides → codex: SKILL.md 1`] = `
+exports[`render skill with-overrides → codex: canonical 1`] = `
 "---
 name: with-overrides
 description: With-overrides skill (Codex variant — Codex-tailored description).
@@ -136,7 +169,7 @@ For Codex: pass the issue number explicitly, then fix and test.
 "
 `;
 
-exports[`render with-overrides → codex: warnings 1`] = `
+exports[`render skill with-overrides → codex: warnings 1`] = `
 [
   {
     "detail": "stripped disable-model-invocation, allowed-tools",
@@ -146,9 +179,36 @@ exports[`render with-overrides → codex: warnings 1`] = `
 ]
 `;
 
-exports[`render with-overrides → codex: resources 1`] = `[]`;
+exports[`render skill with-overrides → codex: resources 1`] = `[]`;
 
-exports[`render with-resources → claude: SKILL.md 1`] = `
+exports[`render skill with-overrides → claude-chat: canonical 1`] = `
+"---
+name: with-overrides
+description: Test fixture for per-target body and field overrides.
+---
+
+Fix issue $ARGUMENTS following the project's coding standards.
+"
+`;
+
+exports[`render skill with-overrides → claude-chat: warnings 1`] = `
+[
+  {
+    "detail": "stripped disable-model-invocation, allowed-tools",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "claude-chat",
+  },
+  {
+    "detail": "body uses $ARGUMENTS but no targets.claude-chat.body override",
+    "kind": "claude-only-body-feature",
+    "target": "claude-chat",
+  },
+]
+`;
+
+exports[`render skill with-overrides → claude-chat: resources 1`] = `[]`;
+
+exports[`render skill with-resources → claude: canonical 1`] = `
 "---
 name: with-resources
 description: Test fixture exercising bundled resource subdirectory passthrough.
@@ -158,16 +218,16 @@ See \`references/api.md\` for protocol details and run \`scripts/run.sh\` to exe
 "
 `;
 
-exports[`render with-resources → claude: warnings 1`] = `[]`;
+exports[`render skill with-resources → claude: warnings 1`] = `[]`;
 
-exports[`render with-resources → claude: resources 1`] = `
+exports[`render skill with-resources → claude: resources 1`] = `
 [
   "references",
   "scripts",
 ]
 `;
 
-exports[`render with-resources → opencode: SKILL.md 1`] = `
+exports[`render skill with-resources → opencode: canonical 1`] = `
 "---
 name: with-resources
 description: Test fixture exercising bundled resource subdirectory passthrough.
@@ -177,16 +237,16 @@ See \`references/api.md\` for protocol details and run \`scripts/run.sh\` to exe
 "
 `;
 
-exports[`render with-resources → opencode: warnings 1`] = `[]`;
+exports[`render skill with-resources → opencode: warnings 1`] = `[]`;
 
-exports[`render with-resources → opencode: resources 1`] = `
+exports[`render skill with-resources → opencode: resources 1`] = `
 [
   "references",
   "scripts",
 ]
 `;
 
-exports[`render with-resources → codex: SKILL.md 1`] = `
+exports[`render skill with-resources → codex: canonical 1`] = `
 "---
 name: with-resources
 description: Test fixture exercising bundled resource subdirectory passthrough.
@@ -196,16 +256,35 @@ See \`references/api.md\` for protocol details and run \`scripts/run.sh\` to exe
 "
 `;
 
-exports[`render with-resources → codex: warnings 1`] = `[]`;
+exports[`render skill with-resources → codex: warnings 1`] = `[]`;
 
-exports[`render with-resources → codex: resources 1`] = `
+exports[`render skill with-resources → codex: resources 1`] = `
 [
   "references",
   "scripts",
 ]
 `;
 
-exports[`render common-subset → claude: SKILL.md 1`] = `
+exports[`render skill with-resources → claude-chat: canonical 1`] = `
+"---
+name: with-resources
+description: Test fixture exercising bundled resource subdirectory passthrough.
+---
+
+See \`references/api.md\` for protocol details and run \`scripts/run.sh\` to exercise it.
+"
+`;
+
+exports[`render skill with-resources → claude-chat: warnings 1`] = `[]`;
+
+exports[`render skill with-resources → claude-chat: resources 1`] = `
+[
+  "references",
+  "scripts",
+]
+`;
+
+exports[`render skill common-subset → claude: canonical 1`] = `
 "---
 name: common-subset
 description: Test fixture using only the common-subset frontmatter and a plain body.
@@ -215,11 +294,11 @@ A short, plain skill body with no Claude-only features.
 "
 `;
 
-exports[`render common-subset → claude: warnings 1`] = `[]`;
+exports[`render skill common-subset → claude: warnings 1`] = `[]`;
 
-exports[`render common-subset → claude: resources 1`] = `[]`;
+exports[`render skill common-subset → claude: resources 1`] = `[]`;
 
-exports[`render common-subset → opencode: SKILL.md 1`] = `
+exports[`render skill common-subset → opencode: canonical 1`] = `
 "---
 name: common-subset
 description: Test fixture using only the common-subset frontmatter and a plain body.
@@ -229,11 +308,11 @@ A short, plain skill body with no Claude-only features.
 "
 `;
 
-exports[`render common-subset → opencode: warnings 1`] = `[]`;
+exports[`render skill common-subset → opencode: warnings 1`] = `[]`;
 
-exports[`render common-subset → opencode: resources 1`] = `[]`;
+exports[`render skill common-subset → opencode: resources 1`] = `[]`;
 
-exports[`render common-subset → codex: SKILL.md 1`] = `
+exports[`render skill common-subset → codex: canonical 1`] = `
 "---
 name: common-subset
 description: Test fixture using only the common-subset frontmatter and a plain body.
@@ -243,6 +322,50 @@ A short, plain skill body with no Claude-only features.
 "
 `;
 
-exports[`render common-subset → codex: warnings 1`] = `[]`;
+exports[`render skill common-subset → codex: warnings 1`] = `[]`;
 
-exports[`render common-subset → codex: resources 1`] = `[]`;
+exports[`render skill common-subset → codex: resources 1`] = `[]`;
+
+exports[`render skill common-subset → claude-chat: canonical 1`] = `
+"---
+name: common-subset
+description: Test fixture using only the common-subset frontmatter and a plain body.
+---
+
+A short, plain skill body with no Claude-only features.
+"
+`;
+
+exports[`render skill common-subset → claude-chat: warnings 1`] = `[]`;
+
+exports[`render skill common-subset → claude-chat: resources 1`] = `[]`;
+
+exports[`render output-style output-style-basic → claude: canonical 1`] = `
+"---
+name: terse-mentor
+description: Terse mentor — brief explanations followed by one targeted question.
+---
+
+You are a terse mentor. Keep explanations to two sentences max, then ask a focused follow-up question that probes the user's understanding.
+"
+`;
+
+exports[`render output-style output-style-basic → claude: warnings 1`] = `[]`;
+
+exports[`render output-style output-style-basic → claude: resources 1`] = `[]`;
+
+exports[`render output-style output-style-rich → claude: canonical 1`] = `
+"---
+name: code-reviewer
+description: Senior reviewer voice — surfaces the highest-priority concern first.
+keep-coding-instructions: true
+force-for-plugin: false
+---
+
+You are reviewing code as a senior engineer. Surface the single highest-priority concern first; queue others. Cite line numbers in \`path:line\` form.
+"
+`;
+
+exports[`render output-style output-style-rich → claude: warnings 1`] = `[]`;
+
+exports[`render output-style output-style-rich → claude: resources 1`] = `[]`;

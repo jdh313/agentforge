@@ -1,10 +1,10 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { ALL_CLAUDE_KEYS } from '../schema.ts';
+import { ALL_CLAUDE_KEYS, OUTPUT_STYLE_KEYS } from '../schema.ts';
 import type { TargetAdapter } from './index.ts';
 
-const ClaudeOutputFrontmatter = z.object({
+const ClaudeSkillFrontmatter = z.object({
   name: z.string().optional(),
   description: z.string(),
   when_to_use: z.string().optional(),
@@ -22,10 +22,27 @@ const ClaudeOutputFrontmatter = z.object({
   shell: z.enum(['bash', 'powershell']).optional(),
 });
 
+const ClaudeOutputStyleFrontmatter = z.object({
+  name: z.string().optional(),
+  description: z.string(),
+  'keep-coding-instructions': z.boolean().optional(),
+  'force-for-plugin': z.boolean().optional(),
+});
+
 export const claudeTarget: TargetAdapter = {
   name: 'claude',
-  outputBaseDir: () => join(homedir(), '.claude/skills'),
-  allowedFrontmatterKeys: ALL_CLAUDE_KEYS,
-  resourceSubdirs: new Set(['scripts', 'references', 'assets']),
-  outputFrontmatterSchema: ClaudeOutputFrontmatter,
+  artifacts: {
+    skill: {
+      outputBaseDir: () => join(homedir(), '.claude/skills'),
+      allowedFrontmatterKeys: ALL_CLAUDE_KEYS,
+      resourceSubdirs: new Set(['scripts', 'references', 'assets']),
+      outputFrontmatterSchema: ClaudeSkillFrontmatter,
+    },
+    'output-style': {
+      outputBaseDir: () => join(homedir(), '.claude/output-styles'),
+      allowedFrontmatterKeys: OUTPUT_STYLE_KEYS,
+      resourceSubdirs: new Set(),
+      outputFrontmatterSchema: ClaudeOutputStyleFrontmatter,
+    },
+  },
 };
