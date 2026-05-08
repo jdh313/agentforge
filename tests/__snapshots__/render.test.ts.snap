@@ -1,0 +1,248 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`render claude-rich → claude: SKILL.md 1`] = `
+"---
+name: claude-rich
+description: >-
+  Test fixture exercising Claude-only frontmatter and $ARGUMENTS body
+  substitution.
+argument-hint: '[issue-number]'
+disable-model-invocation: true
+allowed-tools: Bash(git *) Read
+---
+
+Fix GitHub issue $ARGUMENTS following the project's coding standards.
+
+1. Read the issue description.
+2. Implement the fix.
+3. Add tests.
+"
+`;
+
+exports[`render claude-rich → claude: warnings 1`] = `[]`;
+
+exports[`render claude-rich → claude: resources 1`] = `[]`;
+
+exports[`render claude-rich → opencode: SKILL.md 1`] = `
+"---
+name: claude-rich
+description: >-
+  Test fixture exercising Claude-only frontmatter and $ARGUMENTS body
+  substitution.
+---
+
+Fix GitHub issue $ARGUMENTS following the project's coding standards.
+
+1. Read the issue description.
+2. Implement the fix.
+3. Add tests.
+"
+`;
+
+exports[`render claude-rich → opencode: warnings 1`] = `
+[
+  {
+    "detail": "stripped argument-hint, disable-model-invocation, allowed-tools",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "opencode",
+  },
+  {
+    "detail": "body uses $ARGUMENTS but no targets.opencode.body override",
+    "kind": "claude-only-body-feature",
+    "target": "opencode",
+  },
+]
+`;
+
+exports[`render claude-rich → opencode: resources 1`] = `[]`;
+
+exports[`render claude-rich → codex: SKILL.md 1`] = `
+"---
+name: claude-rich
+description: >-
+  Test fixture exercising Claude-only frontmatter and $ARGUMENTS body
+  substitution.
+---
+
+Fix GitHub issue $ARGUMENTS following the project's coding standards.
+
+1. Read the issue description.
+2. Implement the fix.
+3. Add tests.
+"
+`;
+
+exports[`render claude-rich → codex: warnings 1`] = `
+[
+  {
+    "detail": "stripped argument-hint, disable-model-invocation, allowed-tools",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "codex",
+  },
+  {
+    "detail": "body uses $ARGUMENTS but no targets.codex.body override",
+    "kind": "claude-only-body-feature",
+    "target": "codex",
+  },
+]
+`;
+
+exports[`render claude-rich → codex: resources 1`] = `[]`;
+
+exports[`render with-overrides → claude: SKILL.md 1`] = `
+"---
+name: with-overrides
+description: Test fixture for per-target body and field overrides.
+disable-model-invocation: true
+allowed-tools: Bash(git *)
+---
+
+Fix issue $ARGUMENTS following the project's coding standards.
+"
+`;
+
+exports[`render with-overrides → claude: warnings 1`] = `[]`;
+
+exports[`render with-overrides → claude: resources 1`] = `[]`;
+
+exports[`render with-overrides → opencode: SKILL.md 1`] = `
+"---
+name: with-overrides
+description: Test fixture for per-target body and field overrides.
+---
+Pass the issue number as the first argument when invoking this skill,
+then summarize and fix it.
+"
+`;
+
+exports[`render with-overrides → opencode: warnings 1`] = `
+[
+  {
+    "detail": "stripped disable-model-invocation, allowed-tools",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "opencode",
+  },
+]
+`;
+
+exports[`render with-overrides → opencode: resources 1`] = `[]`;
+
+exports[`render with-overrides → codex: SKILL.md 1`] = `
+"---
+name: with-overrides
+description: With-overrides skill (Codex variant — Codex-tailored description).
+---
+For Codex: pass the issue number explicitly, then fix and test.
+"
+`;
+
+exports[`render with-overrides → codex: warnings 1`] = `
+[
+  {
+    "detail": "stripped disable-model-invocation, allowed-tools",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "codex",
+  },
+]
+`;
+
+exports[`render with-overrides → codex: resources 1`] = `[]`;
+
+exports[`render with-resources → claude: SKILL.md 1`] = `
+"---
+name: with-resources
+description: Test fixture exercising bundled resource subdirectory passthrough.
+---
+
+See \`references/api.md\` for protocol details and run \`scripts/run.sh\` to exercise it.
+"
+`;
+
+exports[`render with-resources → claude: warnings 1`] = `[]`;
+
+exports[`render with-resources → claude: resources 1`] = `
+[
+  "references",
+  "scripts",
+]
+`;
+
+exports[`render with-resources → opencode: SKILL.md 1`] = `
+"---
+name: with-resources
+description: Test fixture exercising bundled resource subdirectory passthrough.
+---
+
+See \`references/api.md\` for protocol details and run \`scripts/run.sh\` to exercise it.
+"
+`;
+
+exports[`render with-resources → opencode: warnings 1`] = `[]`;
+
+exports[`render with-resources → opencode: resources 1`] = `
+[
+  "references",
+  "scripts",
+]
+`;
+
+exports[`render with-resources → codex: SKILL.md 1`] = `
+"---
+name: with-resources
+description: Test fixture exercising bundled resource subdirectory passthrough.
+---
+
+See \`references/api.md\` for protocol details and run \`scripts/run.sh\` to exercise it.
+"
+`;
+
+exports[`render with-resources → codex: warnings 1`] = `[]`;
+
+exports[`render with-resources → codex: resources 1`] = `
+[
+  "references",
+  "scripts",
+]
+`;
+
+exports[`render common-subset → claude: SKILL.md 1`] = `
+"---
+name: common-subset
+description: Test fixture using only the common-subset frontmatter and a plain body.
+---
+
+A short, plain skill body with no Claude-only features.
+"
+`;
+
+exports[`render common-subset → claude: warnings 1`] = `[]`;
+
+exports[`render common-subset → claude: resources 1`] = `[]`;
+
+exports[`render common-subset → opencode: SKILL.md 1`] = `
+"---
+name: common-subset
+description: Test fixture using only the common-subset frontmatter and a plain body.
+---
+
+A short, plain skill body with no Claude-only features.
+"
+`;
+
+exports[`render common-subset → opencode: warnings 1`] = `[]`;
+
+exports[`render common-subset → opencode: resources 1`] = `[]`;
+
+exports[`render common-subset → codex: SKILL.md 1`] = `
+"---
+name: common-subset
+description: Test fixture using only the common-subset frontmatter and a plain body.
+---
+
+A short, plain skill body with no Claude-only features.
+"
+`;
+
+exports[`render common-subset → codex: warnings 1`] = `[]`;
+
+exports[`render common-subset → codex: resources 1`] = `[]`;
