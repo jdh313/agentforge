@@ -1,0 +1,27 @@
+schema: agentforge.package/v1
+id: librarian
+defaults:
+  name: librarian
+  version: 0.17.1
+  description: Curates, catalogs, retrieves, and maintains an Obsidian knowledge base.
+  author:
+    name: Jacob Hoehler
+  license: Apache-2.0
+  keywords: [obsidian, knowledge-base, notes, curation]
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+  - type: agent
+    pattern: agents/*.md
+targets:
+  claude:
+    native:
+      description: Full Claude-native Librarian package metadata
+  codex:
+    overrides:
+      description: Curates and retrieves notes through shared workflows and isolated roles.
+    native:
+      interface:
+        displayName: Librarian
+        category: Productivity
+        capabilities: [Read, Write, Interactive]

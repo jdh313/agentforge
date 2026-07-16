@@ -1,0 +1,11 @@
+schema: agentforge.package/v1
+id: malformed-native
+defaults:
+  name: malformed-native
+  version: 1.0.0
+artifacts:
+  - type: skill
+    pattern: SKILL.md
+targets:
+  codex:
+    native: [not, an, object]

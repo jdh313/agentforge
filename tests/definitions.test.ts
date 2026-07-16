@@ -1,0 +1,160 @@
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  loadMarketplaceDefinition,
+  loadPackageDefinition,
+  parseMarketplaceDefinition,
+  parsePackageDefinition,
+} from '../src/definitions.ts';
+
+const DEFINITIONS = join(import.meta.dir, 'fixtures', 'definitions');
+const MARKETPLACE_FIXTURE = join(DEFINITIONS, 'cc-marketplace');
+
+let temporaryRoot: string;
+
+beforeAll(() => {
+  temporaryRoot = mkdtempSync(join(tmpdir(), 'agentforge-definitions-'));
+});
+
+afterAll(() => {
+  if (temporaryRoot && existsSync(temporaryRoot)) {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+describe('package definitions', () => {
+  test('loads a representative Librarian package and resolves projection patterns', async () => {
+    const loaded = await loadPackageDefinition(
+      join(MARKETPLACE_FIXTURE, 'packages', 'librarian', 'PACKAGE.yaml'),
+    );
+
+    expect(loaded.definition.id).toBe('librarian');
+    expect(loaded.definition.defaults).toEqual({
+      name: 'librarian',
+      version: '0.17.1',
+      description: 'Curates, catalogs, retrieves, and maintains an Obsidian knowledge base.',
+      author: { name: 'Jacob Hoehler' },
+      license: 'Apache-2.0',
+      keywords: ['obsidian', 'knowledge-base', 'notes', 'curation'],
+    });
+    expect(Object.keys(loaded.definition.targets)).toEqual(['claude', 'codex']);
+    expect(loaded.definition.targets.codex?.overrides?.description).toContain('shared workflows');
+    expect(loaded.definition.targets.codex?.native).toMatchObject({
+      interface: { displayName: 'Librarian' },
+    });
+    expect(loaded.artifacts.get('skill')).toHaveLength(1);
+    expect(loaded.artifacts.get('agent')).toHaveLength(1);
+  });
+
+  test('rejects artifact patterns that match no files', async () => {
+    await expect(
+      loadPackageDefinition(join(DEFINITIONS, 'invalid', 'missing-artifacts', 'PACKAGE.yaml')),
+    ).rejects.toThrow('matched no files');
+  });
+
+  test('rejects malformed native overlays', () => {
+    const path = join(DEFINITIONS, 'invalid', 'malformed-native', 'PACKAGE.yaml');
+    expect(() => parsePackageDefinition(readFileSync(path, 'utf8'), path)).toThrow(
+      'targets.codex.native',
+    );
+  });
+});
+
+describe('marketplace definitions', () => {
+  test('loads cc-marketplace-shaped publications and their explicit package universe', async () => {
+    const loaded = await loadMarketplaceDefinition(join(MARKETPLACE_FIXTURE, 'MARKETPLACE.yaml'));
+
+    expect([...loaded.packages.keys()].toSorted()).toEqual([
+      'coach',
+      'commit',
+      'craft',
+      'librarian',
+      'linear',
+      'spec-flow',
+    ]);
+    expect(loaded.definition.publications).toMatchObject([
+      {
+        id: 'claude',
+        target: 'claude',
+        enrollment: { mode: 'all-compatible' },
+      },
+      {
+        id: 'codex',
+        target: 'codex',
+        enrollment: {
+          mode: 'include',
+          packages: ['commit', 'craft', 'linear', 'librarian', 'spec-flow'],
+        },
+      },
+    ]);
+  });
+
+  test('rejects duplicate publication ids', () => {
+    const source = readFileSync(join(MARKETPLACE_FIXTURE, 'MARKETPLACE.yaml'), 'utf8').replace(
+      '  - id: codex',
+      '  - id: claude',
+    );
+    expect(() => parseMarketplaceDefinition(source)).toThrow('duplicate publication id "claude"');
+  });
+
+  test('rejects colliding package ids', async () => {
+    const root = copyMarketplace('collision');
+    const packagePath = join(root, 'packages', 'craft', 'PACKAGE.yaml');
+    writeFileSync(
+      packagePath,
+      readFileSync(packagePath, 'utf8').replace('id: craft', 'id: commit'),
+    );
+
+    await expect(loadMarketplaceDefinition(join(root, 'MARKETPLACE.yaml'))).rejects.toThrow(
+      'package id "commit" collides',
+    );
+  });
+
+  test('rejects package patterns that match no definitions', async () => {
+    const root = copyMarketplace('missing-packages');
+    replaceMarketplace(root, 'packages/*/PACKAGE.yaml', 'elsewhere/*/PACKAGE.yaml');
+
+    await expect(loadMarketplaceDefinition(join(root, 'MARKETPLACE.yaml'))).rejects.toThrow(
+      'package pattern "elsewhere/*/PACKAGE.yaml" matched no files',
+    );
+  });
+
+  test('rejects unknown explicit enrollment references', async () => {
+    const root = copyMarketplace('unknown-enrollment');
+    replaceMarketplace(
+      root,
+      'packages: [commit, craft, linear, librarian, spec-flow]',
+      'packages: [missing]',
+    );
+
+    await expect(loadMarketplaceDefinition(join(root, 'MARKETPLACE.yaml'))).rejects.toThrow(
+      'includes unknown package "missing"',
+    );
+  });
+
+  test('rejects explicit enrollment in a target the package does not declare', async () => {
+    const root = copyMarketplace('incompatible-enrollment');
+    replaceMarketplace(
+      root,
+      'packages: [commit, craft, linear, librarian, spec-flow]',
+      'packages: [coach]',
+    );
+
+    await expect(loadMarketplaceDefinition(join(root, 'MARKETPLACE.yaml'))).rejects.toThrow(
+      'does not declare target "codex"',
+    );
+  });
+});
+
+function copyMarketplace(name: string): string {
+  const destination = join(temporaryRoot, name);
+  cpSync(MARKETPLACE_FIXTURE, destination, { recursive: true });
+  return destination;
+}
+
+function replaceMarketplace(root: string, before: string, after: string): void {
+  const path = join(root, 'MARKETPLACE.yaml');
+  writeFileSync(path, readFileSync(path, 'utf8').replace(before, after));
+}

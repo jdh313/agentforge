@@ -1,0 +1,11 @@
+schema: agentforge.package/v1
+id: coach
+defaults:
+  name: coach
+  version: 0.10.1
+  description: ADHD-friendly productivity coaching workflows.
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+targets:
+  claude: {}

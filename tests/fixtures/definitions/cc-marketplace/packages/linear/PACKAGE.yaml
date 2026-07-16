@@ -1,0 +1,12 @@
+schema: agentforge.package/v1
+id: linear
+defaults:
+  name: linear
+  version: 0.4.1
+  description: Linear workflow conventions and ticket operations.
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+targets:
+  claude: {}
+  codex: {}

@@ -7,9 +7,13 @@
   "bin": {
     "agentforge": "./src/cli.ts"
   },
+  "exports": {
+    "./definitions": "./src/definitions.ts"
+  },
   "scripts": {
     "start": "bun run src/cli.ts",
     "test": "bun test",
+    "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write ."
   },
@@ -21,6 +25,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",
-    "@types/bun": "^1.3.13"
+    "@types/bun": "^1.3.13",
+    "typescript": "^7.0.2"
   }
 }

@@ -1,0 +1,10 @@
+schema: agentforge.package/v1
+id: missing-artifacts
+defaults:
+  name: missing-artifacts
+  version: 1.0.0
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+targets:
+  codex: {}

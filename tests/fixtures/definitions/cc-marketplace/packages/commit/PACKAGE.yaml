@@ -1,0 +1,12 @@
+schema: agentforge.package/v1
+id: commit
+defaults:
+  name: commit
+  version: 3.2.1
+  description: Format-aware atomic commits for git and jj.
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+targets:
+  claude: {}
+  codex: {}
