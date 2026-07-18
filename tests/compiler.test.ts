@@ -201,6 +201,8 @@ describe('marketplace compiler interface', () => {
     ['./relative.json', 'destination must be a normalized file path'],
     ['nested//file.json', 'destination must be a normalized file path'],
     ['nested\\file.json', 'use portable forward-slash separators'],
+    ['nested/file.', 'path segments must not end with a dot or space'],
+    ['nested/file ', 'path segments must not end with a dot or space'],
   ])('rejects unsafe destination %p', async (destination, reason) => {
     const loaded = await loadMarketplaceDefinition(MARKETPLACE_FIXTURE);
     const compile = () =>
@@ -249,6 +251,76 @@ describe('marketplace compiler interface', () => {
 
     expect(compile).toThrow(
       'output destination "packages/shared.json" collides between publication "claude", package "commit" and publication "claude", package "craft"',
+    );
+  });
+
+  test.each([
+    ['Plugin.json', 'plugin.json'],
+    ['packages/caf\u00e9.json', 'packages/cafe\u0301.json'],
+  ])('rejects portable destination aliases %p and %p', async (first, second) => {
+    const loaded = await loadMarketplaceDefinition(MARKETPLACE_FIXTURE);
+    const compile = () =>
+      compileMarketplace(
+        loaded,
+        adaptersWithClaude(() => ({
+          outputs: [
+            {
+              kind: 'generated',
+              packageId: 'commit',
+              destination: first,
+              content: '{}\n',
+            },
+            {
+              kind: 'generated',
+              packageId: 'craft',
+              destination: second,
+              content: '{}\n',
+            },
+          ],
+        })),
+      );
+
+    expect(compile).toThrow(
+      `output destinations "${first}" and "${second}" collide between publication "claude", package "commit" and publication "claude", package "craft"`,
+    );
+  });
+
+  test.each([
+    'output',
+    'diagnostic',
+  ] as const)('rejects %s provenance outside the resolved enrollment', async (recordType) => {
+    const loaded = await loadMarketplaceDefinition(MARKETPLACE_FIXTURE);
+    const invalidResult = (): TargetCompilationResult =>
+      recordType === 'output'
+        ? {
+            outputs: [
+              {
+                kind: 'generated',
+                packageId: 'coach',
+                destination: 'coach.json',
+                content: '{}\n',
+              },
+            ],
+          }
+        : {
+            outputs: [],
+            diagnostics: [
+              {
+                code: 'unexpected-package',
+                severity: 'warning',
+                packageId: 'coach',
+                message: 'Coach is not enrolled for Codex.',
+              },
+            ],
+          };
+    const compile = () =>
+      compileMarketplace(loaded, [
+        { target: 'claude', compilePublication: () => ({ outputs: [] }) },
+        { target: 'codex', compilePublication: invalidResult },
+      ]);
+
+    expect(compile).toThrow(
+      `adapter returned ${recordType} for package "coach", which is not enrolled in publication "codex"`,
     );
   });
 });

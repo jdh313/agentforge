@@ -136,23 +136,24 @@ or copied output proposals plus nonfatal diagnostics; the compiler adds
 provenance, orders the plan, and rejects unsafe or colliding destinations.
 
 ```ts
-import { compileMarketplace } from 'agentforge/compiler';
+import {
+  compileMarketplace,
+  type TargetCompilerAdapter,
+} from 'agentforge/compiler';
+
+const compileRegistry: TargetCompilerAdapter['compilePublication'] = (input) => ({
+  outputs: [
+    {
+      kind: 'generated',
+      destination: input.publication.destination,
+      content: JSON.stringify({ name: input.marketplace.metadata.name }),
+    },
+  ],
+});
 
 const plan = compileMarketplace(marketplaceResult, [
-  {
-    target: 'claude',
-    compilePublication(input) {
-      return {
-        outputs: [
-          {
-            kind: 'generated',
-            destination: input.publication.destination,
-            content: JSON.stringify({ name: input.marketplace.metadata.name }),
-          },
-        ],
-      };
-    },
-  },
+  { target: 'claude', compilePublication: compileRegistry },
+  { target: 'codex', compilePublication: compileRegistry },
 ]);
 ```
 
@@ -162,8 +163,9 @@ const plan = compileMarketplace(marketplaceResult, [
 - Package `metadata` contains canonical defaults merged with normalized target
   overrides. Package and publication `native` overlays remain separate so an
   adapter can apply them last.
-- Destinations must be normalized, portable relative file paths. Any exact
-  collision fails with both producers identified.
+- Destinations must be normalized relative file paths with forward-slash
+  separators. Collision checks are case-insensitive and Unicode-normalized;
+  failures identify both producers.
 - A translation gap can be returned as a diagnostic with `retainedSource`,
   keeping the source payload visible without synthesizing a native document.
 

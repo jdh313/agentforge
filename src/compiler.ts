@@ -133,6 +133,7 @@ export function compileMarketplace(
     }
 
     const packages = resolvePackages(loaded, publication);
+    const enrolledPackageIds = new Set(packages.map(({ id }) => id));
     const result = adapter.compilePublication({
       marketplace: {
         id: loaded.definition.id,
@@ -150,6 +151,7 @@ export function compileMarketplace(
 
     for (const output of result.outputs) {
       const { packageId, ...detail } = output;
+      validatePackageProvenance(packageId, enrolledPackageIds, publication, 'output');
       outputs.push({
         ...detail,
         target: publication.target,
@@ -159,6 +161,7 @@ export function compileMarketplace(
 
     for (const diagnostic of result.diagnostics ?? []) {
       const { packageId, ...detail } = diagnostic;
+      validatePackageProvenance(packageId, enrolledPackageIds, publication, 'diagnostic');
       diagnostics.push({
         ...detail,
         target: publication.target,
@@ -280,13 +283,18 @@ function validateDestinations(outputs: readonly DesiredOutput[]): void {
       );
     }
 
-    const prior = claimed.get(output.destination);
+    const collisionKey = destinationCollisionKey(output.destination);
+    const prior = claimed.get(collisionKey);
     if (prior) {
+      const destinationDetail =
+        prior.destination === output.destination
+          ? `output destination "${output.destination}" collides`
+          : `output destinations "${prior.destination}" and "${output.destination}" collide`;
       throw new CompilationError(
-        `output destination "${output.destination}" collides between ${describeProvenance(prior.provenance)} and ${describeProvenance(output.provenance)}`,
+        `${destinationDetail} between ${describeProvenance(prior.provenance)} and ${describeProvenance(output.provenance)}`,
       );
     }
-    claimed.set(output.destination, output);
+    claimed.set(collisionKey, output);
   }
 }
 
@@ -303,7 +311,14 @@ function unsafeDestinationReason(destination: string): string | undefined {
   if (segments.some((segment) => segment.length === 0 || segment === '.')) {
     return 'destination must be a normalized file path';
   }
+  if (segments.some((segment) => segment.endsWith('.') || segment.endsWith(' '))) {
+    return 'path segments must not end with a dot or space';
+  }
   return undefined;
+}
+
+function destinationCollisionKey(destination: string): string {
+  return destination.normalize('NFC').toLowerCase();
 }
 
 function containsControlCharacter(value: string): boolean {
@@ -317,4 +332,16 @@ function describeProvenance(provenance: CompilationProvenance): string {
   const packageDetail =
     provenance.packageId === undefined ? '' : `, package "${provenance.packageId}"`;
   return `publication "${provenance.publicationId}"${packageDetail}`;
+}
+
+function validatePackageProvenance(
+  packageId: string | undefined,
+  enrolledPackageIds: ReadonlySet<string>,
+  publication: PublicationDefinition,
+  recordType: 'output' | 'diagnostic',
+): void {
+  if (packageId === undefined || enrolledPackageIds.has(packageId)) return;
+  throw new CompilationError(
+    `adapter returned ${recordType} for package "${packageId}", which is not enrolled in publication "${publication.id}"`,
+  );
 }
