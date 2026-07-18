@@ -1,8 +1,8 @@
 # agentforge — Repo Instructions
 
 TypeScript/Bun CLI that renders canonical AI agent artifacts (`SKILL.md`,
-`OUTPUT_STYLE.md`) into per-harness outputs for Claude Code, OpenCode, Codex,
-and Claude chat. Defers to user-level CLAUDE.md for shell, OS, and global
+`OUTPUT_STYLE.md`) into per-harness outputs for Codex, OpenCode, Codex,
+and Codex chat. Defers to user-level AGENTS.md for shell, OS, and global
 preferences; only narrows or extends here.
 
 ## Terminology
@@ -11,19 +11,19 @@ preferences; only narrows or extends here.
   `skill`, `output-style` (today), `agent`, `mcp` (planned). Each artifact
   has a canonical filename (`SKILL.md`, `OUTPUT_STYLE.md`), a canonical
   schema, and a layout (`directory` for skills, `file` for output-styles).
-- **Target** — the harness consuming the output: `claude`, `opencode`,
-  `codex`, `claude-chat`. A target may support a subset of artifacts; e.g.,
-  `output-style` only renders to `claude` because no other harness has the
+- **Target** — the harness consuming the output: `Codex`, `opencode`,
+  `codex`, `Codex-chat`. A target may support a subset of artifacts; e.g.,
+  `output-style` only renders to `Codex` because no other harness has the
   concept.
 
 ## Status
 
 - **M1 spike** complete — skills only, synthetic fixtures, snapshot-tested.
-- **output-style** artifact landed — only `claude` supports it (Codex has a
+- **output-style** artifact landed — only `Codex` supports it (Codex has a
   fixed `personality` enum, not custom files; OpenCode has no analog).
 - Real-corpus migration, `agent` artifact, `mcp` artifact, watch mode, Nix
   integration, and GitHub publishing are M2+.
-- Full milestone plan: `~/.claude/plans/stateful-meandering-hamming.md`.
+- Full milestone plan: `~/.Codex/plans/stateful-meandering-hamming.md`.
 
 ## Stack
 
@@ -57,11 +57,11 @@ src/
     index.ts        — TargetAdapter (name + artifacts map),
                       ArtifactConfig, getArtifactConfig,
                       REGISTRY/getTarget/allTargets
-    claude.ts       — artifacts.skill (~/.claude/skills),
-                      artifacts['output-style'] (~/.claude/output-styles)
+    Codex.ts       — artifacts.skill (~/.Codex/skills),
+                      artifacts['output-style'] (~/.Codex/output-styles)
     opencode.ts     — artifacts.skill (~/.config/opencode/skills)
     codex.ts        — artifacts.skill (~/.agents/skills)
-    claude-chat.ts  — artifacts.skill (~/Downloads/claude-skills, zipped)
+    Codex-chat.ts  — artifacts.skill (~/Downloads/Codex-skills, zipped)
 tests/
   fixtures/         — 4 skills + 2 output-styles
                       (output-style-basic, output-style-rich)
@@ -90,10 +90,10 @@ tests/
   writes `<outDir>/<name>.md` directly, no resources.
 - Resource subdirs (`scripts/`, `references/`, `assets/`) copy passthrough
   when present (directory layout only).
-- Warnings (skill artifact, non-Claude targets only):
-  - `claude-only-frontmatter-stripped` — listed Claude-only keys lost in
+- Warnings (skill artifact, non-Codex targets only):
+  - `Codex-only-frontmatter-stripped` — listed Codex-only keys lost in
     output.
-  - `claude-only-body-feature` — canonical body uses `$ARGUMENTS`,
+  - `Codex-only-body-feature` — canonical body uses `$ARGUMENTS`,
     `${CLAUDE_*}`, `` !`…` ``, ` ```! `, or `$N`, and no `targets.<name>.body`
     override is set.
 
@@ -178,7 +178,7 @@ bun build --compile src/cli.ts --outfile ~/.local/bin/agentforge
 - Multi-artifact source directory rendering (each source dir contains
   exactly one canonical file).
 - Codex `agents/openai.yaml` emission.
-- Translating Claude-only body features (`$ARGUMENTS`, dynamic shell
+- Translating Codex-only body features (`$ARGUMENTS`, dynamic shell
   injection) into target-native forms — current behavior is warn-only.
 - Nix integration; the tool runs as a plain `bun run` invocation.
 
