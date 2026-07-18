@@ -8,6 +8,7 @@
     "agentforge": "./src/cli.ts"
   },
   "exports": {
+    "./compiler": "./src/compiler.ts",
     "./definitions": "./src/definitions.ts"
   },
   "scripts": {
