@@ -169,6 +169,7 @@ export function compileMarketplace(
 
   outputs.sort(compareOutputs);
   diagnostics.sort(compareDiagnostics);
+  validateDestinations(outputs);
   return { marketplaceId: loaded.definition.id, outputs, diagnostics };
 }
 
@@ -238,27 +239,82 @@ function provenanceFor(
 }
 
 function compareIds(left: { id: string }, right: { id: string }): number {
-  return left.id.localeCompare(right.id);
+  return compareStrings(left.id, right.id);
 }
 
 function compareOutputs(left: DesiredOutput, right: DesiredOutput): number {
   return (
     compareProvenance(left.provenance, right.provenance) ||
-    left.destination.localeCompare(right.destination)
+    compareStrings(left.destination, right.destination)
   );
 }
 
 function compareDiagnostics(left: CompilationDiagnostic, right: CompilationDiagnostic): number {
   return (
     compareProvenance(left.provenance, right.provenance) ||
-    left.code.localeCompare(right.code) ||
-    left.message.localeCompare(right.message)
+    compareStrings(left.code, right.code) ||
+    compareStrings(left.message, right.message)
   );
 }
 
 function compareProvenance(left: CompilationProvenance, right: CompilationProvenance): number {
   return (
-    left.publicationId.localeCompare(right.publicationId) ||
-    (left.packageId ?? '').localeCompare(right.packageId ?? '')
+    compareStrings(left.publicationId, right.publicationId) ||
+    compareStrings(left.packageId ?? '', right.packageId ?? '')
   );
+}
+
+function compareStrings(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function validateDestinations(outputs: readonly DesiredOutput[]): void {
+  const claimed = new Map<string, DesiredOutput>();
+  for (const output of outputs) {
+    const reason = unsafeDestinationReason(output.destination);
+    if (reason) {
+      throw new CompilationError(
+        `unsafe output destination "${output.destination}" from ${describeProvenance(output.provenance)}: ${reason}`,
+      );
+    }
+
+    const prior = claimed.get(output.destination);
+    if (prior) {
+      throw new CompilationError(
+        `output destination "${output.destination}" collides between ${describeProvenance(prior.provenance)} and ${describeProvenance(output.provenance)}`,
+      );
+    }
+    claimed.set(output.destination, output);
+  }
+}
+
+function unsafeDestinationReason(destination: string): string | undefined {
+  if (destination.length === 0) return 'destination must not be empty';
+  if (containsControlCharacter(destination)) return 'control characters are not allowed';
+  if (destination.includes('\\')) return 'use portable forward-slash separators';
+  if (destination.startsWith('/') || /^[A-Za-z]:/.test(destination)) {
+    return 'destination must be relative';
+  }
+
+  const segments = destination.split('/');
+  if (segments.includes('..')) return 'parent-directory segments are not allowed';
+  if (segments.some((segment) => segment.length === 0 || segment === '.')) {
+    return 'destination must be a normalized file path';
+  }
+  return undefined;
+}
+
+function containsControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || code === 127;
+  });
+}
+
+function describeProvenance(provenance: CompilationProvenance): string {
+  const packageDetail =
+    provenance.packageId === undefined ? '' : `, package "${provenance.packageId}"`;
+  return `publication "${provenance.publicationId}"${packageDetail}`;
 }

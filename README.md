@@ -16,8 +16,9 @@ AgentForge has two layers:
 ## Status
 
 Skill and output-style rendering is snapshot-tested. Version 1 package and
-marketplace definitions can be loaded and validated through the library API;
-compiling those definitions into native manifests and registries is planned.
+marketplace definitions can be loaded, validated, and compiled into a pure,
+deterministic output plan through the library API. Native manifest and registry
+adapters are planned.
 
 ## Quick start
 
@@ -126,6 +127,45 @@ publications:
   is the future registry escape hatch and applies last.
 - These models validate inputs only. Native manifest/registry emission,
   translators, drift checks, and output management are not implemented yet.
+
+## Marketplace compiler
+
+The compiler resolves publication enrollment and target-specific package
+metadata before calling an injected target adapter. Adapters return generated
+or copied output proposals plus nonfatal diagnostics; the compiler adds
+provenance, orders the plan, and rejects unsafe or colliding destinations.
+
+```ts
+import { compileMarketplace } from 'agentforge/compiler';
+
+const plan = compileMarketplace(marketplaceResult, [
+  {
+    target: 'claude',
+    compilePublication(input) {
+      return {
+        outputs: [
+          {
+            kind: 'generated',
+            destination: input.publication.destination,
+            content: JSON.stringify({ name: input.marketplace.metadata.name }),
+          },
+        ],
+      };
+    },
+  },
+]);
+```
+
+- Compilation is synchronous and performs no filesystem I/O.
+- `all-compatible` enrollment includes every package declaring the target;
+  explicit enrollment remains validated and deterministic.
+- Package `metadata` contains canonical defaults merged with normalized target
+  overrides. Package and publication `native` overlays remain separate so an
+  adapter can apply them last.
+- Destinations must be normalized, portable relative file paths. Any exact
+  collision fails with both producers identified.
+- A translation gap can be returned as a diagnostic with `retainedSource`,
+  keeping the source payload visible without synthesizing a native document.
 
 ## CLI
 
