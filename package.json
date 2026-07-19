@@ -8,6 +8,7 @@
     "agentforge": "./src/cli.ts"
   },
   "exports": {
+    "./agent-command": "./src/agent-command.ts",
     "./compiler": "./src/compiler.ts",
     "./definitions": "./src/definitions.ts",
     "./marketplace-adapters": "./src/marketplace-adapters.ts",
