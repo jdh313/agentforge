@@ -50,7 +50,6 @@ describe('marketplace compiler interface', () => {
 
     expect(compilations.map(({ publication }) => publication.id)).toEqual(['claude', 'codex']);
     expect(compilations[0]?.packages.map(({ id }) => id)).toEqual([
-      'coach',
       'commit',
       'craft',
       'librarian',

@@ -78,7 +78,10 @@ describe('marketplace definitions', () => {
       {
         id: 'claude',
         target: 'claude',
-        enrollment: { mode: 'all-compatible' },
+        enrollment: {
+          mode: 'include',
+          packages: ['commit', 'craft', 'linear', 'librarian', 'spec-flow'],
+        },
       },
       {
         id: 'codex',
@@ -138,8 +141,8 @@ describe('marketplace definitions', () => {
     const root = copyMarketplace('incompatible-enrollment');
     replaceMarketplace(
       root,
-      'packages: [commit, craft, linear, librarian, spec-flow]',
-      'packages: [coach]',
+      'id: codex\n    target: codex\n    destination: .agents/plugins/marketplace.json\n    enrollment:\n      mode: include\n      packages: [commit, craft, linear, librarian, spec-flow]',
+      'id: codex\n    target: codex\n    destination: .agents/plugins/marketplace.json\n    enrollment:\n      mode: include\n      packages: [coach]',
     );
 
     await expect(loadMarketplaceDefinition(join(root, 'MARKETPLACE.yaml'))).rejects.toThrow(

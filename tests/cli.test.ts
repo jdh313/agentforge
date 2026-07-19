@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -34,6 +35,52 @@ afterAll(() => {
 });
 
 describe('compile command', () => {
+  test('materializes the complete five-package acceptance interface', () => {
+    const outDir = join(temporaryRoot, 'acceptance-interface');
+
+    const result = runCli('compile', MARKETPLACE, '--out', outDir);
+
+    expect(result.exitCode).toBe(0);
+    expect(listRelativeFiles(outDir)).toEqual([
+      'claude/.claude-plugin/marketplace.json',
+      'claude/packages/commit/.claude-plugin/plugin.json',
+      'claude/packages/commit/hooks/destructive-vcs-guard.sh',
+      'claude/packages/commit/hooks/hooks.json',
+      'claude/packages/commit/skills/commit/SKILL.md',
+      'claude/packages/craft/.claude-plugin/plugin.json',
+      'claude/packages/craft/skills/tdd/SKILL.md',
+      'claude/packages/librarian/.claude-plugin/plugin.json',
+      'claude/packages/librarian/agents/vault-reader.md',
+      'claude/packages/librarian/skills/wiki-query/SKILL.md',
+      'claude/packages/linear/.claude-plugin/plugin.json',
+      'claude/packages/linear/skills/linear/SKILL.md',
+      'claude/packages/spec-flow/.claude-plugin/plugin.json',
+      'claude/packages/spec-flow/commands/spec-flow.md',
+      'claude/packages/spec-flow/hooks/hooks.json',
+      'claude/packages/spec-flow/skills/draft/SKILL.md',
+      'claude/packages/spec-flow/skills/draft/assets/logo.txt',
+      'claude/packages/spec-flow/skills/draft/references/contract.md',
+      'claude/packages/spec-flow/skills/draft/scripts/check.ts',
+      'codex/.agents/plugins/marketplace.json',
+      'codex/packages/commit/.codex-plugin/plugin.json',
+      'codex/packages/commit/skills/commit/SKILL.md',
+      'codex/packages/craft/.codex-plugin/plugin.json',
+      'codex/packages/craft/skills/tdd/SKILL.md',
+      'codex/packages/librarian/.codex-plugin/plugin.json',
+      'codex/packages/librarian/agents/vault-reader.md',
+      'codex/packages/librarian/skills/wiki-query/SKILL.md',
+      'codex/packages/linear/.codex-plugin/plugin.json',
+      'codex/packages/linear/skills/linear/SKILL.md',
+      'codex/packages/spec-flow/.codex-plugin/plugin.json',
+      'codex/packages/spec-flow/skills/draft/SKILL.md',
+      'codex/packages/spec-flow/skills/draft/assets/logo.txt',
+      'codex/packages/spec-flow/skills/draft/references/contract.md',
+      'codex/packages/spec-flow/skills/draft/scripts/check.ts',
+      'codex/packages/spec-flow/skills/spec-flow/SKILL.md',
+      'codex/packages/spec-flow/skills/spec-flow/agents/openai.yaml',
+    ]);
+  });
+
   test('materializes every publication and summarizes nonfatal diagnostics', () => {
     const outDir = join(temporaryRoot, 'all-publications');
 
@@ -219,4 +266,13 @@ function runCliWithEnv(
     stdout: result.stdout.toString(),
     stderr: result.stderr.toString(),
   };
+}
+
+function listRelativeFiles(root: string, directory = root): string[] {
+  return readdirSync(directory, { withFileTypes: true })
+    .flatMap((entry) => {
+      const path = join(directory, entry.name);
+      return entry.isDirectory() ? listRelativeFiles(root, path) : [path.slice(root.length + 1)];
+    })
+    .toSorted();
 }

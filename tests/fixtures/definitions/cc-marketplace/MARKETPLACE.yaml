@@ -13,7 +13,8 @@ publications:
     target: claude
     destination: .claude-plugin/marketplace.json
     enrollment:
-      mode: all-compatible
+      mode: include
+      packages: [commit, craft, linear, librarian, spec-flow]
     native:
       owner:
         email: jacob@example.com

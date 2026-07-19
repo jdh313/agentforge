@@ -27,9 +27,9 @@ describe('native marketplace adapters', () => {
 
     expect(plan.outputs.map(({ destination }) => destination)).toEqual([
       '.claude-plugin/marketplace.json',
-      'packages/coach/.claude-plugin/plugin.json',
-      'packages/coach/skills/today/SKILL.md',
       'packages/commit/.claude-plugin/plugin.json',
+      'packages/commit/hooks/destructive-vcs-guard.sh',
+      'packages/commit/hooks/hooks.json',
       'packages/commit/skills/commit/SKILL.md',
       'packages/craft/.claude-plugin/plugin.json',
       'packages/craft/skills/tdd/SKILL.md',
@@ -56,12 +56,6 @@ describe('native marketplace adapters', () => {
         email: 'jacob@example.com',
       },
       plugins: [
-        {
-          name: 'coach',
-          version: '0.10.1',
-          description: 'ADHD-friendly productivity coaching workflows.',
-          source: './packages/coach',
-        },
         {
           name: 'commit',
           version: '3.2.1',
