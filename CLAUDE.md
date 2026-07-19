@@ -21,6 +21,9 @@ preferences; only narrows or extends here.
 - **M1 spike** complete — skills only, synthetic fixtures, snapshot-tested.
 - **output-style** artifact landed — only `claude` supports it (Codex has a
   fixed `personality` enum, not custom files; OpenCode has no analog).
+- Marketplace compilation translates package-level Claude `agent` and
+  `command` sources into direct Claude files and inferred Codex procedures or
+  skills; commands receive skill-local `agents/openai.yaml` policy.
 - Real-corpus migration, `agent` artifact, `mcp` artifact, watch mode, Nix
   integration, and GitHub publishing are M2+.
 - Full milestone plan: `~/.claude/plans/stateful-meandering-hamming.md`.
@@ -48,6 +51,7 @@ src/
                       CLAUDE_ONLY_KEYS, COMMON_KEYS, ALL_CLAUDE_KEYS,
                       OUTPUT_STYLE_KEYS
   deep-merge.ts     — small typed deep-merge (no lodash)
+  agent-command.ts  — canonical agent/command behavior parsers
   render.ts         — pipeline: parse → validate → merge → filter →
                       emit → copy resources (directory layout) → warnings
   cli.ts            — commander entry: render, validate, list-targets;
@@ -172,12 +176,11 @@ bun build --compile src/cli.ts --outfile ~/.local/bin/agentforge
 
 ## Out of scope today
 
-- Agent and MCP artifacts (M5/M6).
+- Leaf-renderer `agent` artifacts and MCP artifacts (M5/M6).
 - Watch mode.
 - Compiled binary via `bun build --compile`.
 - Multi-artifact source directory rendering (each source dir contains
   exactly one canonical file).
-- Codex `agents/openai.yaml` emission.
 - Translating Claude-only body features (`$ARGUMENTS`, dynamic shell
   injection) into target-native forms — current behavior is warn-only.
 - Nix integration; the tool runs as a plain `bun run` invocation.

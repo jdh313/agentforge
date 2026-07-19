@@ -4,7 +4,9 @@ Define and render canonical AI agent artifacts for multiple harnesses.
 
 Takes a single canonical source (e.g. a `SKILL.md`) and emits harness-specific
 outputs for Claude Code, OpenCode, and Codex — each with the right path,
-frontmatter shape, and optional per-target body overrides.
+frontmatter shape, and optional per-target body overrides. Marketplace
+compilation also translates Claude agent and command behaviors into direct
+Claude artifacts or inferred Codex procedures and skills.
 
 AgentForge has two layers:
 
@@ -19,7 +21,8 @@ Skill and output-style rendering is snapshot-tested. Version 1 package and
 marketplace definitions can be loaded, validated, and compiled into a pure,
 deterministic output plan through the library API. Production Claude and Codex
 adapters emit validated native marketplace registries, plugin manifests, and
-package payloads.
+package payloads, including agent and command translations for the
+representative marketplace corpus.
 
 ## Quick start
 
@@ -70,6 +73,8 @@ artifacts:
     pattern: skills/*/SKILL.md
   - type: agent
     pattern: agents/*.md
+  - type: command
+    pattern: commands/*.md
   - type: hook
     pattern: hooks/hooks.json
 targets:
@@ -194,8 +199,14 @@ const plan = compileMarketplace(marketplaceResult, [
 - Both targets emit per-package rendered skills plus copied `scripts/`,
   `references/`, and `assets/` resources alongside their marketplace and plugin
   documents.
+- Claude emits declared `agent` and `command` sources directly as
+  `agents/*.md` and `commands/*.md`. Codex infers reusable role procedures from
+  agents and explicit-invocation skills from commands; inferred command skills
+  receive skill-local `agents/openai.yaml` policy.
 - Claude passes declared `hook` artifacts through to the package tree. Codex
   retains them as structured unsupported-projection diagnostics.
+- Inferred Codex translations emit structured diagnostics naming behavior that
+  is not runtime-enforced and retain the source declaration for inspection.
 - Other unsupported artifact declarations remain visible through diagnostics
   carrying their source path and artifact type.
 - Package document destinations and registry source paths follow each loaded
