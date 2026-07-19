@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Command } from 'commander';
 import matter from 'gray-matter';
+import { checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
 import { type CompilationPlan, compileMarketplace } from './compiler.ts';
 import { type LoadedMarketplace, loadMarketplaceDefinition } from './definitions.ts';
 import { claudeMarketplaceAdapter, codexMarketplaceAdapter } from './marketplace-adapters.ts';
@@ -110,6 +111,12 @@ const formatCompilation = (plan: CompilationPlan): string => {
   const lines = [...outputCounts]
     .toSorted(([left], [right]) => compareStrings(left, right))
     .map(([publication, count]) => `[${publication}] wrote ${count} files`);
+  lines.push(...formatCompilationDiagnostics(plan));
+  return lines.join('\n');
+};
+
+const formatCompilationDiagnostics = (plan: CompilationPlan): string[] => {
+  const lines: string[] = [];
   for (const diagnostic of plan.diagnostics) {
     const packageDetail = diagnostic.provenance.packageId
       ? `/${diagnostic.provenance.packageId}`
@@ -118,7 +125,7 @@ const formatCompilation = (plan: CompilationPlan): string => {
       `${diagnostic.severity} [${diagnostic.provenance.publicationId}${packageDetail}] ${diagnostic.code}: ${diagnostic.message}`,
     );
   }
-  return lines.join('\n');
+  return lines;
 };
 
 const compileSelectedMarketplace = (loaded: LoadedMarketplace): CompilationPlan => {
@@ -170,6 +177,79 @@ program
       process.exitCode = 1;
     }
   });
+
+program
+  .command('check <marketplace>')
+  .description('Validate a compiled marketplace and report output drift without writing')
+  .requiredOption('-o, --out <dir>', 'compiled output directory')
+  .option(
+    '-p, --publication <id>',
+    'publication to check; repeat to select more than one',
+    collect,
+    [],
+  )
+  .option(
+    '--claude-native',
+    'cross-check selected Claude publications with claude plugin validate --strict',
+  )
+  .action(
+    async (
+      marketplace: string,
+      opts: { out: string; publication: string[]; claudeNative?: boolean },
+    ) => {
+      try {
+        const loaded = await loadMarketplaceDefinition(resolve(marketplace));
+        const selected = selectPublications(loaded, opts.publication);
+        const plan = compileSelectedMarketplace(selected);
+        const outputRoot = resolve(opts.out);
+        const result = checkMarketplace(plan, outputRoot);
+
+        for (const publication of selected.definition.publications.toSorted((left, right) =>
+          compareStrings(left.id, right.id),
+        )) {
+          const count = result.filesChecked.filter((path) =>
+            path.startsWith(`${publication.id}/`),
+          ).length;
+          const status = result.issues.some(({ publicationId }) => publicationId === publication.id)
+            ? 'failed'
+            : 'ok';
+          console.log(`[${publication.id}] ${status}: ${count} managed files`);
+        }
+        for (const line of formatCompilationDiagnostics(plan)) console.log(line);
+        for (const issue of result.issues) console.error(formatCheckIssue(issue));
+
+        let failed = result.issues.length > 0;
+        if (opts.claudeNative) {
+          for (const publication of selected.definition.publications.filter(
+            ({ target }) => target === 'claude',
+          )) {
+            const native = Bun.spawnSync({
+              cmd: ['claude', 'plugin', 'validate', '--strict', join(outputRoot, publication.id)],
+              stdout: 'pipe',
+              stderr: 'pipe',
+            });
+            if (native.stdout.length > 0) process.stdout.write(native.stdout);
+            if (native.stderr.length > 0) process.stderr.write(native.stderr);
+            if (native.exitCode !== 0) {
+              failed = true;
+              console.error(
+                `error [${publication.id}] claude-native-validation: claude plugin validate --strict exited ${native.exitCode}`,
+              );
+            }
+          }
+        }
+        if (failed) process.exitCode = 1;
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 1;
+      }
+    },
+  );
+
+const formatCheckIssue = (issue: MarketplaceCheckIssue): string => {
+  const packageDetail = issue.packageId ? `/${issue.packageId}` : '';
+  return `error [${issue.publicationId}${packageDetail}] ${issue.code}: ${issue.path}: ${issue.message}`;
+};
 
 program
   .command('render <source-dir>')

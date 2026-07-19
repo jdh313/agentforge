@@ -49,7 +49,7 @@ const CodexInterface = z.looseObject({
   screenshots: z.array(z.string().min(1)).optional(),
 });
 
-const CodexPluginManifest = z.looseObject({
+export const CodexPluginManifest = z.looseObject({
   name: z.string().min(1),
   version: z.string().min(1),
   description: z.string().min(1).optional(),
@@ -63,12 +63,10 @@ const CodexPluginManifest = z.looseObject({
 
 const CodexMarketplacePlugin = z.looseObject({
   name: z.string().min(1),
-  source: z.union([
-    z.string().min(1),
-    z.looseObject({
-      source: z.string().min(1),
-    }),
-  ]),
+  source: z.looseObject({
+    source: z.literal('local'),
+    path: z.string().min(1),
+  }),
   policy: z.looseObject({
     installation: z.enum(['AVAILABLE', 'INSTALLED_BY_DEFAULT', 'NOT_AVAILABLE']),
     authentication: z.enum(['ON_INSTALL', 'ON_FIRST_USE']),
@@ -76,7 +74,7 @@ const CodexMarketplacePlugin = z.looseObject({
   category: z.string().min(1),
 });
 
-const CodexMarketplace = z.looseObject({
+export const CodexMarketplace = z.looseObject({
   name: z.string().min(1),
   interface: z.looseObject({ displayName: z.string().min(1) }).optional(),
   plugins: z.array(CodexMarketplacePlugin),

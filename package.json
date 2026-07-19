@@ -9,6 +9,7 @@
   },
   "exports": {
     "./agent-command": "./src/agent-command.ts",
+    "./check": "./src/check.ts",
     "./compiler": "./src/compiler.ts",
     "./definitions": "./src/definitions.ts",
     "./materializer": "./src/materializer.ts",

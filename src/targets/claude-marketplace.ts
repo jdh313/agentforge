@@ -30,7 +30,7 @@ const Author = z.looseObject({
   url: z.url().optional(),
 });
 
-const ClaudePluginManifest = z.looseObject({
+export const ClaudePluginManifest = z.looseObject({
   name: z.string().min(1),
   displayName: z.string().min(1).optional(),
   version: z.string().min(1),
@@ -47,7 +47,7 @@ const ClaudeMarketplacePlugin = ClaudePluginManifest.extend({
   source: z.union([z.string().min(1), z.looseObject({ source: z.string().min(1) })]),
 });
 
-const ClaudeMarketplace = z.looseObject({
+export const ClaudeMarketplace = z.looseObject({
   name: z.string().min(1),
   description: z.string().min(1).optional(),
   owner: Author,

@@ -1,5 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -111,10 +119,98 @@ describe('compile command', () => {
   });
 });
 
+describe('check command', () => {
+  test('accepts clean output and keeps translation diagnostics nonfatal', () => {
+    const outDir = join(temporaryRoot, 'clean-check');
+    expect(runCli('compile', MARKETPLACE, '--out', outDir).exitCode).toBe(0);
+    const before = readFileSync(
+      join(outDir, 'codex', '.agents', 'plugins', 'marketplace.json'),
+      'utf8',
+    );
+
+    const result = runCli('check', MARKETPLACE, '--out', outDir);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('[claude] ok: 19 managed files');
+    expect(result.stdout).toContain('[codex] ok: 17 managed files');
+    expect(result.stdout).toContain(
+      'note [codex/librarian] inferred-artifact-projection: Agent "vault-reader" inferred',
+    );
+    expect(
+      readFileSync(join(outDir, 'codex', '.agents', 'plugins', 'marketplace.json'), 'utf8'),
+    ).toBe(before);
+  });
+
+  test('exits nonzero with actionable drift diagnostics', () => {
+    const outDir = join(temporaryRoot, 'drift-check');
+    expect(
+      runCli('compile', MARKETPLACE, '--out', outDir, '--publication', 'claude').exitCode,
+    ).toBe(0);
+    writeFileSync(
+      join(outDir, 'claude', '.claude-plugin', 'marketplace.json'),
+      '{"changed":true}\n',
+    );
+
+    const result = runCli('check', MARKETPLACE, '--out', outDir, '--publication', 'claude');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      'error [claude] changed-output: claude/.claude-plugin/marketplace.json: managed output differs',
+    );
+    expect(result.stderr).toContain(
+      'error [claude] invalid-native-document: claude/.claude-plugin/marketplace.json:',
+    );
+  });
+
+  test('runs Claude strict validation only when explicitly requested', () => {
+    const outDir = join(temporaryRoot, 'native-check');
+    const binDir = join(temporaryRoot, 'bin');
+    const argsPath = join(temporaryRoot, 'claude-args.txt');
+    mkdirSync(binDir);
+    const claude = join(binDir, 'claude');
+    writeFileSync(claude, '#!/bin/sh\nprintf "%s\\n" "$@" > "$AGENTFORGE_CLAUDE_ARGS"\n');
+    chmodSync(claude, 0o755);
+    expect(
+      runCli('compile', MARKETPLACE, '--out', outDir, '--publication', 'claude').exitCode,
+    ).toBe(0);
+
+    const withoutNative = runCli('check', MARKETPLACE, '--out', outDir, '--publication', 'claude');
+    expect(withoutNative.exitCode).toBe(0);
+    expect(existsSync(argsPath)).toBe(false);
+
+    const withNative = runCliWithEnv(
+      {
+        PATH: `${binDir}:${process.env.PATH ?? ''}`,
+        AGENTFORGE_CLAUDE_ARGS: argsPath,
+      },
+      'check',
+      MARKETPLACE,
+      '--out',
+      outDir,
+      '--publication',
+      'claude',
+      '--claude-native',
+    );
+    expect(withNative.exitCode).toBe(0);
+    expect(readFileSync(argsPath, 'utf8')).toBe(
+      `plugin\nvalidate\n--strict\n${join(outDir, 'claude')}\n`,
+    );
+  });
+});
+
 function runCli(...args: string[]): { exitCode: number; stdout: string; stderr: string } {
+  return runCliWithEnv({}, ...args);
+}
+
+function runCliWithEnv(
+  env: Record<string, string>,
+  ...args: string[]
+): { exitCode: number; stdout: string; stderr: string } {
   const result = Bun.spawnSync({
     cmd: [process.execPath, 'run', CLI, ...args],
     cwd: REPO_ROOT,
+    env: { ...process.env, ...env },
     stdout: 'pipe',
     stderr: 'pipe',
   });
