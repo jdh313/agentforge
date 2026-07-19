@@ -1,5 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import {
@@ -125,6 +134,34 @@ targets:
       expect.objectContaining({ destination: 'bundle/draft/SKILL.md' }),
       expect.objectContaining({ destination: 'bundle/draft/references/contract.md' }),
     ]);
+  });
+
+  test('records portable executable intent for declared payloads', async () => {
+    const packagePath = packageWithPayload(
+      'executable-payload',
+      `  include:
+    - source: skills/draft/scripts/check.ts`,
+    );
+    chmodSync(join(dirname(packagePath), 'skills', 'draft', 'scripts', 'check.ts'), 0o751);
+
+    const loaded = await loadPackageDefinition(packagePath);
+
+    expect(loaded.payloads.claude).toEqual([
+      expect.objectContaining({ destination: 'skills/draft/scripts/check.ts', executable: true }),
+    ]);
+  });
+
+  test('rejects declared payloads reached through symlinks', async () => {
+    const packagePath = packageWithPayload(
+      'symlinked-payload',
+      `  include:
+    - source: linked-license.txt`,
+    );
+    symlinkSync('LICENSE.txt', join(dirname(packagePath), 'linked-license.txt'));
+
+    await expect(loadPackageDefinition(packagePath)).rejects.toThrow(
+      'payload source "linked-license.txt" must not be a symbolic link or traverse one',
+    );
   });
 
   test('rejects ambiguous destinations for directory and glob payloads', async () => {

@@ -1,8 +1,17 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { CompilationPlan, DesiredOutput } from '../src/compiler.ts';
+import type { CompilationPlan, DesiredCopiedOutput, DesiredOutput } from '../src/compiler.ts';
 import { materializeCompilation } from '../src/materializer.ts';
 
 let temporaryRoot: string;
@@ -55,6 +64,27 @@ describe('marketplace materialization', () => {
     expect(existsSync(join(outDir, 'stale.txt'))).toBe(false);
   });
 
+  test('normalizes copied payload modes while preserving executable intent', () => {
+    const executableSource = join(temporaryRoot, 'executable-source.sh');
+    const regularSource = join(temporaryRoot, 'regular-source.txt');
+    const outDir = join(temporaryRoot, 'portable-modes');
+    writeFileSync(executableSource, '#!/bin/sh\n');
+    writeFileSync(regularSource, 'regular\n');
+    chmodSync(executableSource, 0o751);
+    chmodSync(regularSource, 0o640);
+
+    materializeCompilation(
+      plan([
+        { ...copied('bin/run.sh', executableSource, 'commit'), executable: true },
+        { ...copied('README.txt', regularSource, 'commit'), executable: false },
+      ]),
+      outDir,
+    );
+
+    expect(statSync(join(outDir, 'bin/run.sh')).mode & 0o777).toBe(0o755);
+    expect(statSync(join(outDir, 'README.txt')).mode & 0o777).toBe(0o644);
+  });
+
   test('rejects destinations outside the output root before publishing', () => {
     const outDir = join(temporaryRoot, 'unsafe');
 
@@ -99,7 +129,7 @@ function generated(destination: string, content: string): DesiredOutput {
   };
 }
 
-function copied(destination: string, sourcePath: string, packageId: string): DesiredOutput {
+function copied(destination: string, sourcePath: string, packageId: string): DesiredCopiedOutput {
   return {
     kind: 'copy',
     target: 'claude',

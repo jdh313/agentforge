@@ -261,6 +261,34 @@ describe('marketplace compiler interface', () => {
     );
   });
 
+  test('rejects file and directory destination conflicts', async () => {
+    const loaded = await loadMarketplaceDefinition(MARKETPLACE_FIXTURE);
+    const compile = () =>
+      compileMarketplace(
+        loaded,
+        adaptersWithClaude(() => ({
+          outputs: [
+            {
+              kind: 'generated',
+              packageId: 'commit',
+              destination: 'packages/commit/config',
+              content: '{}\n',
+            },
+            {
+              kind: 'copy',
+              packageId: 'craft',
+              destination: 'packages/commit/config/defaults.json',
+              sourcePath: '/source/defaults.json',
+            },
+          ],
+        })),
+      );
+
+    expect(compile).toThrow(
+      'output destinations "packages/commit/config" and "packages/commit/config/defaults.json" conflict as file and directory',
+    );
+  });
+
   test.each([
     ['Plugin.json', 'plugin.json'],
     ['packages/caf\u00e9.json', 'packages/cafe\u0301.json'],

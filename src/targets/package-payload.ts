@@ -99,6 +99,16 @@ export function compilePackagePayload(
     }
   }
 
+  outputs.push(
+    ...packageInput.payloads.map(({ destination, executable, sourcePath }) => ({
+      kind: 'copy' as const,
+      packageId: packageInput.id,
+      destination: `${packageDirectory}/${destination}`,
+      sourcePath,
+      executable,
+    })),
+  );
+
   return { outputs, diagnostics };
 }
 

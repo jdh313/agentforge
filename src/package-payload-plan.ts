@@ -1,10 +1,12 @@
-import { dirname, posix, relative, sep } from 'node:path';
+import { lstatSync } from 'node:fs';
+import { dirname, join, posix, relative, sep } from 'node:path';
 import type { PackageDefinition } from './definitions.ts';
 import type { TargetName } from './types.ts';
 
 export interface PackagePayload {
   sourcePath: string;
   destination: string;
+  executable: boolean;
 }
 
 export type PackagePayloadPlans = Partial<Record<TargetName, readonly PackagePayload[]>>;
@@ -28,11 +30,15 @@ export function normalizePackagePayloads(
   const relativeFiles = new Map(
     files.map((sourcePath) => [portableRelative(packageRoot, sourcePath), sourcePath]),
   );
-  const shared = expandDeclaration(definition.payloads, relativeFiles);
+  const shared = expandDeclaration(definition.payloads, relativeFiles, packageRoot);
   const plans: PackagePayloadPlans = {};
 
   for (const target of Object.keys(definition.targets).toSorted() as TargetName[]) {
-    const targetEntries = expandDeclaration(definition.targets[target]?.payloads, relativeFiles);
+    const targetEntries = expandDeclaration(
+      definition.targets[target]?.payloads,
+      relativeFiles,
+      packageRoot,
+    );
     plans[target] = validatePlan(target, [...shared, ...targetEntries]);
   }
 
@@ -42,20 +48,26 @@ export function normalizePackagePayloads(
 function expandDeclaration(
   declaration: PayloadDeclaration | undefined,
   files: ReadonlyMap<string, string>,
+  packageRoot: string,
 ): PackagePayload[] {
   if (!declaration) return [];
   const globalExcludes = compileExcludes(declaration.exclude ?? []);
   return declaration.include.flatMap((include) =>
-    expandInclude(include, files, [...globalExcludes, ...compileExcludes(include.exclude ?? [])]),
+    expandInclude(include, files, packageRoot, [
+      ...globalExcludes,
+      ...compileExcludes(include.exclude ?? []),
+    ]),
   );
 }
 
 function expandInclude(
   include: PayloadInclude,
   files: ReadonlyMap<string, string>,
+  packageRoot: string,
   excludes: readonly Bun.Glob[],
 ): PackagePayload[] {
   validateSourcePattern(include.source, 'payload source');
+  rejectSymlinkedSourcePattern(packageRoot, include.source);
   if (include.destination !== undefined) validateDestination(include.destination);
 
   const directory = include.source.endsWith('/');
@@ -81,7 +93,7 @@ function expandInclude(
 
   const sourceRoot = directory ? include.source : staticGlobRoot(include.source);
   return matches.map((source) => ({
-    sourcePath: requireSourcePath(files, source),
+    ...inspectSource(files, source, packageRoot),
     destination: destinationFor(include, source, sourceRoot, directory || glob),
   }));
 }
@@ -107,6 +119,31 @@ function staticGlobRoot(pattern: string): string {
   if (firstDynamic < 0) return posix.dirname(pattern);
   const root = segments.slice(0, firstDynamic).join('/');
   return root.length === 0 ? '.' : root;
+}
+
+function rejectSymlinkedSourcePattern(packageRoot: string, pattern: string): void {
+  const candidate = pattern.endsWith('/')
+    ? pattern.slice(0, -1)
+    : containsGlob(pattern)
+      ? staticGlobRoot(pattern)
+      : pattern;
+  if (candidate === '.' || candidate.length === 0) return;
+
+  let current = packageRoot;
+  for (const segment of candidate.split('/')) {
+    current = join(current, segment);
+    try {
+      if (lstatSync(current).isSymbolicLink()) {
+        throw new PackagePayloadPlanError(
+          `payload source "${pattern}" must not be a symbolic link or traverse one`,
+        );
+      }
+    } catch (cause) {
+      if (cause instanceof PackagePayloadPlanError) throw cause;
+      if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw cause;
+    }
+  }
 }
 
 function compileExcludes(patterns: readonly string[]): Bun.Glob[] {
@@ -185,8 +222,30 @@ function portableRelative(from: string, to: string): string {
   return relative(from, to).split(sep).join('/');
 }
 
-function requireSourcePath(files: ReadonlyMap<string, string>, source: string): string {
+function inspectSource(
+  files: ReadonlyMap<string, string>,
+  source: string,
+  packageRoot: string,
+): Pick<PackagePayload, 'sourcePath' | 'executable'> {
   const sourcePath = files.get(source);
   if (!sourcePath) throw new PackagePayloadPlanError(`missing loaded payload source "${source}"`);
-  return sourcePath;
+
+  let current = dirname(sourcePath);
+  const ancestors: string[] = [];
+  while (current !== packageRoot && current !== dirname(current)) {
+    ancestors.push(current);
+    current = dirname(current);
+  }
+  const paths = [sourcePath, ...ancestors];
+  if (paths.some((path) => lstatSync(path).isSymbolicLink())) {
+    throw new PackagePayloadPlanError(
+      `payload source "${source}" must not be a symbolic link or traverse one`,
+    );
+  }
+
+  const status = lstatSync(sourcePath);
+  if (!status.isFile()) {
+    throw new PackagePayloadPlanError(`payload source "${source}" must resolve to a regular file`);
+  }
+  return { sourcePath, executable: (status.mode & 0o111) !== 0 };
 }

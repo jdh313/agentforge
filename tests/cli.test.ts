@@ -7,6 +7,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -55,8 +56,10 @@ describe('compile command', () => {
       'claude/packages/linear/.claude-plugin/plugin.json',
       'claude/packages/linear/skills/linear/SKILL.md',
       'claude/packages/spec-flow/.claude-plugin/plugin.json',
+      'claude/packages/spec-flow/LICENSE.txt',
       'claude/packages/spec-flow/commands/spec-flow.md',
       'claude/packages/spec-flow/hooks/hooks.json',
+      'claude/packages/spec-flow/native-hooks.json',
       'claude/packages/spec-flow/skills/draft/SKILL.md',
       'claude/packages/spec-flow/skills/draft/assets/logo.txt',
       'claude/packages/spec-flow/skills/draft/references/contract.md',
@@ -72,6 +75,8 @@ describe('compile command', () => {
       'codex/packages/linear/.codex-plugin/plugin.json',
       'codex/packages/linear/skills/linear/SKILL.md',
       'codex/packages/spec-flow/.codex-plugin/plugin.json',
+      'codex/packages/spec-flow/LICENSE.txt',
+      'codex/packages/spec-flow/config/defaults.json',
       'codex/packages/spec-flow/skills/draft/SKILL.md',
       'codex/packages/spec-flow/skills/draft/assets/logo.txt',
       'codex/packages/spec-flow/skills/draft/references/contract.md',
@@ -120,18 +125,14 @@ describe('compile command', () => {
     const outDir = join(temporaryRoot, 'deterministic-rebuild');
 
     const first = runCli('compile', MARKETPLACE, '--out', outDir, '--publication', 'claude');
-    const firstMarketplace = readFileSync(
-      join(outDir, 'claude', '.claude-plugin', 'marketplace.json'),
-    );
+    const firstTree = snapshotOutputTree(join(outDir, 'claude'));
     const second = runCli('compile', MARKETPLACE, '--out', outDir, '--publication', 'claude');
-    const secondMarketplace = readFileSync(
-      join(outDir, 'claude', '.claude-plugin', 'marketplace.json'),
-    );
+    const secondTree = snapshotOutputTree(join(outDir, 'claude'));
 
     expect(first.exitCode).toBe(0);
     expect(second.exitCode).toBe(0);
     expect(second.stdout).toBe(first.stdout);
-    expect(secondMarketplace).toEqual(firstMarketplace);
+    expect(secondTree).toEqual(firstTree);
   });
 
   test('rejects unknown publications before changing existing output', () => {
@@ -179,8 +180,8 @@ describe('check command', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
-    expect(result.stdout).toContain('[claude] ok: 19 managed files');
-    expect(result.stdout).toContain('[codex] ok: 17 managed files');
+    expect(result.stdout).toContain('[claude] ok: 21 managed files');
+    expect(result.stdout).toContain('[codex] ok: 19 managed files');
     expect(result.stdout).toContain(
       'note [codex/librarian] inferred-artifact-projection: Agent "vault-reader" inferred',
     );
@@ -275,4 +276,15 @@ function listRelativeFiles(root: string, directory = root): string[] {
       return entry.isDirectory() ? listRelativeFiles(root, path) : [path.slice(root.length + 1)];
     })
     .toSorted();
+}
+
+function snapshotOutputTree(root: string) {
+  return listRelativeFiles(root).map((relativePath) => {
+    const path = join(root, relativePath);
+    return {
+      path: relativePath,
+      content: readFileSync(path).toString('base64'),
+      mode: statSync(path).mode & 0o777,
+    };
+  });
 }

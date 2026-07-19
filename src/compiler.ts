@@ -32,6 +32,7 @@ export interface ProposedGeneratedOutput extends ProposedOutputBase {
 export interface ProposedCopiedOutput extends ProposedOutputBase {
   kind: 'copy';
   sourcePath: string;
+  executable?: boolean;
 }
 
 export type ProposedOutput = ProposedGeneratedOutput | ProposedCopiedOutput;
@@ -50,6 +51,7 @@ export interface DesiredGeneratedOutput extends DesiredOutputBase {
 export interface DesiredCopiedOutput extends DesiredOutputBase {
   kind: 'copy';
   sourcePath: string;
+  executable?: boolean;
 }
 
 export type DesiredOutput = DesiredGeneratedOutput | DesiredCopiedOutput;
@@ -298,6 +300,15 @@ function validateDestinations(outputs: readonly DesiredOutput[]): void {
           : `output destinations "${prior.destination}" and "${output.destination}" collide`;
       throw new CompilationError(
         `${destinationDetail} between ${describeProvenance(prior.provenance)} and ${describeProvenance(output.provenance)}`,
+      );
+    }
+    const prefixCollision = [...claimed.entries()].find(([priorKey]) => {
+      return collisionKey.startsWith(`${priorKey}/`) || priorKey.startsWith(`${collisionKey}/`);
+    });
+    if (prefixCollision) {
+      const priorOutput = prefixCollision[1];
+      throw new CompilationError(
+        `output destinations "${priorOutput.destination}" and "${output.destination}" conflict as file and directory between ${describeProvenance(priorOutput.provenance)} and ${describeProvenance(output.provenance)}`,
       );
     }
     claimed.set(collisionKey, output);

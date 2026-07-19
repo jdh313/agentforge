@@ -39,8 +39,10 @@ describe('native marketplace adapters', () => {
       'packages/linear/.claude-plugin/plugin.json',
       'packages/linear/skills/linear/SKILL.md',
       'packages/spec-flow/.claude-plugin/plugin.json',
+      'packages/spec-flow/LICENSE.txt',
       'packages/spec-flow/commands/spec-flow.md',
       'packages/spec-flow/hooks/hooks.json',
+      'packages/spec-flow/native-hooks.json',
       'packages/spec-flow/skills/draft/SKILL.md',
       'packages/spec-flow/skills/draft/assets/logo.txt',
       'packages/spec-flow/skills/draft/references/contract.md',
@@ -138,6 +140,8 @@ describe('native marketplace adapters', () => {
       'packages/linear/.codex-plugin/plugin.json',
       'packages/linear/skills/linear/SKILL.md',
       'packages/spec-flow/.codex-plugin/plugin.json',
+      'packages/spec-flow/LICENSE.txt',
+      'packages/spec-flow/config/defaults.json',
       'packages/spec-flow/skills/draft/SKILL.md',
       'packages/spec-flow/skills/draft/assets/logo.txt',
       'packages/spec-flow/skills/draft/references/contract.md',
@@ -210,6 +214,12 @@ describe('native marketplace adapters', () => {
     expect(
       copiedOutput(claudePlan.outputs, 'packages/spec-flow/hooks/hooks.json').sourcePath,
     ).toEndWith('/packages/spec-flow/hooks/hooks.json');
+    expect(copiedOutput(claudePlan.outputs, 'packages/spec-flow/LICENSE.txt').sourcePath).toEndWith(
+      '/packages/spec-flow/LICENSE.txt',
+    );
+    expect(
+      copiedOutput(claudePlan.outputs, 'packages/spec-flow/native-hooks.json').sourcePath,
+    ).toEndWith('/packages/spec-flow/hooks/hooks.json');
     expect(
       matter(
         generatedOutput(claudePlan.outputs, 'packages/librarian/agents/vault-reader.md').content,
@@ -257,6 +267,9 @@ describe('native marketplace adapters', () => {
         ({ destination }) => destination === 'packages/spec-flow/hooks/hooks.json',
       ),
     ).toBe(false);
+    expect(
+      copiedOutput(codexPlan.outputs, 'packages/spec-flow/config/defaults.json').sourcePath,
+    ).toEndWith('/packages/spec-flow/config/defaults.json');
     expect(
       generatedOutput(codexPlan.outputs, 'packages/librarian/agents/vault-reader.md').content,
     ).toBe('# Vault reader\n\nRead-only role procedure for inspecting the knowledge base.\n');

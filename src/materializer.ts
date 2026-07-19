@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -66,9 +67,13 @@ function materializeOutput(output: DesiredOutput, stagingRoot: string): void {
 
   if (output.kind === 'generated') {
     writeFileSync(destination, output.content, 'utf8');
+    chmodSync(destination, 0o644);
     return;
   }
   copyFileSync(output.sourcePath, destination);
+  if (output.executable !== undefined) {
+    chmodSync(destination, output.executable ? 0o755 : 0o644);
+  }
 }
 
 function requireContainedDestination(
