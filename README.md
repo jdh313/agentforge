@@ -140,9 +140,9 @@ publications:
   `include` names an explicit subset and rejects missing or incompatible IDs.
 - Marketplace defaults are shared identity metadata. Publication `native` data
   is the future registry escape hatch and applies last.
-- These models validate inputs only. Native emission, translation, and output
-  materialization are separate compiler and materializer concerns; drift
-  checking is not implemented yet.
+- These models validate inputs only. Native emission, translation,
+  materialization, and read-only drift checking remain separate pipeline
+  concerns.
 
 ## Marketplace compiler
 
@@ -254,6 +254,27 @@ agentforge list-targets
 - `--claude-native` additionally runs `claude plugin validate --strict` for
   selected Claude publications. It is opt-in so the default check does not
   require Claude Code to be installed.
+
+## Beta acceptance corpus
+
+The canonical five-package fixture represents `commit`, `craft`, `linear`,
+`librarian`, and `spec-flow`, including skills, nested resources, agents,
+commands, hooks, target overrides, and target-native metadata. From a clean
+AgentForge checkout, compile and validate both publications with:
+
+```sh
+bun run src/cli.ts compile tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-beta
+bun run src/cli.ts check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-beta
+bun run src/cli.ts check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-beta --publication claude --claude-native
+uv run --project ../cc-marketplace marketplace validate --format codex --manifest /tmp/agentforge-beta/codex/.agents/plugins/marketplace.json --plugins-root /tmp/agentforge-beta/codex/packages
+```
+
+- The first check is AgentForge's always-on validation and drift gate for both
+  publications.
+- The Claude command requires the `claude` CLI.
+- The Codex cross-check requires a sibling `../cc-marketplace` checkout and is
+  read-only; it does not modify that repository or the compiled publication.
+- `bun test`, `bun run typecheck`, and `bun run lint` are the repository gates.
 
 ## Targets
 
