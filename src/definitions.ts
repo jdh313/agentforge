@@ -119,7 +119,13 @@ export type MarketplaceDefinition = z.infer<typeof CanonicalMarketplace>;
 export interface LoadedPackage {
   path: string;
   definition: PackageDefinition;
-  artifacts: ReadonlyMap<string, readonly string[]>;
+  artifacts: ReadonlyMap<string, readonly LoadedArtifact[]>;
+  files: readonly string[];
+}
+
+export interface LoadedArtifact {
+  path: string;
+  content: string;
 }
 
 export interface LoadedMarketplace {
@@ -149,7 +155,7 @@ export async function loadPackageDefinition(path: string): Promise<LoadedPackage
   requireFilename(path, PACKAGE_FILENAME);
   const definition = parsePackageDefinition(await readFile(path, 'utf8'), path);
   const root = dirname(resolve(path));
-  const artifacts = new Map<string, string[]>();
+  const artifacts = new Map<string, LoadedArtifact[]>();
 
   for (const projection of definition.artifacts) {
     const matches = await expandPattern(root, projection.pattern);
@@ -160,10 +166,21 @@ export async function loadPackageDefinition(path: string): Promise<LoadedPackage
       );
     }
     const current = artifacts.get(projection.type) ?? [];
-    artifacts.set(projection.type, [...current, ...matches]);
+    const loaded = await Promise.all(
+      matches.map(async (artifactPath) => ({
+        path: artifactPath,
+        content: await readFile(artifactPath, 'utf8'),
+      })),
+    );
+    artifacts.set(projection.type, [...current, ...loaded]);
   }
 
-  return { path: resolve(path), definition, artifacts };
+  return {
+    path: resolve(path),
+    definition,
+    artifacts,
+    files: await expandPattern(root, '**/*'),
+  };
 }
 
 export async function loadMarketplaceDefinition(path: string): Promise<LoadedMarketplace> {

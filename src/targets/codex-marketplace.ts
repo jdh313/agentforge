@@ -1,4 +1,3 @@
-import { dirname, relative, sep } from 'node:path';
 import { z } from 'zod';
 import {
   CompilationError,
@@ -7,6 +6,9 @@ import {
   type TargetCompilerAdapter,
 } from '../compiler.ts';
 import { deepMerge } from '../deep-merge.ts';
+import { compilePackagePayload, relativePackageDirectory } from './package-payload.ts';
+
+const PASSTHROUGH_ARTIFACT_TYPES = new Set<string>();
 
 const Author = z.looseObject({
   name: z.string().min(1),
@@ -68,6 +70,9 @@ export const codexMarketplaceAdapter: TargetCompilerAdapter = {
   target: 'codex',
   compilePublication(input) {
     const packages = input.packages.map((packageInput) => compilePackage(input, packageInput));
+    const payloads = input.packages.map((packageInput) =>
+      compilePackagePayload(input, packageInput, PASSTHROUGH_ARTIFACT_TYPES),
+    );
     const marketplace = parseDocument(
       CodexMarketplace,
       deepMerge(
@@ -104,7 +109,9 @@ export const codexMarketplaceAdapter: TargetCompilerAdapter = {
           destination,
           content: serialize(manifest),
         })),
+        ...payloads.flatMap(({ outputs }) => outputs),
       ],
+      diagnostics: payloads.flatMap(({ diagnostics }) => diagnostics),
     };
   },
 };
@@ -121,10 +128,6 @@ function compilePackage(input: PublicationCompilation, packageInput: Compilation
       `plugin document for package "${packageInput.id}"`,
     ),
   };
-}
-
-function relativePackageDirectory(marketplacePath: string, packagePath: string): string {
-  return relative(dirname(marketplacePath), dirname(packagePath)).split(sep).join('/');
 }
 
 function serialize(document: unknown): string {

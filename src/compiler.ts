@@ -1,5 +1,6 @@
 import { deepMerge } from './deep-merge.ts';
 import type {
+  LoadedArtifact,
   LoadedMarketplace,
   MarketplaceDefinition,
   NativeOverlay,
@@ -75,7 +76,8 @@ export interface CompilationPackage {
   path: string;
   metadata: PackageMetadata;
   native: NativeOverlay;
-  artifacts: ReadonlyMap<string, readonly string[]>;
+  artifacts: ReadonlyMap<string, readonly LoadedArtifact[]>;
+  files: readonly string[];
 }
 
 export interface PublicationCompilation {
@@ -225,6 +227,7 @@ function resolvePackages(
       ) as PackageMetadata,
       native: target.native ?? {},
       artifacts: loadedPackage.artifacts,
+      files: loadedPackage.files,
     };
   });
 }

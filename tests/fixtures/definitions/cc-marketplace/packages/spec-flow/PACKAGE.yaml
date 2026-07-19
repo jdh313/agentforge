@@ -11,6 +11,8 @@ defaults:
 artifacts:
   - type: skill
     pattern: skills/*/SKILL.md
+  - type: hook
+    pattern: hooks/hooks.json
 targets:
   claude: {}
   codex:

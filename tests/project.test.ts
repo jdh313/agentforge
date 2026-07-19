@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { projectArtifact } from 'agentforge/render';
 import matter from 'gray-matter';
-import { projectArtifact } from '../src/render.ts';
 
 describe('leaf artifact projection', () => {
   test('projects target content and resource inputs without materializing files', () => {
