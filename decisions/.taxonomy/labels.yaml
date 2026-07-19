@@ -1,0 +1,13 @@
+# Labels — what a decision is about. 1–4 per atom.
+# Finite list, hand-edited. `ndr capture` refuses unknown values.
+# To add: edit this file (friction is the feature — prevents drift).
+- architecture   # system shape, framework, runtime composition
+- process        # how decisions get made / written / read
+- scope          # what's in vs out
+- substrate      # storage and retrieval medium
+- tooling        # what we use to make / store / read things
+- ci-strategy    # CI platform, gates, caching
+- deployment     # how things ship / run / migrate
+- read-side      # context-loading, retrieval, supersession resolution
+- repo-shape     # monorepo vs split, package layout
+- write-side     # capture, materialization, schema enforcement
