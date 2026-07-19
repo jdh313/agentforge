@@ -81,8 +81,19 @@ artifacts:
     pattern: commands/*.md
   - type: hook
     pattern: hooks/hooks.json
+payloads:
+  include:
+    - source: LICENSE
+    - source: templates/
+      destination: resources/templates/
+      exclude: [templates/private/**]
+  exclude: ['**/*.test.md']
 targets:
-  claude: {}
+  claude:
+    payloads:
+      include:
+        - source: hooks/*.json
+          destination: hooks/
   codex:
     overrides:
       description: Curate notes through shared workflows and isolated roles.
@@ -97,6 +108,16 @@ targets:
 - `artifacts` declares open package-level projection types and patterns. Leaf
   `ArtifactType` remains the smaller canonical renderer vocabulary; native
   passthrough types such as `hook` do not expand it.
+- `payloads.include` is an ordered list of package-relative source/destination
+  entries. Exact files keep their source path by default; directories and globs
+  preserve paths below their static source root and require directory
+  destinations ending in `/` when remapped.
+- `payloads.exclude` applies to every include in that declaration, while an
+  include's own `exclude` narrows only that entry. Shared payloads are combined
+  with optional `targets.<name>.payloads` before normalization.
+- Loading expands payload declarations against the package file inventory into
+  deterministic per-target plans. Escaping, non-portable, unmatched,
+  ambiguous, and colliding destinations fail before compilation.
 - Loading retains declared artifact source text plus the package file inventory,
   so later compilation can remain free of filesystem I/O.
 - Keys under `targets` declare target support. `overrides` changes normalized
