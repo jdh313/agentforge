@@ -18,7 +18,8 @@ AgentForge has two layers:
 Skill and output-style rendering is snapshot-tested. Version 1 package and
 marketplace definitions can be loaded, validated, and compiled into a pure,
 deterministic output plan through the library API. Production Claude and Codex
-adapters emit validated native marketplace registries and plugin manifests.
+adapters emit validated native marketplace registries, plugin manifests, and
+package payloads.
 
 ## Quick start
 
@@ -69,6 +70,8 @@ artifacts:
     pattern: skills/*/SKILL.md
   - type: agent
     pattern: agents/*.md
+  - type: hook
+    pattern: hooks/hooks.json
 targets:
   claude: {}
   codex:
@@ -82,8 +85,11 @@ targets:
 - `id` is the stable AgentForge identity and cannot be changed by target data.
 - `defaults` is the normalized shared metadata set: `name`, `version`,
   `description`, `author`, `license`, and `keywords`.
-- `artifacts` declares projection patterns. It does not exclude other package
-  contents from a future compiler.
+- `artifacts` declares open package-level projection types and patterns. Leaf
+  `ArtifactType` remains the smaller canonical renderer vocabulary; native
+  passthrough types such as `hook` do not expand it.
+- Loading retains declared artifact source text plus the package file inventory,
+  so later compilation can remain free of filesystem I/O.
 - Keys under `targets` declare target support. `overrides` changes normalized
   defaults for one target.
 - `native` accepts any JSON-compatible object. A future compiler applies it
@@ -185,10 +191,13 @@ const plan = compileMarketplace(marketplaceResult, [
 ]);
 ```
 
-- Claude emits the configured marketplace destination plus per-package
-  `.claude-plugin/plugin.json` documents.
-- Codex emits the configured marketplace destination plus per-package
-  `.codex-plugin/plugin.json` documents.
+- Both targets emit per-package rendered skills plus copied `scripts/`,
+  `references/`, and `assets/` resources alongside their marketplace and plugin
+  documents.
+- Claude passes declared `hook` artifacts through to the package tree. Codex
+  retains them as structured unsupported-projection diagnostics.
+- Other unsupported artifact declarations remain visible through diagnostics
+  carrying their source path and artifact type.
 - Package document destinations and registry source paths follow each loaded
   `PACKAGE.yaml` directory relative to `MARKETPLACE.yaml`.
 - Known native fields are type-checked with open target schemas; unrecognized
