@@ -117,7 +117,13 @@ targets:
   with optional `targets.<name>.payloads` before normalization.
 - Loading expands payload declarations against the package file inventory into
   deterministic per-target plans. Escaping, non-portable, unmatched,
-  ambiguous, and colliding destinations fail before compilation.
+  ambiguous, symbolic-link, and colliding destinations fail before
+  materialization. Collisions include file/directory conflicts and conflicts
+  with generated artifacts.
+- Compilation copies each declared payload to its exact planned destination.
+  Executable source intent is normalized to mode `0755`; other payloads use
+  `0644`. The complete output is staged and atomically replaces the previous
+  tree only after every file succeeds.
 - Loading retains declared artifact source text plus the package file inventory,
   so later compilation can remain free of filesystem I/O.
 - Keys under `targets` declare target support. `overrides` changes normalized
