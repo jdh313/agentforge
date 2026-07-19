@@ -23,7 +23,8 @@ deterministic output plan through the library API. Production Claude and Codex
 adapters emit validated native marketplace registries, plugin manifests, and
 package payloads, including agent and command translations for the
 representative marketplace corpus. The CLI materializes those plans as atomic,
-complete-snapshot marketplace builds.
+complete-snapshot marketplace builds and checks materialized trees for native
+validity and drift without writing.
 
 ## Quick start
 
@@ -35,6 +36,7 @@ bun run src/cli.ts list-targets
 bun run src/cli.ts render tests/fixtures/claude-rich --all-targets --out-base /tmp/agentforge-spike
 bun run src/cli.ts validate tests/fixtures/claude-rich
 bun run src/cli.ts compile tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-marketplace
+bun run src/cli.ts check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-marketplace
 ```
 
 ## Package and marketplace definitions
@@ -222,6 +224,9 @@ const plan = compileMarketplace(marketplaceResult, [
 ```
 agentforge compile <MARKETPLACE.yaml> --out <out-dir>
 agentforge compile <MARKETPLACE.yaml> --out <out-dir> --publication <id>
+agentforge check <MARKETPLACE.yaml> --out <out-dir>
+agentforge check <MARKETPLACE.yaml> --out <out-dir> --publication <id>
+agentforge check <MARKETPLACE.yaml> --out <out-dir> --claude-native
 agentforge render <skill-source-dir> --target <name> --out <out-dir>
 agentforge render <skill-source-dir> --all-targets --out-base <out-base>
 agentforge validate <skill-source-dir>
@@ -238,6 +243,17 @@ agentforge list-targets
   planning or staging failures leave the prior output intact.
 - Notes and warnings are printed in deterministic plan order and do not make a
   successful compile exit nonzero.
+- `check` derives the same expected publication plans in memory, validates
+  registries, plugin manifests, local plugin references, package identity and
+  version parity, and projected skill frontmatter, then reports missing,
+  changed, and unexpected managed files without modifying the output tree.
+- `check` mirrors repeatable `--publication` selection. Only selected
+  `<out-dir>/<publication-id>/` trees are managed; paths outside them are left
+  alone. Validation errors and drift exit nonzero, while translation notes and
+  warnings remain nonfatal.
+- `--claude-native` additionally runs `claude plugin validate --strict` for
+  selected Claude publications. It is opt-in so the default check does not
+  require Claude Code to be installed.
 
 ## Targets
 
