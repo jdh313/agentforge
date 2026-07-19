@@ -22,7 +22,8 @@ marketplace definitions can be loaded, validated, and compiled into a pure,
 deterministic output plan through the library API. Production Claude and Codex
 adapters emit validated native marketplace registries, plugin manifests, and
 package payloads, including agent and command translations for the
-representative marketplace corpus.
+representative marketplace corpus. The CLI materializes those plans as atomic,
+complete-snapshot marketplace builds.
 
 ## Quick start
 
@@ -33,6 +34,7 @@ bun test
 bun run src/cli.ts list-targets
 bun run src/cli.ts render tests/fixtures/claude-rich --all-targets --out-base /tmp/agentforge-spike
 bun run src/cli.ts validate tests/fixtures/claude-rich
+bun run src/cli.ts compile tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-marketplace
 ```
 
 ## Package and marketplace definitions
@@ -136,8 +138,9 @@ publications:
   `include` names an explicit subset and rejects missing or incompatible IDs.
 - Marketplace defaults are shared identity metadata. Publication `native` data
   is the future registry escape hatch and applies last.
-- These models validate inputs only. Native manifest/registry emission,
-  translators, drift checks, and output management are not implemented yet.
+- These models validate inputs only. Native emission, translation, and output
+  materialization are separate compiler and materializer concerns; drift
+  checking is not implemented yet.
 
 ## Marketplace compiler
 
@@ -217,11 +220,24 @@ const plan = compileMarketplace(marketplaceResult, [
 ## CLI
 
 ```
+agentforge compile <MARKETPLACE.yaml> --out <out-dir>
+agentforge compile <MARKETPLACE.yaml> --out <out-dir> --publication <id>
 agentforge render <skill-source-dir> --target <name> --out <out-dir>
 agentforge render <skill-source-dir> --all-targets --out-base <out-base>
 agentforge validate <skill-source-dir>
 agentforge list-targets
 ```
+
+- `compile` builds every publication when no filter is provided. Repeat
+  `--publication <id>` to select a deterministic subset.
+- Each publication is isolated under `<out-dir>/<publication-id>/`, preserving
+  its compiled relative destinations without allowing cross-target package
+  projections to collide.
+- The output directory is a complete snapshot. AgentForge stages every
+  generated document and copied artifact before replacing an existing build;
+  planning or staging failures leave the prior output intact.
+- Notes and warnings are printed in deterministic plan order and do not make a
+  successful compile exit nonzero.
 
 ## Targets
 

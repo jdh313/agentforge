@@ -3,6 +3,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Command } from 'commander';
 import matter from 'gray-matter';
+import { type CompilationPlan, compileMarketplace } from './compiler.ts';
+import { type LoadedMarketplace, loadMarketplaceDefinition } from './definitions.ts';
+import { claudeMarketplaceAdapter, codexMarketplaceAdapter } from './marketplace-adapters.ts';
+import { materializeCompilation } from './materializer.ts';
 import { render } from './render.ts';
 import { ARTIFACT_DEFS } from './schema.ts';
 import { allTargets } from './targets/index.ts';
@@ -64,6 +68,108 @@ const resolveArtifact = (sourceDir: string, flag: string | undefined): ArtifactT
   }
   return detectArtifact(sourceDir);
 };
+
+const collect = (value: string, previous: string[]): string[] => [...previous, value];
+
+const compareStrings = (left: string, right: string): number => {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+};
+
+const selectPublications = (
+  loaded: LoadedMarketplace,
+  requested: readonly string[],
+): LoadedMarketplace => {
+  if (requested.length === 0) return loaded;
+
+  const duplicate = requested.find((id, index) => requested.indexOf(id) !== index);
+  if (duplicate) throw new Error(`duplicate publication: ${duplicate}`);
+
+  const available = new Set(loaded.definition.publications.map(({ id }) => id));
+  const unknown = requested.find((id) => !available.has(id));
+  if (unknown) throw new Error(`unknown publication: ${unknown}`);
+
+  const selected = new Set(requested);
+  return {
+    ...loaded,
+    definition: {
+      ...loaded.definition,
+      publications: loaded.definition.publications.filter(({ id }) => selected.has(id)),
+    },
+  };
+};
+
+const formatCompilation = (plan: CompilationPlan): string => {
+  const outputCounts = new Map<string, number>();
+  for (const output of plan.outputs) {
+    const publication = output.provenance.publicationId;
+    outputCounts.set(publication, (outputCounts.get(publication) ?? 0) + 1);
+  }
+
+  const lines = [...outputCounts]
+    .toSorted(([left], [right]) => compareStrings(left, right))
+    .map(([publication, count]) => `[${publication}] wrote ${count} files`);
+  for (const diagnostic of plan.diagnostics) {
+    const packageDetail = diagnostic.provenance.packageId
+      ? `/${diagnostic.provenance.packageId}`
+      : '';
+    lines.push(
+      `${diagnostic.severity} [${diagnostic.provenance.publicationId}${packageDetail}] ${diagnostic.code}: ${diagnostic.message}`,
+    );
+  }
+  return lines.join('\n');
+};
+
+const compileSelectedMarketplace = (loaded: LoadedMarketplace): CompilationPlan => {
+  const outputs: CompilationPlan['outputs'][number][] = [];
+  const diagnostics: CompilationPlan['diagnostics'][number][] = [];
+
+  for (const publication of loaded.definition.publications.toSorted((left, right) =>
+    compareStrings(left.id, right.id),
+  )) {
+    const publicationMarketplace: LoadedMarketplace = {
+      ...loaded,
+      definition: { ...loaded.definition, publications: [publication] },
+    };
+    const plan = compileMarketplace(publicationMarketplace, [
+      claudeMarketplaceAdapter,
+      codexMarketplaceAdapter,
+    ]);
+    outputs.push(
+      ...plan.outputs.map((output) => ({
+        ...output,
+        destination: `${publication.id}/${output.destination}`,
+      })),
+    );
+    diagnostics.push(...plan.diagnostics);
+  }
+
+  return { marketplaceId: loaded.definition.id, outputs, diagnostics };
+};
+
+program
+  .command('compile <marketplace>')
+  .description('Compile a marketplace definition into a complete output directory')
+  .requiredOption('-o, --out <dir>', 'output directory')
+  .option(
+    '-p, --publication <id>',
+    'publication to compile; repeat to select more than one',
+    collect,
+    [],
+  )
+  .action(async (marketplace: string, opts: { out: string; publication: string[] }) => {
+    try {
+      const loaded = await loadMarketplaceDefinition(resolve(marketplace));
+      const selected = selectPublications(loaded, opts.publication);
+      const plan = compileSelectedMarketplace(selected);
+      materializeCompilation(plan, resolve(opts.out));
+      console.log(formatCompilation(plan));
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  });
 
 program
   .command('render <source-dir>')
