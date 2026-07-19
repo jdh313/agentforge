@@ -34,10 +34,12 @@ describe('native marketplace adapters', () => {
       'packages/craft/.claude-plugin/plugin.json',
       'packages/craft/skills/tdd/SKILL.md',
       'packages/librarian/.claude-plugin/plugin.json',
+      'packages/librarian/agents/vault-reader.md',
       'packages/librarian/skills/wiki-query/SKILL.md',
       'packages/linear/.claude-plugin/plugin.json',
       'packages/linear/skills/linear/SKILL.md',
       'packages/spec-flow/.claude-plugin/plugin.json',
+      'packages/spec-flow/commands/spec-flow.md',
       'packages/spec-flow/hooks/hooks.json',
       'packages/spec-flow/skills/draft/SKILL.md',
       'packages/spec-flow/skills/draft/assets/logo.txt',
@@ -137,6 +139,7 @@ describe('native marketplace adapters', () => {
       'packages/craft/.codex-plugin/plugin.json',
       'packages/craft/skills/tdd/SKILL.md',
       'packages/librarian/.codex-plugin/plugin.json',
+      'packages/librarian/agents/vault-reader.md',
       'packages/librarian/skills/wiki-query/SKILL.md',
       'packages/linear/.codex-plugin/plugin.json',
       'packages/linear/skills/linear/SKILL.md',
@@ -145,6 +148,8 @@ describe('native marketplace adapters', () => {
       'packages/spec-flow/skills/draft/assets/logo.txt',
       'packages/spec-flow/skills/draft/references/contract.md',
       'packages/spec-flow/skills/draft/scripts/check.ts',
+      'packages/spec-flow/skills/spec-flow/SKILL.md',
+      'packages/spec-flow/skills/spec-flow/agents/openai.yaml',
     ]);
 
     expect(generatedDocument(plan.outputs, '.agents/plugins/marketplace.json')).toEqual({
@@ -212,6 +217,24 @@ describe('native marketplace adapters', () => {
       copiedOutput(claudePlan.outputs, 'packages/spec-flow/hooks/hooks.json').sourcePath,
     ).toEndWith('/packages/spec-flow/hooks/hooks.json');
     expect(
+      matter(
+        generatedOutput(claudePlan.outputs, 'packages/librarian/agents/vault-reader.md').content,
+      ).data,
+    ).toMatchObject({
+      name: 'vault-reader',
+      description: 'Read and synthesize vault context without modifying it.',
+      model: 'sonnet',
+    });
+    expect(
+      matter(
+        generatedOutput(claudePlan.outputs, 'packages/spec-flow/commands/spec-flow.md').content,
+      ).data,
+    ).toMatchObject({
+      description: 'Drive a change through the spec-flow contract lifecycle.',
+      'argument-hint': '<subcommand> [args]',
+      'allowed-tools': ['Skill'],
+    });
+    expect(
       copiedOutput(claudePlan.outputs, 'packages/spec-flow/skills/draft/assets/logo.txt')
         .sourcePath,
     ).toEndWith('/packages/spec-flow/skills/draft/assets/logo.txt');
@@ -240,6 +263,32 @@ describe('native marketplace adapters', () => {
         ({ destination }) => destination === 'packages/spec-flow/hooks/hooks.json',
       ),
     ).toBe(false);
+    expect(
+      generatedOutput(codexPlan.outputs, 'packages/librarian/agents/vault-reader.md').content,
+    ).toBe('# Vault reader\n\nRead-only role procedure for inspecting the knowledge base.\n');
+    expect(
+      matter(
+        generatedOutput(codexPlan.outputs, 'packages/spec-flow/skills/spec-flow/SKILL.md').content,
+      ),
+    ).toMatchObject({
+      data: {
+        name: 'spec-flow',
+        description: 'Drive a change through the spec-flow contract lifecycle.',
+      },
+      content: expect.stringContaining('Dispatch the requested lifecycle operation'),
+    });
+    expect(
+      Bun.YAML.parse(
+        generatedOutput(codexPlan.outputs, 'packages/spec-flow/skills/spec-flow/agents/openai.yaml')
+          .content,
+      ),
+    ).toEqual({
+      interface: {
+        display_name: 'Spec Flow',
+        short_description: 'Drive a change through the spec-flow contract lifecycle.',
+      },
+      policy: { allow_implicit_invocation: false },
+    });
     expect(codexPlan.diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -248,16 +297,22 @@ describe('native marketplace adapters', () => {
           provenance: expect.objectContaining({ packageId: 'spec-flow' }),
         }),
         expect.objectContaining({
-          code: 'unsupported-artifact-projection',
+          code: 'inferred-artifact-projection',
+          severity: 'note',
+          provenance: expect.objectContaining({ packageId: 'librarian' }),
+          retainedSource: expect.objectContaining({ artifactType: 'agent' }),
+        }),
+        expect.objectContaining({
+          code: 'inferred-artifact-projection',
           severity: 'note',
           provenance: expect.objectContaining({ packageId: 'spec-flow' }),
-          retainedSource: expect.objectContaining({ artifactType: 'hook' }),
+          retainedSource: expect.objectContaining({ artifactType: 'command' }),
         }),
         expect.objectContaining({
           code: 'unsupported-artifact-projection',
           severity: 'note',
-          provenance: expect.objectContaining({ packageId: 'librarian' }),
-          retainedSource: expect.objectContaining({ artifactType: 'agent' }),
+          provenance: expect.objectContaining({ packageId: 'spec-flow' }),
+          retainedSource: expect.objectContaining({ artifactType: 'hook' }),
         }),
       ]),
     );

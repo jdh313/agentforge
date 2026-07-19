@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseAgentBehavior, parseCommandBehavior } from '../agent-command.ts';
 import {
   CompilationError,
   type CompilationPackage,
@@ -6,9 +7,22 @@ import {
   type TargetCompilerAdapter,
 } from '../compiler.ts';
 import { deepMerge } from '../deep-merge.ts';
-import { compilePackagePayload, relativePackageDirectory } from './package-payload.ts';
+import {
+  type ArtifactTranslator,
+  compilePackagePayload,
+  relativePackageArtifactPath,
+  relativePackageDirectory,
+} from './package-payload.ts';
 
-const PASSTHROUGH_ARTIFACT_TYPES = new Set(['hook']);
+const DIRECT_TRANSLATORS = new Map<string, ArtifactTranslator>([
+  ['agent', directTranslator(parseAgentBehavior)],
+  ['command', directTranslator(parseCommandBehavior)],
+]);
+
+const PAYLOAD_POLICY = {
+  passthroughArtifactTypes: new Set(['hook']),
+  translators: DIRECT_TRANSLATORS,
+};
 
 const Author = z.looseObject({
   name: z.string().min(1),
@@ -45,7 +59,7 @@ export const claudeMarketplaceAdapter: TargetCompilerAdapter = {
   compilePublication(input) {
     const packages = input.packages.map((packageInput) => compilePackage(input, packageInput));
     const payloads = input.packages.map((packageInput) =>
-      compilePackagePayload(input, packageInput, PASSTHROUGH_ARTIFACT_TYPES),
+      compilePackagePayload(input, packageInput, PAYLOAD_POLICY),
     );
     const marketplace = parseDocument(
       ClaudeMarketplace,
@@ -78,6 +92,25 @@ export const claudeMarketplaceAdapter: TargetCompilerAdapter = {
     };
   },
 };
+
+function directTranslator(
+  parse: (sourcePath: string, source: string) => { source: string },
+): ArtifactTranslator {
+  return ({ artifact, packageDirectory, packageInput }) => {
+    const behavior = parse(artifact.path, artifact.content);
+    return {
+      outputs: [
+        {
+          kind: 'generated',
+          packageId: packageInput.id,
+          destination: `${packageDirectory}/${relativePackageArtifactPath(packageInput.path, artifact.path)}`,
+          content: behavior.source,
+        },
+      ],
+      diagnostics: [],
+    };
+  };
+}
 
 function compilePackage(input: PublicationCompilation, packageInput: CompilationPackage) {
   const packageDirectory = relativePackageDirectory(input.marketplace.path, packageInput.path);

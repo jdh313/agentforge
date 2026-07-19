@@ -5,18 +5,32 @@ import type {
   ProposedOutput,
   PublicationCompilation,
 } from '../compiler.ts';
+import type { LoadedArtifact } from '../definitions.ts';
 import { projectArtifact } from '../render.ts';
 import type { TargetName } from '../types.ts';
 
-interface PackagePayloadResult {
+export interface PackagePayloadResult {
   outputs: ProposedOutput[];
   diagnostics: ProposedCompilationDiagnostic[];
+}
+
+export interface ArtifactTranslatorInput {
+  artifact: LoadedArtifact;
+  packageDirectory: string;
+  packageInput: CompilationPackage;
+}
+
+export type ArtifactTranslator = (input: ArtifactTranslatorInput) => PackagePayloadResult;
+
+export interface PackagePayloadPolicy {
+  passthroughArtifactTypes: ReadonlySet<string>;
+  translators: ReadonlyMap<string, ArtifactTranslator>;
 }
 
 export function compilePackagePayload(
   input: PublicationCompilation,
   packageInput: CompilationPackage,
-  passthroughArtifactTypes: ReadonlySet<string>,
+  policy: PackagePayloadPolicy,
 ): PackagePayloadResult {
   const outputs: ProposedOutput[] = [];
   const diagnostics: ProposedCompilationDiagnostic[] = [];
@@ -61,7 +75,15 @@ export function compilePackagePayload(
         continue;
       }
 
-      if (passthroughArtifactTypes.has(artifactType)) {
+      const translator = policy.translators.get(artifactType);
+      if (translator) {
+        const translated = translator({ artifact, packageDirectory, packageInput });
+        outputs.push(...translated.outputs);
+        diagnostics.push(...translated.diagnostics);
+        continue;
+      }
+
+      if (policy.passthroughArtifactTypes.has(artifactType)) {
         outputs.push({
           kind: 'copy',
           packageId: packageInput.id,
@@ -97,6 +119,10 @@ function unsupportedProjection(
 
 export function relativePackageDirectory(marketplacePath: string, packagePath: string): string {
   return portableRelative(dirname(marketplacePath), dirname(packagePath));
+}
+
+export function relativePackageArtifactPath(packagePath: string, artifactPath: string): string {
+  return portableRelative(dirname(packagePath), artifactPath);
 }
 
 function portableRelative(from: string, to: string): string {
