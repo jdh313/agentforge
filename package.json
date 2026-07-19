@@ -11,6 +11,7 @@
     "./agent-command": "./src/agent-command.ts",
     "./compiler": "./src/compiler.ts",
     "./definitions": "./src/definitions.ts",
+    "./materializer": "./src/materializer.ts",
     "./marketplace-adapters": "./src/marketplace-adapters.ts",
     "./render": "./src/render.ts"
   },
