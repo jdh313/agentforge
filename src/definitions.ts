@@ -1,6 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { z } from 'zod';
+import {
+  normalizePackagePayloads,
+  PackagePayloadPlanError,
+  type PackagePayloadPlans,
+} from './package-payload-plan.ts';
 import { TARGET_NAMES } from './types.ts';
 
 export const PACKAGE_FILENAME = 'PACKAGE.yaml';
@@ -35,9 +40,21 @@ export const PackageDefaults = z.strictObject({
   keywords: z.array(z.string().min(1)).optional(),
 });
 
+const PayloadInclude = z.strictObject({
+  source: z.string().min(1),
+  destination: z.string().min(1).optional(),
+  exclude: z.array(z.string().min(1)).optional(),
+});
+
+const PayloadDeclaration = z.strictObject({
+  include: z.array(PayloadInclude).min(1),
+  exclude: z.array(z.string().min(1)).optional(),
+});
+
 const PackageTarget = z.strictObject({
   overrides: PackageDefaults.partial().optional(),
   native: JsonObject.optional(),
+  payloads: PayloadDeclaration.optional(),
 });
 
 const ArtifactPattern = z.strictObject({
@@ -51,6 +68,7 @@ export const CanonicalPackage = z
     id: Slug,
     defaults: PackageDefaults,
     artifacts: z.array(ArtifactPattern).min(1),
+    payloads: PayloadDeclaration.optional(),
     targets: z
       .partialRecord(TargetName, PackageTarget)
       .refine((targets) => Object.keys(targets).length > 0, 'declare at least one target'),
@@ -121,6 +139,7 @@ export interface LoadedPackage {
   definition: PackageDefinition;
   artifacts: ReadonlyMap<string, readonly LoadedArtifact[]>;
   files: readonly string[];
+  payloads: PackagePayloadPlans;
 }
 
 export interface LoadedArtifact {
@@ -175,11 +194,24 @@ export async function loadPackageDefinition(path: string): Promise<LoadedPackage
     artifacts.set(projection.type, [...current, ...loaded]);
   }
 
+  const resolvedPath = resolve(path);
+  const files = await expandPattern(root, '**/*');
+  let payloads: PackagePayloadPlans;
+  try {
+    payloads = normalizePackagePayloads(resolvedPath, definition, files);
+  } catch (cause) {
+    if (cause instanceof PackagePayloadPlanError) {
+      throw new DefinitionError(cause.message, path, { cause });
+    }
+    throw cause;
+  }
+
   return {
-    path: resolve(path),
+    path: resolvedPath,
     definition,
     artifacts,
-    files: await expandPattern(root, '**/*'),
+    files,
+    payloads,
   };
 }
 

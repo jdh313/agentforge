@@ -87,6 +87,14 @@ describe('marketplace compiler interface', () => {
         description: 'Full Claude-native Librarian package metadata',
       },
     });
+    expect(compilations[0]?.packages.find(({ id }) => id === 'spec-flow')?.payloads).toEqual([
+      expect.objectContaining({ destination: 'LICENSE.txt' }),
+      expect.objectContaining({ destination: 'native-hooks.json' }),
+    ]);
+    expect(compilations[1]?.packages.find(({ id }) => id === 'spec-flow')?.payloads).toEqual([
+      expect.objectContaining({ destination: 'LICENSE.txt' }),
+      expect.objectContaining({ destination: 'config/defaults.json' }),
+    ]);
     expect(plan).toMatchObject({
       marketplaceId: 'cc-marketplace',
       outputs: [

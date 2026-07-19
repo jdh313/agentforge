@@ -15,9 +15,20 @@ artifacts:
     pattern: commands/*.md
   - type: hook
     pattern: hooks/hooks.json
+payloads:
+  include:
+    - source: LICENSE.txt
 targets:
-  claude: {}
+  claude:
+    payloads:
+      include:
+        - source: hooks/hooks.json
+          destination: native-hooks.json
   codex:
+    payloads:
+      include:
+        - source: config/
+          destination: config/
     native:
       interface:
         displayName: Spec Flow

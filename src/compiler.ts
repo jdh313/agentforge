@@ -6,6 +6,7 @@ import type {
   NativeOverlay,
   PackageDefinition,
 } from './definitions.ts';
+import type { PackagePayload } from './package-payload-plan.ts';
 import type { TargetName } from './types.ts';
 
 type PublicationDefinition = MarketplaceDefinition['publications'][number];
@@ -78,6 +79,7 @@ export interface CompilationPackage {
   native: NativeOverlay;
   artifacts: ReadonlyMap<string, readonly LoadedArtifact[]>;
   files: readonly string[];
+  payloads: readonly PackagePayload[];
 }
 
 export interface PublicationCompilation {
@@ -228,6 +230,7 @@ function resolvePackages(
       native: target.native ?? {},
       artifacts: loadedPackage.artifacts,
       files: loadedPackage.files,
+      payloads: loadedPackage.payloads[publication.target] ?? [],
     };
   });
 }

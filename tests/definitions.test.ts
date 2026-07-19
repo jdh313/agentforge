@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import {
   loadMarketplaceDefinition,
   loadPackageDefinition,
@@ -25,6 +25,48 @@ afterAll(() => {
 });
 
 describe('package definitions', () => {
+  test('accepts ordered shared and target-specific payload declarations', () => {
+    const definition = parsePackageDefinition(`
+schema: agentforge.package/v1
+id: example
+defaults:
+  name: example
+  version: 1.0.0
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+payloads:
+  include:
+    - source: README.md
+    - source: templates/
+      destination: resources/templates/
+      exclude: [templates/private/**]
+  exclude: ['**/*.test.md']
+targets:
+  claude:
+    payloads:
+      include:
+        - source: hooks/*.json
+          destination: hooks/
+  codex: {}
+`);
+
+    expect(definition.payloads).toEqual({
+      include: [
+        { source: 'README.md' },
+        {
+          source: 'templates/',
+          destination: 'resources/templates/',
+          exclude: ['templates/private/**'],
+        },
+      ],
+      exclude: ['**/*.test.md'],
+    });
+    expect(definition.targets.claude?.payloads).toEqual({
+      include: [{ source: 'hooks/*.json', destination: 'hooks/' }],
+    });
+  });
+
   test('loads a representative Librarian package and resolves projection patterns', async () => {
     const loaded = await loadPackageDefinition(
       join(MARKETPLACE_FIXTURE, 'packages', 'librarian', 'PACKAGE.yaml'),
@@ -46,6 +88,121 @@ describe('package definitions', () => {
     });
     expect(loaded.artifacts.get('skill')).toHaveLength(1);
     expect(loaded.artifacts.get('agent')).toHaveLength(1);
+  });
+
+  test('normalizes payload declarations into deterministic target plans', async () => {
+    const packagePath = packageWithPayload(
+      'payload-plan',
+      `  include:
+    - source: skills/draft/
+      destination: bundle/draft/
+      exclude: ['**/assets/**']
+  exclude: ['**/*.ts']`,
+      `  claude:
+    payloads:
+      include:
+        - source: hooks/*.json
+          destination: hooks/
+  codex: {}`,
+    );
+
+    const loaded = await loadPackageDefinition(packagePath);
+
+    expect(
+      loaded.payloads.claude?.map(({ destination, sourcePath }) => ({
+        destination,
+        source: relative(dirname(packagePath), sourcePath),
+      })),
+    ).toEqual([
+      { source: 'skills/draft/SKILL.md', destination: 'bundle/draft/SKILL.md' },
+      {
+        source: 'skills/draft/references/contract.md',
+        destination: 'bundle/draft/references/contract.md',
+      },
+      { source: 'hooks/hooks.json', destination: 'hooks/hooks.json' },
+    ]);
+    expect(loaded.payloads.codex).toEqual([
+      expect.objectContaining({ destination: 'bundle/draft/SKILL.md' }),
+      expect.objectContaining({ destination: 'bundle/draft/references/contract.md' }),
+    ]);
+  });
+
+  test('rejects ambiguous destinations for directory and glob payloads', async () => {
+    const packagePath = packageWithPayload(
+      'ambiguous-payload-destination',
+      `  include:
+    - source: hooks/*.json
+      destination: hook.json`,
+    );
+
+    await expect(loadPackageDefinition(packagePath)).rejects.toThrow(
+      'payload destination "hook.json" must end with "/" when the source is a directory or glob',
+    );
+  });
+
+  test('rejects non-portable payload destinations', async () => {
+    const packagePath = packageWithPayload(
+      'non-portable-payload-destination',
+      `  include:
+    - source: hooks/hooks.json
+      destination: portable/file.`,
+    );
+
+    await expect(loadPackageDefinition(packagePath)).rejects.toThrow(
+      'payload destination "portable/file." has a segment ending with a dot or space',
+    );
+  });
+
+  test('rejects payload sources that escape the package root', async () => {
+    const packagePath = packageWithPayload(
+      'escaping-payload-source',
+      `  include:
+    - source: ../secret.json`,
+    );
+
+    await expect(loadPackageDefinition(packagePath)).rejects.toThrow(
+      'payload source "../secret.json" must not escape the package root',
+    );
+  });
+
+  test('rejects payload destinations that escape the package root', async () => {
+    const packagePath = packageWithPayload(
+      'escaping-payload-destination',
+      `  include:
+    - source: hooks/hooks.json
+      destination: ../outside.json`,
+    );
+
+    await expect(loadPackageDefinition(packagePath)).rejects.toThrow(
+      'payload destination "../outside.json" must not escape the package root',
+    );
+  });
+
+  test('rejects payload declarations that match no files', async () => {
+    const packagePath = packageWithPayload(
+      'missing-payload-source',
+      `  include:
+    - source: missing/**`,
+    );
+
+    await expect(loadPackageDefinition(packagePath)).rejects.toThrow(
+      'payload source "missing/**" matched no files',
+    );
+  });
+
+  test('rejects colliding normalized payload destinations', async () => {
+    const packagePath = packageWithPayload(
+      'colliding-payload-destinations',
+      `  include:
+    - source: hooks/hooks.json
+      destination: shared.json
+    - source: commands/spec-flow.md
+      destination: shared.json`,
+    );
+
+    await expect(loadPackageDefinition(packagePath)).rejects.toThrow(
+      'payload destination "shared.json" collide for target "claude"',
+    );
   });
 
   test('rejects artifact patterns that match no files', async () => {
@@ -160,4 +317,30 @@ function copyMarketplace(name: string): string {
 function replaceMarketplace(root: string, before: string, after: string): void {
   const path = join(root, 'MARKETPLACE.yaml');
   writeFileSync(path, readFileSync(path, 'utf8').replace(before, after));
+}
+
+function packageWithPayload(
+  name: string,
+  payload: string,
+  targets = '  claude: {}\n  codex: {}',
+): string {
+  const root = copyMarketplace(name);
+  const packagePath = join(root, 'packages', 'spec-flow', 'PACKAGE.yaml');
+  writeFileSync(
+    packagePath,
+    `schema: agentforge.package/v1
+id: spec-flow
+defaults:
+  name: spec-flow
+  version: 0.12.2
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+payloads:
+${payload}
+targets:
+${targets}
+`,
+  );
+  return packagePath;
 }
