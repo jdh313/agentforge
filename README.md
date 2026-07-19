@@ -17,8 +17,8 @@ AgentForge has two layers:
 
 Skill and output-style rendering is snapshot-tested. Version 1 package and
 marketplace definitions can be loaded, validated, and compiled into a pure,
-deterministic output plan through the library API. Native manifest and registry
-adapters are planned.
+deterministic output plan through the library API. Production Claude and Codex
+adapters emit validated native marketplace registries and plugin manifests.
 
 ## Quick start
 
@@ -168,6 +168,31 @@ const plan = compileMarketplace(marketplaceResult, [
   failures identify both producers.
 - A translation gap can be returned as a diagnostic with `retainedSource`,
   keeping the source payload visible without synthesizing a native document.
+
+Use the production adapters to compile the canonical collection into Claude and
+Codex marketplace documents:
+
+```ts
+import { compileMarketplace } from 'agentforge/compiler';
+import {
+  claudeMarketplaceAdapter,
+  codexMarketplaceAdapter,
+} from 'agentforge/marketplace-adapters';
+
+const plan = compileMarketplace(marketplaceResult, [
+  claudeMarketplaceAdapter,
+  codexMarketplaceAdapter,
+]);
+```
+
+- Claude emits the configured marketplace destination plus per-package
+  `.claude-plugin/plugin.json` documents.
+- Codex emits the configured marketplace destination plus per-package
+  `.codex-plugin/plugin.json` documents.
+- Package document destinations and registry source paths follow each loaded
+  `PACKAGE.yaml` directory relative to `MARKETPLACE.yaml`.
+- Known native fields are type-checked with open target schemas; unrecognized
+  native keys remain available for target evolution.
 
 ## CLI
 

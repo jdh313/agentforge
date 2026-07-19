@@ -1,0 +1,105 @@
+import { dirname, relative, sep } from 'node:path';
+import { z } from 'zod';
+import {
+  CompilationError,
+  type CompilationPackage,
+  type PublicationCompilation,
+  type TargetCompilerAdapter,
+} from '../compiler.ts';
+import { deepMerge } from '../deep-merge.ts';
+
+const Author = z.looseObject({
+  name: z.string().min(1),
+  email: z.email().optional(),
+  url: z.url().optional(),
+});
+
+const ClaudePluginManifest = z.looseObject({
+  name: z.string().min(1),
+  displayName: z.string().min(1).optional(),
+  version: z.string().min(1),
+  description: z.string().min(1).optional(),
+  author: Author.optional(),
+  homepage: z.url().optional(),
+  repository: z.url().optional(),
+  license: z.string().min(1).optional(),
+  keywords: z.array(z.string().min(1)).optional(),
+  defaultEnabled: z.boolean().optional(),
+});
+
+const ClaudeMarketplacePlugin = ClaudePluginManifest.extend({
+  source: z.union([z.string().min(1), z.looseObject({ source: z.string().min(1) })]),
+});
+
+const ClaudeMarketplace = z.looseObject({
+  name: z.string().min(1),
+  description: z.string().min(1).optional(),
+  owner: Author,
+  plugins: z.array(ClaudeMarketplacePlugin),
+});
+
+export const claudeMarketplaceAdapter: TargetCompilerAdapter = {
+  target: 'claude',
+  compilePublication(input) {
+    const packages = input.packages.map((packageInput) => compilePackage(input, packageInput));
+    const marketplace = parseDocument(
+      ClaudeMarketplace,
+      deepMerge(
+        {
+          ...input.marketplace.metadata,
+          plugins: packages.map(({ manifest, source }) => ({ ...manifest, source })),
+        },
+        input.publication.native,
+      ),
+      `marketplace document for publication "${input.publication.id}"`,
+    );
+
+    return {
+      outputs: [
+        {
+          kind: 'generated',
+          destination: input.publication.destination,
+          content: serialize(marketplace),
+        },
+        ...packages.map(({ packageId, destination, manifest }) => ({
+          kind: 'generated' as const,
+          packageId,
+          destination,
+          content: serialize(manifest),
+        })),
+      ],
+    };
+  },
+};
+
+function compilePackage(input: PublicationCompilation, packageInput: CompilationPackage) {
+  const packageDirectory = relativePackageDirectory(input.marketplace.path, packageInput.path);
+  return {
+    packageId: packageInput.id,
+    destination: `${packageDirectory}/.claude-plugin/plugin.json`,
+    source: `./${packageDirectory}`,
+    manifest: parseDocument(
+      ClaudePluginManifest,
+      deepMerge({ ...packageInput.metadata }, packageInput.native),
+      `plugin document for package "${packageInput.id}"`,
+    ),
+  };
+}
+
+function relativePackageDirectory(marketplacePath: string, packagePath: string): string {
+  return relative(dirname(marketplacePath), dirname(packagePath)).split(sep).join('/');
+}
+
+function serialize(document: unknown): string {
+  return `${JSON.stringify(document, null, 2)}\n`;
+}
+
+function parseDocument<T>(schema: z.ZodType<T>, document: unknown, label: string): T {
+  const result = schema.safeParse(document);
+  if (result.success) return result.data;
+  const issue = result.error.issues[0];
+  const path = issue?.path.join('.') || '<root>';
+  throw new CompilationError(
+    `invalid Claude ${label}: ${path}: ${issue?.message ?? 'validation failed'}`,
+  );
+}

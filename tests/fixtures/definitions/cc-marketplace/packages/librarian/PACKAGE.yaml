@@ -23,5 +23,12 @@ targets:
     native:
       interface:
         displayName: Librarian
+        shortDescription: Curate and retrieve Obsidian knowledge
+        longDescription: Capture, process, retrieve, and maintain notes through approval-gated workflows and isolated vault roles.
+        developerName: Jacob Hoehler
         category: Productivity
         capabilities: [Read, Write, Interactive]
+        defaultPrompt:
+          - Search my knowledge base for this topic.
+          - Capture this as a structured note.
+          - Inspect my vault without changing anything.

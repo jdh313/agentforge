@@ -9,7 +9,8 @@
   },
   "exports": {
     "./compiler": "./src/compiler.ts",
-    "./definitions": "./src/definitions.ts"
+    "./definitions": "./src/definitions.ts",
+    "./marketplace-adapters": "./src/marketplace-adapters.ts"
   },
   "scripts": {
     "start": "bun run src/cli.ts",
