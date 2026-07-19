@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join, relative } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 import matter from 'gray-matter';
 import JSZip from 'jszip';
 import { deepMerge } from './deep-merge.ts';
@@ -23,6 +23,26 @@ export interface RenderOptions {
   target: TargetName;
   outDir: string;
   artifact?: ArtifactType;
+}
+
+export interface ArtifactProjectionOptions {
+  sourcePath: string;
+  source: string;
+  target: TargetName;
+  artifact: ArtifactType;
+  resourcePaths?: readonly string[];
+}
+
+export interface ProjectedResource {
+  sourcePath: string;
+  relativePath: string;
+}
+
+export interface ArtifactProjection {
+  artifactName: string;
+  content: string;
+  resources: readonly ProjectedResource[];
+  warnings: readonly Warning[];
 }
 
 // biome-ignore-start lint/suspicious/noTemplateCurlyInString: labels are literal docs of Claude-only patterns
@@ -60,21 +80,15 @@ const omitKey = <T extends Record<string, unknown>>(
   return rest;
 };
 
-export const render = async (opts: RenderOptions): Promise<RenderResult> => {
-  const { sourceDir, target, outDir, artifact = 'skill' } = opts;
+export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjection => {
+  const { sourcePath, source, target, artifact, resourcePaths = [] } = opts;
   const artifactDef = ARTIFACT_DEFS[artifact];
-  const canonicalFile = join(sourceDir, artifactDef.canonicalFilename);
-  if (!existsSync(canonicalFile)) {
-    throw new Error(`${artifactDef.canonicalFilename} not found at ${canonicalFile}`);
-  }
-
   const artifactConfig = getArtifactConfig(target, artifact);
   if (!artifactConfig) {
     throw new Error(`target ${target} does not support artifact ${artifact}`);
   }
 
-  const raw = readFileSync(canonicalFile, 'utf-8');
-  const parsed = matter(raw);
+  const parsed = matter(source);
   const data = artifactDef.canonicalSchema.parse(parsed.data) as Record<string, unknown> & {
     targets?: Record<string, unknown>;
   };
@@ -121,33 +135,77 @@ export const render = async (opts: RenderOptions): Promise<RenderResult> => {
     typeof (filtered as { name?: unknown }).name === 'string' &&
     (filtered as { name: string }).name.length > 0
       ? (filtered as { name: string }).name
-      : nameFromSourceDir(sourceDir);
+      : nameFromSourceDir(dirname(sourcePath));
 
   const rendered = matter.stringify(body, filtered);
-  const resourcesCopied: string[] = [];
+  const sourceDir = dirname(sourcePath);
+  const resources = resourcePaths
+    .map((resourcePath) => ({
+      sourcePath: resourcePath,
+      relativePath: relative(sourceDir, resourcePath).split('\\').join('/'),
+    }))
+    .filter(({ relativePath }) => {
+      const [subdir] = relativePath.split('/');
+      return subdir !== undefined && artifactConfig.resourceSubdirs.has(subdir);
+    })
+    .toSorted((left, right) => {
+      if (left.relativePath < right.relativePath) return -1;
+      if (left.relativePath > right.relativePath) return 1;
+      return 0;
+    });
+
+  return { artifactName, content: rendered, resources, warnings };
+};
+
+export const render = async (opts: RenderOptions): Promise<RenderResult> => {
+  const { sourceDir, target, outDir, artifact = 'skill' } = opts;
+  const artifactDef = ARTIFACT_DEFS[artifact];
+  const canonicalFile = join(sourceDir, artifactDef.canonicalFilename);
+  if (!existsSync(canonicalFile)) {
+    throw new Error(`${artifactDef.canonicalFilename} not found at ${canonicalFile}`);
+  }
+
+  const artifactConfig = getArtifactConfig(target, artifact);
+  if (!artifactConfig) {
+    throw new Error(`target ${target} does not support artifact ${artifact}`);
+  }
+
+  const resourcePaths = [...artifactConfig.resourceSubdirs].flatMap((subdir) => {
+    const resourceDir = join(sourceDir, subdir);
+    return existsSync(resourceDir)
+      ? walkFiles(resourceDir).map((path) => join(resourceDir, path))
+      : [];
+  });
+  const projection = projectArtifact({
+    sourcePath: canonicalFile,
+    source: readFileSync(canonicalFile, 'utf-8'),
+    target,
+    artifact,
+    resourcePaths,
+  });
+  const resourcesCopied = [
+    ...new Set(projection.resources.map(({ relativePath }) => relativePath.split('/')[0])),
+  ];
 
   if (artifactDef.layout === 'file') {
     mkdirSync(outDir, { recursive: true });
-    const outputPath = join(outDir, `${artifactName}.md`);
-    writeFileSync(outputPath, rendered, 'utf-8');
-    return { outputPath, resourcesCopied, warnings };
+    const outputPath = join(outDir, `${projection.artifactName}.md`);
+    writeFileSync(outputPath, projection.content, 'utf-8');
+    return { outputPath, resourcesCopied, warnings: [...projection.warnings] };
   }
 
   const isZip = artifactConfig.bundle === 'zip';
   const tempRoot = isZip ? mkdtempSync(join(tmpdir(), 'agentforge-zip-')) : null;
-  const materializeDir = tempRoot ? join(tempRoot, artifactName) : outDir;
+  const materializeDir = tempRoot ? join(tempRoot, projection.artifactName) : outDir;
 
   mkdirSync(materializeDir, { recursive: true });
   const canonicalOutPath = join(materializeDir, artifactDef.canonicalFilename);
-  writeFileSync(canonicalOutPath, rendered, 'utf-8');
+  writeFileSync(canonicalOutPath, projection.content, 'utf-8');
 
-  for (const sub of artifactConfig.resourceSubdirs) {
-    const srcSub = join(sourceDir, sub);
-    if (existsSync(srcSub)) {
-      const destSub = join(materializeDir, sub);
-      cpSync(srcSub, destSub, { recursive: true });
-      resourcesCopied.push(sub);
-    }
+  for (const resource of projection.resources) {
+    const destination = join(materializeDir, resource.relativePath);
+    mkdirSync(dirname(destination), { recursive: true });
+    cpSync(resource.sourcePath, destination);
   }
 
   let outputPath = canonicalOutPath;
@@ -158,7 +216,7 @@ export const render = async (opts: RenderOptions): Promise<RenderResult> => {
     }
     const buf = await zip.generateAsync({ type: 'nodebuffer' });
     mkdirSync(outDir, { recursive: true });
-    outputPath = join(outDir, `${artifactName}.zip`);
+    outputPath = join(outDir, `${projection.artifactName}.zip`);
     writeFileSync(outputPath, buf);
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -166,7 +224,7 @@ export const render = async (opts: RenderOptions): Promise<RenderResult> => {
   return {
     outputPath,
     resourcesCopied,
-    warnings,
+    warnings: [...projection.warnings],
   };
 };
 
