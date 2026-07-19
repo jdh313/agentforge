@@ -7,6 +7,8 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -112,6 +114,27 @@ describe('marketplace materialization', () => {
 
     expect(readFileSync(join(outDir, 'marketplace.json'), 'utf8')).toBe('known good\n');
     expect(existsSync(join(outDir, 'packages/missing.txt'))).toBe(false);
+  });
+
+  test('rejects a declared payload replaced by a symlink after planning', () => {
+    const packageRoot = join(temporaryRoot, 'retargeted-package');
+    const source = join(packageRoot, 'payload.txt');
+    const external = join(temporaryRoot, 'external.txt');
+    const outDir = join(temporaryRoot, 'retargeted-output');
+    mkdirSync(packageRoot);
+    mkdirSync(outDir);
+    writeFileSync(source, 'original\n');
+    writeFileSync(external, 'external\n');
+    writeFileSync(join(outDir, 'sentinel.txt'), 'keep\n');
+    const output = { ...copied('payload.txt', source, 'commit'), sourceRoot: packageRoot };
+    unlinkSync(source);
+    symlinkSync(external, source);
+
+    expect(() => materializeCompilation(plan([output]), outDir)).toThrow(
+      'payload source must not be a symbolic link or traverse one',
+    );
+    expect(readFileSync(join(outDir, 'sentinel.txt'), 'utf8')).toBe('keep\n');
+    expect(existsSync(join(outDir, 'payload.txt'))).toBe(false);
   });
 });
 

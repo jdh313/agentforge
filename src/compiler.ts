@@ -33,6 +33,7 @@ export interface ProposedCopiedOutput extends ProposedOutputBase {
   kind: 'copy';
   sourcePath: string;
   executable?: boolean;
+  sourceRoot?: string;
 }
 
 export type ProposedOutput = ProposedGeneratedOutput | ProposedCopiedOutput;
@@ -52,6 +53,7 @@ export interface DesiredCopiedOutput extends DesiredOutputBase {
   kind: 'copy';
   sourcePath: string;
   executable?: boolean;
+  sourceRoot?: string;
 }
 
 export type DesiredOutput = DesiredGeneratedOutput | DesiredCopiedOutput;

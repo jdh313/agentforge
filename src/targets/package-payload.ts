@@ -105,6 +105,7 @@ export function compilePackagePayload(
       packageId: packageInput.id,
       destination: `${packageDirectory}/${destination}`,
       sourcePath,
+      sourceRoot: packageRoot,
       executable,
     })),
   );

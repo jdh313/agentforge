@@ -2,8 +2,10 @@ import {
   chmodSync,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
+  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -70,9 +72,56 @@ function materializeOutput(output: DesiredOutput, stagingRoot: string): void {
     chmodSync(destination, 0o644);
     return;
   }
-  copyFileSync(output.sourcePath, destination);
+  const source =
+    output.sourceRoot === undefined
+      ? output.sourcePath
+      : requireContainedRegularSource(output.sourceRoot, output.sourcePath);
+  copyFileSync(source, destination);
   if (output.executable !== undefined) {
     chmodSync(destination, output.executable ? 0o755 : 0o644);
+  }
+}
+
+function requireContainedRegularSource(sourceRoot: string, sourcePath: string): string {
+  const root = resolve(sourceRoot);
+  const source = resolve(sourcePath);
+  requireContainedPath(root, source, sourcePath, 'payload source escapes the package root');
+
+  let current = source;
+  while (current !== root) {
+    if (lstatSync(current).isSymbolicLink()) {
+      throw new MaterializationError(
+        `payload source must not be a symbolic link or traverse one: ${JSON.stringify(sourcePath)}`,
+      );
+    }
+    current = dirname(current);
+  }
+
+  const canonicalRoot = realpathSync(root);
+  const canonicalSource = realpathSync(source);
+  requireContainedPath(
+    canonicalRoot,
+    canonicalSource,
+    sourcePath,
+    'payload source resolves outside the package root',
+  );
+  if (!lstatSync(canonicalSource).isFile()) {
+    throw new MaterializationError(
+      `payload source must be a regular file: ${JSON.stringify(sourcePath)}`,
+    );
+  }
+  return canonicalSource;
+}
+
+function requireContainedPath(root: string, path: string, proposed: string, message: string): void {
+  const fromRoot = relative(root, path);
+  if (
+    fromRoot.length === 0 ||
+    fromRoot === '..' ||
+    fromRoot.startsWith(`..${sep}`) ||
+    isAbsolute(fromRoot)
+  ) {
+    throw new MaterializationError(`${message}: ${JSON.stringify(proposed)}`);
   }
 }
 
@@ -81,17 +130,12 @@ function requireContainedDestination(
   destination: string,
   proposed: string,
 ): void {
-  const fromRoot = relative(stagingRoot, destination);
-  if (
-    fromRoot.length === 0 ||
-    fromRoot === '..' ||
-    fromRoot.startsWith(`..${sep}`) ||
-    isAbsolute(fromRoot)
-  ) {
-    throw new MaterializationError(
-      `output destination escapes the output root: ${JSON.stringify(proposed)}`,
-    );
-  }
+  requireContainedPath(
+    stagingRoot,
+    destination,
+    proposed,
+    'output destination escapes the output root',
+  );
 }
 
 function publishStagedTree(stagingRoot: string, destinationRoot: string): void {
