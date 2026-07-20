@@ -39,6 +39,20 @@ bun run src/cli.ts compile tests/fixtures/definitions/cc-marketplace/MARKETPLACE
 bun run src/cli.ts check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-marketplace
 ```
 
+## Build and install
+
+AgentForge can be compiled into a standalone Bun binary. `bun run install:bin`
+builds `dist/agentforge` and symlinks it into `~/.local/bin/agentforge`:
+
+```sh
+bun run install:bin
+agentforge list-targets
+```
+
+Run `bun run build` to compile the binary without installing it. The `dist/`
+directory is gitignored; because the installed command is a symlink, later
+builds update it in place without another install step.
+
 ## Guided plugin onboarding
 
 Invoke `$agentforge-onboard-plugin` from this repository to migrate an existing
@@ -325,7 +339,8 @@ AGENTFORGE_CC_MARKETPLACE_PROJECT=../cc-marketplace bun test tests/cli.test.ts
 - The focused acceptance test always checks the committed trees and AgentForge
   clean/drift behavior. It also runs the installed Claude validator; setting
   `AGENTFORGE_CC_MARKETPLACE_PROJECT` enables the read-only Codex validator test.
-- `bun test`, `bun run typecheck`, and `bun run lint` are the repository gates.
+- `bun test`, `bun run typecheck`, `bun run lint`, and `bun run build` are the
+  repository gates.
 
 ## Targets
 

@@ -21,7 +21,9 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "build": "bun build --compile src/cli.ts --outfile dist/agentforge",
+    "install:bin": "bun run build && ln -sf \"$PWD/dist/agentforge\" ~/.local/bin/agentforge"
   },
   "dependencies": {
     "commander": "^14.0.3",
