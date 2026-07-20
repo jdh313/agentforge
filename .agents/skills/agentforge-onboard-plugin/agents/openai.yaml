@@ -1,0 +1,4 @@
+interface:
+  display_name: "AgentForge Onboard Plugin"
+  short_description: "Guide a plugin into canonical AgentForge definitions"
+  default_prompt: "Use $agentforge-onboard-plugin to onboard this native plugin into AgentForge."
