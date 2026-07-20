@@ -39,6 +39,14 @@ bun run src/cli.ts compile tests/fixtures/definitions/cc-marketplace/MARKETPLACE
 bun run src/cli.ts check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-marketplace
 ```
 
+## Guided plugin onboarding
+
+Invoke `$agentforge-onboard-plugin` from this repository to migrate an existing
+Claude, Codex, or dual-runtime plugin into canonical `PACKAGE.yaml` and
+`MARKETPLACE.yaml` definitions. The project-local skill inventories every source
+path and previews proposed definitions plus target compatibility dispositions
+before modifying plugin or marketplace sources.
+
 ## Package and marketplace definitions
 
 Collection definitions are uppercase standalone YAML files. They are not leaf
