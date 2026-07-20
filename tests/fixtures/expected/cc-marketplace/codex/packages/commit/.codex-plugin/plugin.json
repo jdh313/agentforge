@@ -1,0 +1,28 @@
+{
+  "name": "commit",
+  "version": "3.2.1",
+  "description": "Format-aware atomic commits for git and jj.",
+  "author": {
+    "name": "Jacob Hoehler"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "git",
+    "jj",
+    "commits"
+  ],
+  "interface": {
+    "displayName": "Commit",
+    "shortDescription": "Create and organize atomic commits",
+    "longDescription": "Format-aware atomic commit workflows for Git and Jujutsu.",
+    "developerName": "Jacob Hoehler",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Commit these changes atomically."
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "spec-flow",
+  "version": "0.12.2",
+  "description": "Contract-driven change workflow.",
+  "author": {
+    "name": "Jacob Hoehler"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "sdlc",
+    "contracts",
+    "specification"
+  ],
+  "interface": {
+    "displayName": "Spec Flow",
+    "shortDescription": "Drive contract-based code changes",
+    "longDescription": "Contract-driven capture, drafting, implementation, verification, and close workflows.",
+    "developerName": "Jacob Hoehler",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write",
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "Draft a contract for this change."
+    ]
+  }
+}

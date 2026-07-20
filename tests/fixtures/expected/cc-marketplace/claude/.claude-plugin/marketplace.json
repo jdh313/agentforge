@@ -1,0 +1,86 @@
+{
+  "name": "cc-marketplace",
+  "description": "Personal dual-runtime plugin marketplace",
+  "owner": {
+    "name": "Jacob Hoehler",
+    "email": "jacob@example.com"
+  },
+  "plugins": [
+    {
+      "name": "commit",
+      "version": "3.2.1",
+      "description": "Format-aware atomic commits for git and jj.",
+      "author": {
+        "name": "Jacob Hoehler"
+      },
+      "license": "Apache-2.0",
+      "keywords": [
+        "git",
+        "jj",
+        "commits"
+      ],
+      "source": "./packages/commit"
+    },
+    {
+      "name": "craft",
+      "version": "0.8.0",
+      "description": "Software craftsmanship discipline skills.",
+      "author": {
+        "name": "Jacob Hoehler"
+      },
+      "license": "Apache-2.0",
+      "keywords": [
+        "engineering",
+        "design",
+        "review"
+      ],
+      "source": "./packages/craft"
+    },
+    {
+      "name": "librarian",
+      "version": "0.17.1",
+      "description": "Full Claude-native Librarian package metadata",
+      "author": {
+        "name": "Jacob Hoehler"
+      },
+      "license": "Apache-2.0",
+      "keywords": [
+        "obsidian",
+        "knowledge-base",
+        "notes",
+        "curation"
+      ],
+      "source": "./packages/librarian"
+    },
+    {
+      "name": "linear",
+      "version": "0.4.1",
+      "description": "Linear workflow conventions and ticket operations.",
+      "author": {
+        "name": "Jacob Hoehler"
+      },
+      "license": "Apache-2.0",
+      "keywords": [
+        "linear",
+        "issue-tracking",
+        "workflow"
+      ],
+      "source": "./packages/linear"
+    },
+    {
+      "name": "spec-flow",
+      "version": "0.12.2",
+      "description": "Contract-driven change workflow.",
+      "author": {
+        "name": "Jacob Hoehler"
+      },
+      "license": "Apache-2.0",
+      "keywords": [
+        "sdlc",
+        "contracts",
+        "specification"
+      ],
+      "source": "./packages/spec-flow"
+    }
+  ]
+}

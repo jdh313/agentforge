@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -80,6 +82,34 @@ describe('marketplace check', () => {
       },
     ]);
     expect(snapshot(outputRoot)).toEqual(before);
+  });
+
+  test('reports executable permission drift without repairing the output', () => {
+    if (process.platform === 'win32') return;
+    const source = join(temporaryRoot, 'script.sh');
+    const outputRoot = join(temporaryRoot, 'output');
+    writeFileSync(source, '#!/bin/sh\n');
+    const basePlan = fixturePlan(source);
+    const plan: CompilationPlan = {
+      ...basePlan,
+      outputs: basePlan.outputs.map((output) =>
+        output.kind === 'copy' ? { ...output, executable: true } : output,
+      ),
+    };
+    materializeCompilation(plan, outputRoot);
+    const script = join(outputRoot, 'claude', 'packages', 'example', 'source.txt');
+    chmodSync(script, 0o644);
+
+    const result = checkMarketplace(plan, outputRoot);
+
+    expect(result.issues).toContainEqual({
+      code: 'changed-output-mode',
+      publicationId: 'claude',
+      packageId: 'example',
+      path: 'claude/packages/example/source.txt',
+      message: 'managed output mode is 0644; expected 0755',
+    });
+    expect(statSync(script).mode & 0o777).toBe(0o644);
   });
 
   test('reports target-native schema failures with package provenance', () => {

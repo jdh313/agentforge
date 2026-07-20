@@ -1,0 +1,14 @@
+{
+  "name": "linear",
+  "version": "0.4.1",
+  "description": "Linear workflow conventions and ticket operations.",
+  "author": {
+    "name": "Jacob Hoehler"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "linear",
+    "issue-tracking",
+    "workflow"
+  ]
+}

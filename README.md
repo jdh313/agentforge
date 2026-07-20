@@ -280,7 +280,8 @@ agentforge list-targets
 - `check` derives the same expected publication plans in memory, validates
   registries, plugin manifests, local plugin references, package identity and
   version parity, and projected skill frontmatter, then reports missing,
-  changed, and unexpected managed files without modifying the output tree.
+  changed, permission-drifted, and unexpected managed files without modifying
+  the output tree.
 - `check` mirrors repeatable `--publication` selection. Only selected
   `<out-dir>/<publication-id>/` trees are managed; paths outside them are left
   alone. Validation errors and drift exit nonzero, while translation notes and
@@ -292,15 +293,20 @@ agentforge list-targets
 ## Beta acceptance corpus
 
 The canonical five-package fixture represents `commit`, `craft`, `linear`,
-`librarian`, and `spec-flow`, including skills, nested resources, agents,
-commands, hooks, target overrides, and target-native metadata. From a clean
-AgentForge checkout, compile and validate both publications with:
+`librarian`, and `spec-flow`, including package-root files, arbitrary nested
+skill sidecars, executable scripts, target-native files, agents, commands,
+hooks, target overrides, and target-native metadata. Its exact generated trees
+are committed under `tests/fixtures/expected/cc-marketplace`; the acceptance
+test compares every relative path, byte, and normalized mode (`0755` for the
+declared executable, `0644` otherwise). From a clean AgentForge checkout,
+compile and validate both publications with:
 
 ```sh
 bun run src/cli.ts compile tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-beta
 bun run src/cli.ts check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-beta
 bun run src/cli.ts check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-beta --publication claude --claude-native
-uv run --project ../cc-marketplace marketplace validate --format codex --manifest /tmp/agentforge-beta/codex/.agents/plugins/marketplace.json --plugins-root /tmp/agentforge-beta/codex/packages
+UV_PROJECT_ENVIRONMENT=/tmp/agentforge-cc-marketplace-venv uv run --frozen --project ../cc-marketplace marketplace validate --format codex --manifest /tmp/agentforge-beta/codex/.agents/plugins/marketplace.json --plugins-root /tmp/agentforge-beta/codex/packages
+AGENTFORGE_CC_MARKETPLACE_PROJECT=../cc-marketplace bun test tests/cli.test.ts
 ```
 
 - The first check is AgentForge's always-on validation and drift gate for both
@@ -308,6 +314,9 @@ uv run --project ../cc-marketplace marketplace validate --format codex --manifes
 - The Claude command requires the `claude` CLI.
 - The Codex cross-check requires a sibling `../cc-marketplace` checkout and is
   read-only; it does not modify that repository or the compiled publication.
+- The focused acceptance test always checks the committed trees and AgentForge
+  clean/drift behavior. It also runs the installed Claude validator; setting
+  `AGENTFORGE_CC_MARKETPLACE_PROJECT` enables the read-only Codex validator test.
 - `bun test`, `bun run typecheck`, and `bun run lint` are the repository gates.
 
 ## Targets

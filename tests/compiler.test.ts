@@ -89,10 +89,20 @@ describe('marketplace compiler interface', () => {
     });
     expect(compilations[0]?.packages.find(({ id }) => id === 'spec-flow')?.payloads).toEqual([
       expect.objectContaining({ destination: 'LICENSE.txt' }),
+      expect.objectContaining({
+        destination: 'skills/draft/scripts/check.ts',
+        collision: 'override',
+        executable: true,
+      }),
       expect.objectContaining({ destination: 'native-hooks.json' }),
     ]);
     expect(compilations[1]?.packages.find(({ id }) => id === 'spec-flow')?.payloads).toEqual([
       expect.objectContaining({ destination: 'LICENSE.txt' }),
+      expect.objectContaining({
+        destination: 'skills/draft/scripts/check.ts',
+        collision: 'override',
+        executable: true,
+      }),
       expect.objectContaining({ destination: 'config/defaults.json' }),
       expect.objectContaining({ destination: 'skills/draft/agents/openai.yaml' }),
     ]);

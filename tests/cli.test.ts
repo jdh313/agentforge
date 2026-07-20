@@ -22,6 +22,8 @@ const MARKETPLACE = join(
   'cc-marketplace',
   'MARKETPLACE.yaml',
 );
+const EXPECTED_MARKETPLACE = join(import.meta.dir, 'fixtures', 'expected', 'cc-marketplace');
+const CC_MARKETPLACE_PROJECT = process.env.AGENTFORGE_CC_MARKETPLACE_PROJECT;
 
 let temporaryRoot: string;
 
@@ -36,6 +38,40 @@ afterAll(() => {
 });
 
 describe('compile command', () => {
+  test('matches the committed payload-fidelity trees byte-for-byte with normalized modes', () => {
+    const outDir = join(temporaryRoot, 'payload-fidelity');
+
+    const result = runCli('compile', MARKETPLACE, '--out', outDir);
+
+    expect(result.exitCode).toBe(0);
+    expect(
+      snapshotOutputTree(outDir, process.platform === 'win32' ? expectedMode : undefined),
+    ).toEqual(snapshotOutputTree(EXPECTED_MARKETPLACE, expectedMode));
+    if (process.platform !== 'win32') {
+      for (const target of ['claude', 'codex']) {
+        expect(
+          statSync(
+            join(outDir, target, 'packages', 'spec-flow', 'skills', 'draft', 'scripts', 'check.ts'),
+          ).mode & 0o777,
+        ).toBe(0o755);
+      }
+      expect(
+        statSync(
+          join(
+            outDir,
+            'codex',
+            'packages',
+            'spec-flow',
+            'skills',
+            'draft',
+            'agents',
+            'openai.yaml',
+          ),
+        ).mode & 0o777,
+      ).toBe(0o644);
+    }
+  });
+
   test('materializes the complete five-package acceptance interface', () => {
     const outDir = join(temporaryRoot, 'acceptance-interface');
 
@@ -169,6 +205,50 @@ describe('compile command', () => {
 });
 
 describe('check command', () => {
+  test('accepts the payload corpus cleanly and detects intentional sidecar drift', () => {
+    const outDir = join(temporaryRoot, 'payload-drift');
+    expect(runCli('compile', MARKETPLACE, '--out', outDir).exitCode).toBe(0);
+
+    const clean = runCli('check', MARKETPLACE, '--out', outDir);
+    expect(clean.exitCode).toBe(0);
+
+    const sidecar = join(
+      outDir,
+      'codex',
+      'packages',
+      'spec-flow',
+      'skills',
+      'draft',
+      'agents',
+      'openai.yaml',
+    );
+    writeFileSync(sidecar, 'policy: drifted\n');
+    if (process.platform !== 'win32') {
+      const script = join(
+        outDir,
+        'codex',
+        'packages',
+        'spec-flow',
+        'skills',
+        'draft',
+        'scripts',
+        'check.ts',
+      );
+      chmodSync(script, 0o644);
+    }
+    const drifted = runCli('check', MARKETPLACE, '--out', outDir);
+
+    expect(drifted.exitCode).toBe(1);
+    expect(drifted.stderr).toContain(
+      'changed-output: codex/packages/spec-flow/skills/draft/agents/openai.yaml: managed output differs',
+    );
+    if (process.platform !== 'win32') {
+      expect(drifted.stderr).toContain(
+        'changed-output-mode: codex/packages/spec-flow/skills/draft/scripts/check.ts: managed output mode is 0644; expected 0755',
+      );
+    }
+  });
+
   test('accepts clean output and keeps translation diagnostics nonfatal', () => {
     const outDir = join(temporaryRoot, 'clean-check');
     expect(runCli('compile', MARKETPLACE, '--out', outDir).exitCode).toBe(0);
@@ -246,6 +326,67 @@ describe('check command', () => {
       `plugin\nvalidate\n--strict\n${join(outDir, 'claude')}\n`,
     );
   });
+
+  if (Bun.which('claude')) {
+    test('passes the installed Claude native strict validator', () => {
+      const outDir = join(temporaryRoot, 'claude-native-acceptance');
+      expect(
+        runCli('compile', MARKETPLACE, '--out', outDir, '--publication', 'claude').exitCode,
+      ).toBe(0);
+
+      const result = Bun.spawnSync({
+        cmd: ['claude', 'plugin', 'validate', '--strict', join(outDir, 'claude')],
+        cwd: REPO_ROOT,
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.toString()).toContain('Validation passed');
+    });
+  } else {
+    test.skip('passes the installed Claude native strict validator', () => {});
+  }
+
+  if (CC_MARKETPLACE_PROJECT && Bun.which('uv') && existsSync(CC_MARKETPLACE_PROJECT)) {
+    test('passes the cc-marketplace Codex native validator', () => {
+      const outDir = join(temporaryRoot, 'codex-native-acceptance');
+      expect(
+        runCli('compile', MARKETPLACE, '--out', outDir, '--publication', 'codex').exitCode,
+      ).toBe(0);
+
+      const result = Bun.spawnSync({
+        cmd: [
+          'uv',
+          'run',
+          '--frozen',
+          '--project',
+          CC_MARKETPLACE_PROJECT,
+          'marketplace',
+          'validate',
+          '--format',
+          'codex',
+          '--manifest',
+          join(outDir, 'codex', '.agents', 'plugins', 'marketplace.json'),
+          '--plugins-root',
+          join(outDir, 'codex', 'packages'),
+        ],
+        cwd: REPO_ROOT,
+        env: {
+          ...process.env,
+          UV_CACHE_DIR: join(temporaryRoot, 'uv-cache'),
+          UV_PROJECT_ENVIRONMENT: join(temporaryRoot, 'cc-marketplace-venv'),
+        },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.toString()).toContain('Codex validation passed (5 plugins).');
+    });
+  } else {
+    test.skip('passes the cc-marketplace Codex native validator', () => {});
+  }
 });
 
 function runCli(...args: string[]): { exitCode: number; stdout: string; stderr: string } {
@@ -279,13 +420,17 @@ function listRelativeFiles(root: string, directory = root): string[] {
     .toSorted();
 }
 
-function snapshotOutputTree(root: string) {
+function snapshotOutputTree(root: string, modeForPath?: (path: string) => number) {
   return listRelativeFiles(root).map((relativePath) => {
     const path = join(root, relativePath);
     return {
       path: relativePath,
       content: readFileSync(path).toString('base64'),
-      mode: statSync(path).mode & 0o777,
+      mode: modeForPath?.(relativePath) ?? statSync(path).mode & 0o777,
     };
   });
+}
+
+function expectedMode(relativePath: string): number {
+  return relativePath.endsWith('/skills/draft/scripts/check.ts') ? 0o755 : 0o644;
 }

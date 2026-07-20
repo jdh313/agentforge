@@ -18,6 +18,8 @@ artifacts:
 payloads:
   include:
     - source: LICENSE.txt
+    - source: skills/draft/scripts/check.ts
+      collision: override
 targets:
   claude:
     payloads:

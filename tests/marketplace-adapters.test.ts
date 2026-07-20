@@ -388,7 +388,11 @@ describe('native marketplace adapters', () => {
       plan.outputs,
       'packages/spec-flow/skills/spec-flow/agents/openai.yaml',
     );
-    const diagnostic = plan.diagnostics.find(({ code }) => code === 'supplied-output-override');
+    const diagnostic = plan.diagnostics.find(
+      ({ code, message }) =>
+        code === 'supplied-output-override' &&
+        message.includes('/skills/spec-flow/agents/openai.yaml'),
+    );
 
     expect({
       winner: {

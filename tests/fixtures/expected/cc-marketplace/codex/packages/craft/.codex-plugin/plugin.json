@@ -1,0 +1,29 @@
+{
+  "name": "craft",
+  "version": "0.8.0",
+  "description": "Software craftsmanship discipline skills.",
+  "author": {
+    "name": "Jacob Hoehler"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "engineering",
+    "design",
+    "review"
+  ],
+  "interface": {
+    "displayName": "Craft",
+    "shortDescription": "Apply disciplined engineering workflows",
+    "longDescription": "Reusable software craftsmanship workflows for design, diagnosis, testing, review, and comprehension.",
+    "developerName": "Jacob Hoehler",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write",
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "Diagnose this failure systematically."
+    ]
+  }
+}

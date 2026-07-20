@@ -10,6 +10,7 @@ import { getArtifactConfig } from './targets/index.ts';
 export type MarketplaceCheckIssueCode =
   | 'missing-output'
   | 'changed-output'
+  | 'changed-output-mode'
   | 'unexpected-output'
   | 'invalid-native-document'
   | 'unsafe-plugin-path'
@@ -64,6 +65,19 @@ export function checkMarketplace(
         ),
       );
       continue;
+    }
+    if (process.platform !== 'win32') {
+      const actualMode = lstatSync(actualPath).mode & 0o777;
+      const expectedMode = expectedOutputMode(output);
+      if (actualMode !== expectedMode) {
+        issues.push(
+          issueFor(
+            output,
+            'changed-output-mode',
+            `managed output mode is ${formatMode(actualMode)}; expected ${formatMode(expectedMode)}`,
+          ),
+        );
+      }
     }
     if (!readFileSync(actualPath).equals(expectedBytes(output))) {
       issues.push(
@@ -403,6 +417,16 @@ function expectedBytes(output: DesiredOutput): Buffer {
   return output.kind === 'generated'
     ? Buffer.from(output.content, 'utf8')
     : readFileSync(output.sourcePath);
+}
+
+function expectedOutputMode(output: DesiredOutput): number {
+  if (output.kind === 'generated') return 0o644;
+  if (output.executable !== undefined) return output.executable ? 0o755 : 0o644;
+  return lstatSync(output.sourcePath).mode & 0o777;
+}
+
+function formatMode(mode: number): string {
+  return mode.toString(8).padStart(4, '0');
 }
 
 function isRegularFile(path: string): boolean {

@@ -1,0 +1,14 @@
+{
+  "name": "commit",
+  "version": "3.2.1",
+  "description": "Format-aware atomic commits for git and jj.",
+  "author": {
+    "name": "Jacob Hoehler"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "git",
+    "jj",
+    "commits"
+  ]
+}

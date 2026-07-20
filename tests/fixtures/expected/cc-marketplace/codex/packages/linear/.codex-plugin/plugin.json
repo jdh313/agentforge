@@ -1,0 +1,28 @@
+{
+  "name": "linear",
+  "version": "0.4.1",
+  "description": "Linear workflow conventions and ticket operations.",
+  "author": {
+    "name": "Jacob Hoehler"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "linear",
+    "issue-tracking",
+    "workflow"
+  ],
+  "interface": {
+    "displayName": "Linear",
+    "shortDescription": "Apply team Linear conventions",
+    "longDescription": "Linear ticket conventions, workflow transitions, and integration call patterns.",
+    "developerName": "Jacob Hoehler",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Create a Linear ticket for this work."
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "spec-flow",
+  "version": "0.12.2",
+  "description": "Contract-driven change workflow.",
+  "author": {
+    "name": "Jacob Hoehler"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "sdlc",
+    "contracts",
+    "specification"
+  ]
+}
