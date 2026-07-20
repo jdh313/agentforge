@@ -22,9 +22,10 @@ similarly named installed or cached plugin.
 
 ## 1. Establish safety and authority
 
-1. Read the applicable repository instructions in both the AgentForge and source repositories.
-2. Inspect version-control status in both repositories. Preserve unrelated and pre-existing
-   changes.
+1. Resolve every repository that may be read or modified: AgentForge, the source plugin, and a
+   separate canonical marketplace repository when applicable.
+2. Read the applicable instructions and inspect version-control status in every resolved
+   repository. Preserve unrelated and pre-existing changes.
 3. Read AgentForge's current `README.md`, `src/definitions.ts`, and target adapters as needed.
    Treat the implementation as authoritative when examples and schemas disagree.
 4. Work from regular files inside the plugin root. Identify symbolic links without following
@@ -93,8 +94,10 @@ After approval:
 1. Add or update canonical definitions with focused patches.
 2. Preserve native source bodies unless an approved target override or source remediation is
    required.
-3. Use ordered payload declarations with explicit destinations, exclusions, executable intent,
-   and collision policy.
+3. Use ordered payload declarations with explicit destinations, exclusions, and collision policy.
+   Verify executable source files carry execute bits; AgentForge derives executable intent from
+   source mode and normalizes compiled output to `0755` rather than accepting an `executable`
+   declaration.
 4. Use `collision: override` only for an intentional exact replacement of generated or translated
    output; explain the replacement in the compatibility report.
 5. Keep unsupported targets unenrolled rather than emitting knowingly misleading empty packages.
@@ -115,9 +118,13 @@ Validate from a clean, temporary output root:
 6. Compare expected and current native output paths, contents, and normalized modes.
 7. Review every warning and note; resolve it with an override, documented unsupported disposition,
    or an explicit follow-up.
+8. Run the AgentForge repository gates: `bun test`, `bun run typecheck`, and `bun run lint`, plus
+   focused corpus or CLI acceptance tests affected by the enrolled marketplace.
 
 Do not claim behavioral parity from schema validation alone. For workflow-bearing skills, agents,
-commands, or hooks, require a fresh-runtime smoke test before source-of-truth cutover.
+commands, or hooks, require a fresh-runtime smoke test before source-of-truth cutover. Use a
+disposable runtime or configuration root when the harness supports one. Otherwise obtain explicit
+approval before installing, registering, or replacing anything in the user's live runtime state.
 
 ## 6. Report the result
 
