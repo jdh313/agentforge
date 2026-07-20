@@ -78,6 +78,7 @@ describe('compile command', () => {
       'codex/packages/spec-flow/LICENSE.txt',
       'codex/packages/spec-flow/config/defaults.json',
       'codex/packages/spec-flow/skills/draft/SKILL.md',
+      'codex/packages/spec-flow/skills/draft/agents/openai.yaml',
       'codex/packages/spec-flow/skills/draft/assets/logo.txt',
       'codex/packages/spec-flow/skills/draft/references/contract.md',
       'codex/packages/spec-flow/skills/draft/scripts/check.ts',
@@ -181,7 +182,7 @@ describe('check command', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
     expect(result.stdout).toContain('[claude] ok: 21 managed files');
-    expect(result.stdout).toContain('[codex] ok: 19 managed files');
+    expect(result.stdout).toContain('[codex] ok: 20 managed files');
     expect(result.stdout).toContain(
       'note [codex/librarian] inferred-artifact-projection: Agent "vault-reader" inferred',
     );

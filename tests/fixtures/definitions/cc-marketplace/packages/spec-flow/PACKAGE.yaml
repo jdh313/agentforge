@@ -29,6 +29,7 @@ targets:
       include:
         - source: config/
           destination: config/
+        - source: skills/draft/agents/openai.yaml
     native:
       interface:
         displayName: Spec Flow

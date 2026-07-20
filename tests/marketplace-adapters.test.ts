@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { claudeMarketplaceAdapter, codexMarketplaceAdapter } from 'agentforge/marketplace-adapters';
 import matter from 'gray-matter';
 import {
@@ -143,6 +143,7 @@ describe('native marketplace adapters', () => {
       'packages/spec-flow/LICENSE.txt',
       'packages/spec-flow/config/defaults.json',
       'packages/spec-flow/skills/draft/SKILL.md',
+      'packages/spec-flow/skills/draft/agents/openai.yaml',
       'packages/spec-flow/skills/draft/assets/logo.txt',
       'packages/spec-flow/skills/draft/references/contract.md',
       'packages/spec-flow/skills/draft/scripts/check.ts',
@@ -186,6 +187,9 @@ describe('native marketplace adapters', () => {
         },
       },
     );
+    expect(
+      copiedOutput(plan.outputs, 'packages/spec-flow/skills/draft/agents/openai.yaml').sourcePath,
+    ).toEndWith('/packages/spec-flow/skills/draft/agents/openai.yaml');
   });
 
   test('compiles package skills, resources, passthrough payloads, and diagnostics', async () => {
@@ -323,6 +327,100 @@ describe('native marketplace adapters', () => {
         }),
       ]),
     );
+  });
+
+  test('rejects supplied collisions by default with producer diagnostics', async () => {
+    const loaded = await loadMarketplaceDefinition(MARKETPLACE_FIXTURE);
+    const specFlow = loaded.packages.get('spec-flow');
+    if (!specFlow) throw new Error('missing spec-flow fixture');
+    const packages = new Map(loaded.packages);
+    packages.set('spec-flow', {
+      ...specFlow,
+      payloads: {
+        ...specFlow.payloads,
+        codex: [
+          ...(specFlow.payloads.codex ?? []),
+          {
+            sourcePath: join(dirname(specFlow.path), 'config', 'defaults.json'),
+            destination: 'skills/spec-flow/agents/openai.yaml',
+            executable: false,
+          },
+        ],
+      },
+    });
+
+    expect(() =>
+      compileMarketplace({ ...loaded, packages }, [
+        { target: 'claude', compilePublication: () => ({ outputs: [] }) },
+        codexMarketplaceAdapter,
+      ]),
+    ).toThrow(
+      'supplied output "packages/spec-flow/skills/spec-flow/agents/openai.yaml" collides with translated output for publication "codex", package "spec-flow"; set collision: override on the supplied payload to replace it',
+    );
+  });
+
+  test('explicit supplied collision override replaces translated output deterministically', async () => {
+    const loaded = await loadMarketplaceDefinition(MARKETPLACE_FIXTURE);
+    const specFlow = loaded.packages.get('spec-flow');
+    if (!specFlow) throw new Error('missing spec-flow fixture');
+    const packages = new Map(loaded.packages);
+    packages.set('spec-flow', {
+      ...specFlow,
+      payloads: {
+        ...specFlow.payloads,
+        codex: [
+          ...(specFlow.payloads.codex ?? []),
+          {
+            sourcePath: join(dirname(specFlow.path), 'config', 'defaults.json'),
+            destination: 'skills/spec-flow/agents/openai.yaml',
+            executable: false,
+            collision: 'override',
+          },
+        ],
+      },
+    });
+
+    const plan = compileMarketplace({ ...loaded, packages }, [
+      { target: 'claude', compilePublication: () => ({ outputs: [] }) },
+      codexMarketplaceAdapter,
+    ]);
+    const winner = copiedOutput(
+      plan.outputs,
+      'packages/spec-flow/skills/spec-flow/agents/openai.yaml',
+    );
+    const diagnostic = plan.diagnostics.find(({ code }) => code === 'supplied-output-override');
+
+    expect({
+      winner: {
+        kind: winner.kind,
+        producer: winner.producer,
+        collision: winner.collision,
+        destination: winner.destination,
+      },
+      diagnostic: diagnostic && {
+        code: diagnostic.code,
+        severity: diagnostic.severity,
+        message: diagnostic.message,
+        publicationId: diagnostic.provenance.publicationId,
+        packageId: diagnostic.provenance.packageId,
+      },
+    }).toMatchInlineSnapshot(`
+      {
+        "diagnostic": {
+          "code": "supplied-output-override",
+          "message": "Supplied payload replaced translated output at "packages/spec-flow/skills/spec-flow/agents/openai.yaml".",
+          "packageId": "spec-flow",
+          "publicationId": "codex",
+          "severity": "note",
+        },
+        "winner": {
+          "collision": "override",
+          "destination": "packages/spec-flow/skills/spec-flow/agents/openai.yaml",
+          "kind": "copy",
+          "producer": "supplied",
+        },
+      }
+    `);
   });
 
   test.each([

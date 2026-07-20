@@ -76,6 +76,34 @@ targets:
     });
   });
 
+  test('accepts an explicit generated-output collision override on one payload entry', () => {
+    const definition = parsePackageDefinition(`
+schema: agentforge.package/v1
+id: example
+defaults:
+  name: example
+  version: 1.0.0
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+targets:
+  codex:
+    payloads:
+      include:
+        - source: agents/openai.yaml
+          destination: skills/example/agents/openai.yaml
+          collision: override
+`);
+
+    expect(definition.targets.codex?.payloads?.include).toEqual([
+      {
+        source: 'agents/openai.yaml',
+        destination: 'skills/example/agents/openai.yaml',
+        collision: 'override',
+      },
+    ]);
+  });
+
   test('loads a representative Librarian package and resolves projection patterns', async () => {
     const loaded = await loadPackageDefinition(
       join(MARKETPLACE_FIXTURE, 'packages', 'librarian', 'PACKAGE.yaml'),
@@ -125,6 +153,10 @@ targets:
     ).toEqual([
       { source: 'skills/draft/SKILL.md', destination: 'bundle/draft/SKILL.md' },
       {
+        source: 'skills/draft/agents/openai.yaml',
+        destination: 'bundle/draft/agents/openai.yaml',
+      },
+      {
         source: 'skills/draft/references/contract.md',
         destination: 'bundle/draft/references/contract.md',
       },
@@ -132,6 +164,7 @@ targets:
     ]);
     expect(loaded.payloads.codex).toEqual([
       expect.objectContaining({ destination: 'bundle/draft/SKILL.md' }),
+      expect.objectContaining({ destination: 'bundle/draft/agents/openai.yaml' }),
       expect.objectContaining({ destination: 'bundle/draft/references/contract.md' }),
     ]);
   });

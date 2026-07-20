@@ -44,6 +44,7 @@ const PayloadInclude = z.strictObject({
   source: z.string().min(1),
   destination: z.string().min(1).optional(),
   exclude: z.array(z.string().min(1)).optional(),
+  collision: z.literal('override').optional(),
 });
 
 const PayloadDeclaration = z.strictObject({

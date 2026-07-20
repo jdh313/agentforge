@@ -124,6 +124,13 @@ targets:
   Executable source intent is normalized to mode `0755`; other payloads use
   `0644`. The complete output is staged and atomically replaces the previous
   tree only after every file succeeds.
+- Supplied, translated, and generated outputs have no implicit precedence and
+  are never merged. An exact destination collision fails with producer-aware
+  diagnostics by default. A supplied payload entry may set
+  `collision: override` to replace a generated or translated output at the same
+  exact path in the same package; the compiler records the replacement as a
+  note. This opt-in never masks supplied/supplied, cross-package, or
+  file/directory conflicts.
 - Loading retains declared artifact source text plus the package file inventory,
   so later compilation can remain free of filesystem I/O.
 - Keys under `targets` declare target support. `overrides` changes normalized

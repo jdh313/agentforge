@@ -22,7 +22,11 @@ export interface CompilationProvenance {
 interface ProposedOutputBase {
   destination: string;
   packageId?: string;
+  producer?: OutputProducer;
+  collision?: 'override';
 }
+
+export type OutputProducer = 'generated' | 'translated' | 'supplied';
 
 export interface ProposedGeneratedOutput extends ProposedOutputBase {
   kind: 'generated';
@@ -42,6 +46,8 @@ interface DesiredOutputBase {
   destination: string;
   target: TargetName;
   provenance: CompilationProvenance;
+  producer?: OutputProducer;
+  collision?: 'override';
 }
 
 export interface DesiredGeneratedOutput extends DesiredOutputBase {
@@ -178,10 +184,10 @@ export function compileMarketplace(
     }
   }
 
-  outputs.sort(compareOutputs);
+  const resolvedOutputs = resolveDestinations(outputs, diagnostics);
+  resolvedOutputs.sort(compareOutputs);
   diagnostics.sort(compareDiagnostics);
-  validateDestinations(outputs);
-  return { marketplaceId: loaded.definition.id, outputs, diagnostics };
+  return { marketplaceId: loaded.definition.id, outputs: resolvedOutputs, diagnostics };
 }
 
 function indexAdapters(
@@ -283,8 +289,11 @@ function compareStrings(left: string, right: string): number {
   return 0;
 }
 
-function validateDestinations(outputs: readonly DesiredOutput[]): void {
-  const claimed = new Map<string, DesiredOutput>();
+function resolveDestinations(
+  outputs: readonly DesiredOutput[],
+  diagnostics: CompilationDiagnostic[],
+): DesiredOutput[] {
+  const buckets = new Map<string, DesiredOutput[]>();
   for (const output of outputs) {
     const reason = unsafeDestinationReason(output.destination);
     if (reason) {
@@ -294,27 +303,114 @@ function validateDestinations(outputs: readonly DesiredOutput[]): void {
     }
 
     const collisionKey = destinationCollisionKey(output.destination);
-    const prior = claimed.get(collisionKey);
-    if (prior) {
-      const destinationDetail =
-        prior.destination === output.destination
-          ? `output destination "${output.destination}" collides`
-          : `output destinations "${prior.destination}" and "${output.destination}" collide`;
-      throw new CompilationError(
-        `${destinationDetail} between ${describeProvenance(prior.provenance)} and ${describeProvenance(output.provenance)}`,
-      );
-    }
-    const prefixCollision = [...claimed.entries()].find(([priorKey]) => {
+    const prefixCollision = [...buckets.entries()].find(([priorKey]) => {
       return collisionKey.startsWith(`${priorKey}/`) || priorKey.startsWith(`${collisionKey}/`);
     });
     if (prefixCollision) {
-      const priorOutput = prefixCollision[1];
+      const priorOutput = prefixCollision[1][0];
+      if (!priorOutput) throw new Error('missing claimed output');
       throw new CompilationError(
         `output destinations "${priorOutput.destination}" and "${output.destination}" conflict as file and directory between ${describeProvenance(priorOutput.provenance)} and ${describeProvenance(output.provenance)}`,
       );
     }
-    claimed.set(collisionKey, output);
+    const bucket = buckets.get(collisionKey);
+    if (bucket) bucket.push(output);
+    else buckets.set(collisionKey, [output]);
   }
+
+  return [...buckets.values()].map((bucket) => resolveCollision(bucket, diagnostics));
+}
+
+function resolveCollision(
+  outputs: readonly DesiredOutput[],
+  diagnostics: CompilationDiagnostic[],
+): DesiredOutput {
+  const ordered = [...outputs].sort(compareCollisionOutputs);
+  const first = ordered[0];
+  if (!first) throw new Error('cannot resolve an empty destination bucket');
+  if (ordered.length === 1) return first;
+
+  const overriding = ordered.filter(
+    (output) => output.producer === 'supplied' && output.collision === 'override',
+  );
+  const winner = overriding.length === 1 ? overriding[0] : undefined;
+  const losers = winner ? ordered.filter((output) => output !== winner) : [];
+  if (
+    winner &&
+    losers.length === 1 &&
+    losers.every(
+      (output) =>
+        (output.producer === 'generated' || output.producer === 'translated') &&
+        sameProducerScope(output, winner),
+    )
+  ) {
+    const replaced = losers
+      .map(({ producer }) => producer)
+      .toSorted()
+      .join(' and ');
+    diagnostics.push({
+      code: 'supplied-output-override',
+      severity: 'note',
+      message: `Supplied payload replaced ${replaced} output at "${winner.destination}".`,
+      target: winner.target,
+      provenance: winner.provenance,
+    });
+    return winner;
+  }
+
+  if (winner && losers.length > 1) {
+    throw new CompilationError(
+      `supplied output "${winner.destination}" cannot override ${losers.length} colliding outputs for ${describeProvenance(winner.provenance)}; resolve the producer collision first`,
+    );
+  }
+
+  const supplied = ordered.find(({ producer }) => producer === 'supplied');
+  const other = supplied
+    ? ordered.find(
+        (output) =>
+          output !== supplied &&
+          (output.producer === 'generated' || output.producer === 'translated'),
+      )
+    : undefined;
+  if (supplied && other && sameProducerScope(supplied, other)) {
+    throw new CompilationError(
+      `supplied output "${supplied.destination}" collides with ${other.producer} output for ${describeProvenance(supplied.provenance)}; set collision: override on the supplied payload to replace it`,
+    );
+  }
+
+  const second = ordered[1];
+  if (!second) throw new Error('missing colliding output');
+  const destinationDetail =
+    first.destination === second.destination
+      ? `output destination "${second.destination}" collides`
+      : `output destinations "${first.destination}" and "${second.destination}" collide`;
+  throw new CompilationError(
+    `${destinationDetail} between ${describeProvenance(first.provenance)} and ${describeProvenance(second.provenance)}`,
+  );
+}
+
+function compareCollisionOutputs(left: DesiredOutput, right: DesiredOutput): number {
+  return (
+    compareStrings(left.target, right.target) ||
+    compareProvenance(left.provenance, right.provenance) ||
+    compareStrings(left.destination, right.destination) ||
+    compareStrings(left.producer ?? '', right.producer ?? '') ||
+    compareStrings(left.kind, right.kind) ||
+    compareStrings(
+      left.kind === 'copy' ? left.sourcePath : left.content,
+      right.kind === 'copy' ? right.sourcePath : right.content,
+    )
+  );
+}
+
+function sameProducerScope(left: DesiredOutput, right: DesiredOutput): boolean {
+  return (
+    left.target === right.target &&
+    left.provenance.marketplacePath === right.provenance.marketplacePath &&
+    left.provenance.publicationId === right.provenance.publicationId &&
+    left.provenance.packageId !== undefined &&
+    left.provenance.packageId === right.provenance.packageId
+  );
 }
 
 function unsafeDestinationReason(destination: string): string | undefined {

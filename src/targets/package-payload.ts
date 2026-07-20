@@ -52,6 +52,7 @@ export function compilePackagePayload(
         const skillDirectory = `${packageDirectory}/skills/${projection.artifactName}`;
         outputs.push({
           kind: 'generated',
+          producer: 'generated',
           packageId: packageInput.id,
           destination: `${skillDirectory}/SKILL.md`,
           content: projection.content,
@@ -59,6 +60,7 @@ export function compilePackagePayload(
         outputs.push(
           ...projection.resources.map(({ relativePath, sourcePath }) => ({
             kind: 'copy' as const,
+            producer: 'generated' as const,
             packageId: packageInput.id,
             destination: `${skillDirectory}/${relativePath}`,
             sourcePath,
@@ -78,7 +80,12 @@ export function compilePackagePayload(
       const translator = policy.translators.get(artifactType);
       if (translator) {
         const translated = translator({ artifact, packageDirectory, packageInput });
-        outputs.push(...translated.outputs);
+        outputs.push(
+          ...translated.outputs.map((output) => ({
+            ...output,
+            producer: 'translated' as const,
+          })),
+        );
         diagnostics.push(...translated.diagnostics);
         continue;
       }
@@ -86,6 +93,7 @@ export function compilePackagePayload(
       if (policy.passthroughArtifactTypes.has(artifactType)) {
         outputs.push({
           kind: 'copy',
+          producer: 'translated',
           packageId: packageInput.id,
           destination: `${packageDirectory}/${portableRelative(packageRoot, artifact.path)}`,
           sourcePath: artifact.path,
@@ -100,13 +108,15 @@ export function compilePackagePayload(
   }
 
   outputs.push(
-    ...packageInput.payloads.map(({ destination, executable, sourcePath }) => ({
+    ...packageInput.payloads.map(({ collision, destination, executable, sourcePath }) => ({
       kind: 'copy' as const,
+      producer: 'supplied' as const,
       packageId: packageInput.id,
       destination: `${packageDirectory}/${destination}`,
       sourcePath,
       sourceRoot: packageRoot,
       executable,
+      ...(collision === undefined ? {} : { collision }),
     })),
   );
 

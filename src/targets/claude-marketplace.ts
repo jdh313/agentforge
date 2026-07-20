@@ -77,11 +77,13 @@ export const claudeMarketplaceAdapter: TargetCompilerAdapter = {
       outputs: [
         {
           kind: 'generated',
+          producer: 'generated',
           destination: input.publication.destination,
           content: serialize(marketplace),
         },
         ...packages.map(({ packageId, destination, manifest }) => ({
           kind: 'generated' as const,
+          producer: 'generated' as const,
           packageId,
           destination,
           content: serialize(manifest),

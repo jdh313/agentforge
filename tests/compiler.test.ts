@@ -94,6 +94,7 @@ describe('marketplace compiler interface', () => {
     expect(compilations[1]?.packages.find(({ id }) => id === 'spec-flow')?.payloads).toEqual([
       expect.objectContaining({ destination: 'LICENSE.txt' }),
       expect.objectContaining({ destination: 'config/defaults.json' }),
+      expect.objectContaining({ destination: 'skills/draft/agents/openai.yaml' }),
     ]);
     expect(plan).toMatchObject({
       marketplaceId: 'cc-marketplace',
@@ -258,6 +259,76 @@ describe('marketplace compiler interface', () => {
 
     expect(compile).toThrow(
       'output destination "packages/shared.json" collides between publication "claude", package "commit" and publication "claude", package "craft"',
+    );
+  });
+
+  test.each([
+    false,
+    true,
+  ])('reports colliding producers deterministically when adapter order is reversed: %p', async (reversed) => {
+    const loaded = await loadMarketplaceDefinition(MARKETPLACE_FIXTURE);
+    const proposed = [
+      {
+        kind: 'generated' as const,
+        packageId: 'craft',
+        destination: 'packages/shared.json',
+        content: '{}\n',
+      },
+      {
+        kind: 'generated' as const,
+        packageId: 'commit',
+        destination: 'packages/shared.json',
+        content: '{}\n',
+      },
+    ];
+    const compile = () =>
+      compileMarketplace(
+        loaded,
+        adaptersWithClaude(() => ({
+          outputs: reversed ? proposed.toReversed() : proposed,
+        })),
+      );
+
+    expect(compile).toThrow(
+      'output destination "packages/shared.json" collides between publication "claude", package "commit" and publication "claude", package "craft"',
+    );
+  });
+
+  test('does not let one supplied override mask multiple producer collisions', async () => {
+    const loaded = await loadMarketplaceDefinition(MARKETPLACE_FIXTURE);
+    const compile = () =>
+      compileMarketplace(
+        loaded,
+        adaptersWithClaude(() => ({
+          outputs: [
+            {
+              kind: 'generated',
+              producer: 'generated',
+              packageId: 'commit',
+              destination: 'packages/commit/policy.yaml',
+              content: 'generated\n',
+            },
+            {
+              kind: 'generated',
+              producer: 'translated',
+              packageId: 'commit',
+              destination: 'packages/commit/policy.yaml',
+              content: 'translated\n',
+            },
+            {
+              kind: 'copy',
+              producer: 'supplied',
+              collision: 'override',
+              packageId: 'commit',
+              destination: 'packages/commit/policy.yaml',
+              sourcePath: '/source/policy.yaml',
+            },
+          ],
+        })),
+      );
+
+    expect(compile).toThrow(
+      'supplied output "packages/commit/policy.yaml" cannot override 2 colliding outputs for publication "claude", package "commit"; resolve the producer collision first',
     );
   });
 

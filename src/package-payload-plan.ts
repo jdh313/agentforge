@@ -7,6 +7,7 @@ export interface PackagePayload {
   sourcePath: string;
   destination: string;
   executable: boolean;
+  collision?: 'override';
 }
 
 export type PackagePayloadPlans = Partial<Record<TargetName, readonly PackagePayload[]>>;
@@ -95,6 +96,7 @@ function expandInclude(
   return matches.map((source) => ({
     ...inspectSource(files, source, packageRoot),
     destination: destinationFor(include, source, sourceRoot, directory || glob),
+    ...(include.collision === undefined ? {} : { collision: include.collision }),
   }));
 }
 
