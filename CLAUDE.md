@@ -23,7 +23,8 @@ preferences; only narrows or extends here.
   fixed `personality` enum, not custom files; OpenCode has no analog).
 - Marketplace compilation translates package-level Claude `agent` and
   `command` sources into direct Claude files and inferred Codex procedures or
-  skills; commands receive skill-local `agents/openai.yaml` policy.
+  skills; commands and explicit-only skill projections receive skill-local
+  `agents/openai.yaml` policy.
 - Real-corpus migration, `agent` artifact, `mcp` artifact, watch mode, Nix
   integration, and GitHub publishing are M2+.
 - Full milestone plan: `~/.claude/plans/stateful-meandering-hamming.md`.

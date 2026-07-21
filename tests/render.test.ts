@@ -98,6 +98,45 @@ describe('render skill', () => {
       });
     }
   }
+
+  test('translates explicit-only Claude skills into Codex invocation policy', async () => {
+    const outDir = join(TMP_ROOT, 'explicit-only-codex');
+    const result = await render({
+      sourceDir: FIXTURE_DIR('claude-rich'),
+      target: 'codex',
+      outDir,
+      artifact: 'skill',
+    });
+
+    expect(Bun.YAML.parse(readFileSync(join(outDir, 'agents', 'openai.yaml'), 'utf-8'))).toEqual({
+      policy: { allow_implicit_invocation: false },
+    });
+    expect(result.warnings).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ detail: expect.stringContaining('disable-model-invocation') }),
+      ]),
+    );
+  });
+
+  test.each([
+    'explicit-only-false',
+    'common-subset',
+  ])('does not generate Codex invocation policy for %s', async (fixture) => {
+    const outDir = join(TMP_ROOT, 'implicit-codex', fixture);
+    const result = await render({
+      sourceDir: FIXTURE_DIR(fixture),
+      target: 'codex',
+      outDir,
+      artifact: 'skill',
+    });
+
+    expect(existsSync(join(outDir, 'agents', 'openai.yaml'))).toBe(false);
+    expect(result.warnings).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ detail: expect.stringContaining('disable-model-invocation') }),
+      ]),
+    );
+  });
 });
 
 describe('render output-style', () => {

@@ -329,6 +329,60 @@ describe('native marketplace adapters', () => {
     );
   });
 
+  test('translates explicit-only package skills through the shared Codex projection', async () => {
+    const loaded = await loadMarketplaceDefinition(MARKETPLACE_FIXTURE);
+    const packages = explicitOnlyDraftPackages(loaded, 'remove');
+
+    const plan = compileMarketplace({ ...loaded, packages }, [
+      { target: 'claude', compilePublication: () => ({ outputs: [] }) },
+      codexMarketplaceAdapter,
+    ]);
+
+    expect(
+      Bun.YAML.parse(
+        generatedOutput(plan.outputs, 'packages/spec-flow/skills/draft/agents/openai.yaml').content,
+      ),
+    ).toEqual({ policy: { allow_implicit_invocation: false } });
+    expect(plan.diagnostics).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'claude-only-frontmatter-stripped',
+          message: expect.stringContaining('disable-model-invocation'),
+        }),
+      ]),
+    );
+  });
+
+  test('requires explicit collision policy for a supplied Codex skill sidecar', async () => {
+    const loaded = await loadMarketplaceDefinition(MARKETPLACE_FIXTURE);
+
+    expect(() =>
+      compileMarketplace({ ...loaded, packages: explicitOnlyDraftPackages(loaded) }, [
+        { target: 'claude', compilePublication: () => ({ outputs: [] }) },
+        codexMarketplaceAdapter,
+      ]),
+    ).toThrow(
+      'supplied output "packages/spec-flow/skills/draft/agents/openai.yaml" collides with generated output for publication "codex", package "spec-flow"; set collision: override on the supplied payload to replace it',
+    );
+
+    const plan = compileMarketplace(
+      { ...loaded, packages: explicitOnlyDraftPackages(loaded, 'override') },
+      [{ target: 'claude', compilePublication: () => ({ outputs: [] }) }, codexMarketplaceAdapter],
+    );
+
+    expect(
+      copiedOutput(plan.outputs, 'packages/spec-flow/skills/draft/agents/openai.yaml'),
+    ).toEqual(expect.objectContaining({ producer: 'supplied', collision: 'override' }));
+    expect(plan.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'supplied-output-override',
+          message: expect.stringContaining('replaced generated output'),
+        }),
+      ]),
+    );
+  });
+
   test('rejects supplied collisions by default with producer diagnostics', async () => {
     const loaded = await loadMarketplaceDefinition(MARKETPLACE_FIXTURE);
     const specFlow = loaded.packages.get('spec-flow');
@@ -475,6 +529,44 @@ function codexMarketplaceEntry(name: string, category: string) {
     },
     category,
   };
+}
+
+function explicitOnlyDraftPackages(
+  loaded: Awaited<ReturnType<typeof loadMarketplaceDefinition>>,
+  collision?: 'remove' | 'override',
+) {
+  const specFlow = loaded.packages.get('spec-flow');
+  if (!specFlow) throw new Error('missing spec-flow fixture');
+  const artifacts = new Map(specFlow.artifacts);
+  const skills = artifacts.get('skill') ?? [];
+  artifacts.set(
+    'skill',
+    skills.map((skill) =>
+      skill.path.endsWith('/skills/draft/SKILL.md')
+        ? {
+            ...skill,
+            content: skill.content.replace(
+              'allowed-tools: [Read]\n',
+              'allowed-tools: [Read]\ndisable-model-invocation: true\n',
+            ),
+          }
+        : skill,
+    ),
+  );
+  const packages = new Map(loaded.packages);
+  packages.set('spec-flow', {
+    ...specFlow,
+    artifacts,
+    payloads: {
+      ...specFlow.payloads,
+      codex: (specFlow.payloads.codex ?? []).flatMap((payload) => {
+        if (payload.destination !== 'skills/draft/agents/openai.yaml') return [payload];
+        if (collision === 'remove') return [];
+        return [{ ...payload, ...(collision === 'override' ? { collision } : {}) }];
+      }),
+    },
+  });
+  return packages;
 }
 
 function generatedDocument(outputs: readonly unknown[], destination: string): unknown {

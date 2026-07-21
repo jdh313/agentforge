@@ -264,6 +264,9 @@ const plan = compileMarketplace(marketplaceResult, [
   `agents/*.md` and `commands/*.md`. Codex infers reusable role procedures from
   agents and explicit-invocation skills from commands; inferred command skills
   receive skill-local `agents/openai.yaml` policy.
+- Codex skill projections translate `disable-model-invocation: true` into a
+  skill-local `agents/openai.yaml` policy that disables implicit invocation.
+  Explicitly supplied policy sidecars use the normal payload collision rules.
 - Claude passes declared `hook` artifacts through to the package tree. Codex
   retains them as structured unsupported-projection diagnostics.
 - Inferred Codex translations emit structured diagnostics naming behavior that

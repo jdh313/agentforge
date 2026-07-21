@@ -38,9 +38,15 @@ export interface ProjectedResource {
   relativePath: string;
 }
 
+export interface ProjectedGeneratedFile {
+  relativePath: string;
+  content: string;
+}
+
 export interface ArtifactProjection {
   artifactName: string;
   content: string;
+  generatedFiles: readonly ProjectedGeneratedFile[];
   resources: readonly ProjectedResource[];
   warnings: readonly Warning[];
 }
@@ -109,8 +115,10 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
 
   const warnings: Warning[] = [];
   if (target !== 'claude') {
-    const claudeOnlyPresent = Object.keys(canonicalFrontmatter).filter((k) =>
-      CLAUDE_ONLY_KEYS.has(k),
+    const claudeOnlyPresent = Object.keys(canonicalFrontmatter).filter(
+      (key) =>
+        CLAUDE_ONLY_KEYS.has(key) &&
+        !(target === 'codex' && artifact === 'skill' && key === 'disable-model-invocation'),
     );
     if (claudeOnlyPresent.length > 0) {
       warnings.push({
@@ -138,6 +146,15 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
       : nameFromSourceDir(dirname(sourcePath));
 
   const rendered = matter.stringify(body, filtered);
+  const generatedFiles =
+    target === 'codex' && artifact === 'skill' && merged['disable-model-invocation'] === true
+      ? [
+          {
+            relativePath: 'agents/openai.yaml',
+            content: 'policy:\n  allow_implicit_invocation: false\n',
+          },
+        ]
+      : [];
   const sourceDir = dirname(sourcePath);
   const resources = resourcePaths
     .map((resourcePath) => ({
@@ -154,7 +171,7 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
       return 0;
     });
 
-  return { artifactName, content: rendered, resources, warnings };
+  return { artifactName, content: rendered, generatedFiles, resources, warnings };
 };
 
 export const render = async (opts: RenderOptions): Promise<RenderResult> => {
@@ -201,6 +218,12 @@ export const render = async (opts: RenderOptions): Promise<RenderResult> => {
   mkdirSync(materializeDir, { recursive: true });
   const canonicalOutPath = join(materializeDir, artifactDef.canonicalFilename);
   writeFileSync(canonicalOutPath, projection.content, 'utf-8');
+
+  for (const generatedFile of projection.generatedFiles) {
+    const destination = join(materializeDir, generatedFile.relativePath);
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(destination, generatedFile.content, 'utf-8');
+  }
 
   for (const resource of projection.resources) {
     const destination = join(materializeDir, resource.relativePath);
