@@ -75,7 +75,7 @@ Fix GitHub issue $ARGUMENTS following the project's coding standards.
 exports[`render skill claude-rich → codex: warnings 1`] = `
 [
   {
-    "detail": "stripped argument-hint, disable-model-invocation, allowed-tools",
+    "detail": "stripped argument-hint, allowed-tools",
     "kind": "claude-only-frontmatter-stripped",
     "target": "codex",
   },
@@ -172,7 +172,7 @@ For Codex: pass the issue number explicitly, then fix and test.
 exports[`render skill with-overrides → codex: warnings 1`] = `
 [
   {
-    "detail": "stripped disable-model-invocation, allowed-tools",
+    "detail": "stripped allowed-tools",
     "kind": "claude-only-frontmatter-stripped",
     "target": "codex",
   },

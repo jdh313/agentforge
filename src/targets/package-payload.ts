@@ -58,6 +58,15 @@ export function compilePackagePayload(
           content: projection.content,
         });
         outputs.push(
+          ...projection.generatedFiles.map(({ relativePath, content }) => ({
+            kind: 'generated' as const,
+            producer: 'generated' as const,
+            packageId: packageInput.id,
+            destination: `${skillDirectory}/${relativePath}`,
+            content,
+          })),
+        );
+        outputs.push(
           ...projection.resources.map(({ relativePath, sourcePath }) => ({
             kind: 'copy' as const,
             producer: 'generated' as const,
