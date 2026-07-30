@@ -24,14 +24,28 @@ export function detectClaudeOnlyConstructs(
 
   for (const [artifactType, loaded] of artifacts) {
     for (const artifact of loaded) {
+      // An agent spells its allowlist `tools:`, a command spells the same thing
+      // `allowed-tools:`. Codex enforces neither, so both are the same loss.
       if (artifactType === 'agent') {
-        const tools = agentToolsFilter(artifact.content);
+        const tools = frontmatterToolList(artifact.content, 'tools');
         if (tools !== undefined) {
           detected.push({
             construct: 'agent-tools-filter',
             artifactType,
             sourcePath: artifact.path,
             detail: `agent frontmatter declares tools: ${tools}`,
+          });
+        }
+      }
+
+      if (artifactType === 'command') {
+        const tools = frontmatterToolList(artifact.content, 'allowed-tools');
+        if (tools !== undefined) {
+          detected.push({
+            construct: 'command-tools-filter',
+            artifactType,
+            sourcePath: artifact.path,
+            detail: `command frontmatter declares allowed-tools: ${tools}`,
           });
         }
       }
@@ -55,14 +69,17 @@ export function detectClaudeOnlyConstructs(
   );
 }
 
-function agentToolsFilter(content: string): string | undefined {
+function frontmatterToolList(content: string, key: string): string | undefined {
   let data: Record<string, unknown>;
   try {
     data = matter(content).data;
   } catch {
+    // Malformed frontmatter fails open here and is reported later by the
+    // artifact's own parser, which produces a far better message than this
+    // detector could.
     return undefined;
   }
-  const tools = data.tools;
+  const tools = data[key];
   if (tools === undefined || tools === null) return undefined;
   return Array.isArray(tools) ? tools.join(', ') : String(tools);
 }

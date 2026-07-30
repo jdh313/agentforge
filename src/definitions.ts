@@ -56,7 +56,11 @@ const PayloadDeclaration = z.strictObject({
 // target, and would otherwise be dropped with nothing reported. Constructs that
 // are faithfully translated (a folded hook `args`) or already reported are not
 // listed here — a disposition gates silent loss, not every divergence.
-export const CLAUDE_ONLY_CONSTRUCTS = ['agent-tools-filter', 'mcp-tool-reference'] as const;
+export const CLAUDE_ONLY_CONSTRUCTS = [
+  'agent-tools-filter',
+  'command-tools-filter',
+  'mcp-tool-reference',
+] as const;
 
 export type ClaudeOnlyConstruct = (typeof CLAUDE_ONLY_CONSTRUCTS)[number];
 

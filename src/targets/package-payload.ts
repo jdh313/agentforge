@@ -43,7 +43,7 @@ export function compilePackagePayload(
   const packageRoot = dirname(packageInput.path);
 
   if (policy.requireConstructDispositions) {
-    assertConstructDispositions(input, packageInput);
+    diagnostics.push(...resolveConstructDispositions(input, packageInput));
   }
 
   for (const [artifactType, artifacts] of [...packageInput.artifacts.entries()].toSorted(
@@ -145,26 +145,41 @@ export function compilePackagePayload(
 // `tools:` filter or an `mcp__*` reference passes it unexamined and disappears
 // from output with nothing said. Requiring a declared disposition turns that
 // silence into a compile error naming the construct.
-function assertConstructDispositions(
+function resolveConstructDispositions(
   input: PublicationCompilation,
   packageInput: CompilationPackage,
-): void {
-  const declared = new Set(packageInput.dispositions.map(({ construct }) => construct));
-  const undeclared = detectClaudeOnlyConstructs(packageInput.artifacts).filter(
-    ({ construct }) => !declared.has(construct),
+): ProposedCompilationDiagnostic[] {
+  const declared = new Map(
+    packageInput.dispositions.map((disposition) => [disposition.construct, disposition]),
   );
-  if (undeclared.length === 0) return;
+  const detected = detectClaudeOnlyConstructs(packageInput.artifacts);
+  const undeclared = detected.filter(({ construct }) => !declared.has(construct));
 
-  const detail = undeclared
-    .map(
-      ({ construct, sourcePath, detail: why }) =>
-        `  - ${construct}: ${relativePackageArtifactPath(packageInput.path, sourcePath)} ${why}`,
-    )
-    .join('\n');
-  throw new CompilationError(
-    `package "${packageInput.id}" uses Claude-only constructs with no declared disposition for target "${input.publication.target}":\n${detail}\n` +
-      `Declare each under targets.${input.publication.target}.dispositions in ${packageInput.path}, or remove the construct.`,
-  );
+  if (undeclared.length > 0) {
+    const detail = undeclared
+      .map(
+        ({ construct, sourcePath, detail: why }) =>
+          `  - ${construct}: ${relativePackageArtifactPath(packageInput.path, sourcePath)} ${why}`,
+      )
+      .join('\n');
+    throw new CompilationError(
+      `package "${packageInput.id}" uses Claude-only constructs with no declared disposition for target "${input.publication.target}":\n${detail}\n` +
+        `Declare each under targets.${input.publication.target}.dispositions in ${packageInput.path}, or remove the construct.`,
+    );
+  }
+
+  // Declaring a disposition must not buy silence. Report each one that actually
+  // matched, so the author's note about what a user does not get travels with
+  // every compile and check rather than resting in the YAML.
+  const matched = new Set(detected.map(({ construct }) => construct));
+  return [...declared.values()]
+    .filter(({ construct }) => matched.has(construct))
+    .map(({ construct, disposition, note }) => ({
+      code: 'declared-construct-disposition',
+      severity: 'note' as const,
+      packageId: packageInput.id,
+      message: `Claude-only construct "${construct}" is ${disposition} for target "${input.publication.target}"${note ? `: ${note}` : '.'}`,
+    }));
 }
 
 function unsupportedProjection(

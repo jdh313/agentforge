@@ -345,9 +345,34 @@ function foldHookCommand(command: string, args: readonly string[] | undefined): 
   return [rewritten, ...args.map((arg) => quoteHookArgument(rewriteClaudeHookEnv(arg)))].join(' ');
 }
 
+// Claude hands `args` to argv with no shell involved; Codex splits a single
+// string *with* one. Anything outside a conservative safe set must therefore be
+// quoted, or an argument becomes shell syntax: `x;whoami` would run a second
+// command, `don't` would be a syntax error, `*.ts` would glob, and `''` would
+// vanish and shift the positionals that follow.
+const SHELL_SAFE_ARGUMENT = /^[A-Za-z0-9_@%+=:,./-]+$/;
+
+// The plugin-root references we just rewrote are the one thing that must still
+// expand, so they survive quoting while the literal text around them does not.
+const EXPANDABLE_REFERENCE = /(\$\{(?:PLUGIN_ROOT|PLUGIN_DATA)\})/;
+
 function quoteHookArgument(argument: string): string {
-  if (!/[\s"]/.test(argument)) return argument;
-  return `"${argument.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+  if (SHELL_SAFE_ARGUMENT.test(argument)) return argument;
+  const quoted = argument
+    .split(EXPANDABLE_REFERENCE)
+    .map((segment) => (EXPANDABLE_REFERENCE.test(segment) ? segment : escapeQuotedSegment(segment)))
+    .join('');
+  return `"${quoted}"`;
+}
+
+// Inside double quotes a shell still acts on `$`, a backtick, and a backslash,
+// so neutralize those; whitespace, `;`, `|`, `&`, and globs are already inert.
+function escapeQuotedSegment(segment: string): string {
+  return segment
+    .replaceAll('\\', '\\\\')
+    .replaceAll('"', '\\"')
+    .replaceAll('$', '\\$')
+    .replaceAll('`', '\\`');
 }
 
 function rewriteClaudeHookEnv(value: string): string {

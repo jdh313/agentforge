@@ -27,6 +27,10 @@ targets:
         - source: hooks/hooks.json
           destination: native-hooks.json
   codex:
+    dispositions:
+      - construct: command-tools-filter
+        disposition: stripped
+        note: The spec-flow command's Skill-only allowlist is not enforced on Codex.
     payloads:
       include:
         - source: config/
