@@ -131,6 +131,8 @@ describe('native marketplace adapters', () => {
     expect(plan.outputs.map(({ destination }) => destination)).toEqual([
       '.agents/plugins/marketplace.json',
       'packages/commit/.codex-plugin/plugin.json',
+      'packages/commit/hooks/destructive-vcs-guard.sh',
+      'packages/commit/hooks/hooks.json',
       'packages/commit/skills/commit/SKILL.md',
       'packages/craft/.codex-plugin/plugin.json',
       'packages/craft/skills/tdd/SKILL.md',
@@ -320,7 +322,13 @@ describe('native marketplace adapters', () => {
           retainedSource: expect.objectContaining({ artifactType: 'command' }),
         }),
         expect.objectContaining({
-          code: 'unsupported-artifact-projection',
+          code: 'inferred-artifact-projection',
+          severity: 'note',
+          provenance: expect.objectContaining({ packageId: 'commit' }),
+          retainedSource: expect.objectContaining({ artifactType: 'hook' }),
+        }),
+        expect.objectContaining({
+          code: 'empty-hook-configuration',
           severity: 'note',
           provenance: expect.objectContaining({ packageId: 'spec-flow' }),
           retainedSource: expect.objectContaining({ artifactType: 'hook' }),

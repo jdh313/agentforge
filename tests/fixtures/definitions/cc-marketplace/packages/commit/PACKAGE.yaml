@@ -12,10 +12,16 @@ artifacts:
   - type: skill
     pattern: skills/*/SKILL.md
   - type: hook
-    pattern: hooks/*
+    pattern: hooks/hooks.json
 targets:
-  claude: {}
+  claude:
+    payloads:
+      include:
+        - source: hooks/destructive-vcs-guard.sh
   codex:
+    payloads:
+      include:
+        - source: hooks/destructive-vcs-guard.sh
     native:
       interface:
         displayName: Commit
