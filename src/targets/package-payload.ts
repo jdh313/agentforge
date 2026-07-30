@@ -1,9 +1,11 @@
 import { dirname, relative, sep } from 'node:path';
-import type {
-  CompilationPackage,
-  ProposedCompilationDiagnostic,
-  ProposedOutput,
-  PublicationCompilation,
+import { detectClaudeOnlyConstructs } from '../compatibility.ts';
+import {
+  CompilationError,
+  type CompilationPackage,
+  type ProposedCompilationDiagnostic,
+  type ProposedOutput,
+  type PublicationCompilation,
 } from '../compiler.ts';
 import type { LoadedArtifact } from '../definitions.ts';
 import { projectArtifact } from '../render.ts';
@@ -25,6 +27,9 @@ export type ArtifactTranslator = (input: ArtifactTranslatorInput) => PackagePayl
 export interface PackagePayloadPolicy {
   passthroughArtifactTypes: ReadonlySet<string>;
   translators: ReadonlyMap<string, ArtifactTranslator>;
+  // When set, a Claude-only construct that would be silently lost must carry a
+  // declared disposition for this target or compilation fails.
+  requireConstructDispositions?: boolean;
 }
 
 export function compilePackagePayload(
@@ -36,6 +41,10 @@ export function compilePackagePayload(
   const diagnostics: ProposedCompilationDiagnostic[] = [];
   const packageDirectory = relativePackageDirectory(input.marketplace.path, packageInput.path);
   const packageRoot = dirname(packageInput.path);
+
+  if (policy.requireConstructDispositions) {
+    assertConstructDispositions(input, packageInput);
+  }
 
   for (const [artifactType, artifacts] of [...packageInput.artifacts.entries()].toSorted(
     ([left], [right]) => compareStrings(left, right),
@@ -130,6 +139,32 @@ export function compilePackagePayload(
   );
 
   return { outputs, diagnostics };
+}
+
+// The body-pattern check in `render.ts` reads skill bodies only, so an agent's
+// `tools:` filter or an `mcp__*` reference passes it unexamined and disappears
+// from output with nothing said. Requiring a declared disposition turns that
+// silence into a compile error naming the construct.
+function assertConstructDispositions(
+  input: PublicationCompilation,
+  packageInput: CompilationPackage,
+): void {
+  const declared = new Set(packageInput.dispositions.map(({ construct }) => construct));
+  const undeclared = detectClaudeOnlyConstructs(packageInput.artifacts).filter(
+    ({ construct }) => !declared.has(construct),
+  );
+  if (undeclared.length === 0) return;
+
+  const detail = undeclared
+    .map(
+      ({ construct, sourcePath, detail: why }) =>
+        `  - ${construct}: ${relativePackageArtifactPath(packageInput.path, sourcePath)} ${why}`,
+    )
+    .join('\n');
+  throw new CompilationError(
+    `package "${packageInput.id}" uses Claude-only constructs with no declared disposition for target "${input.publication.target}":\n${detail}\n` +
+      `Declare each under targets.${input.publication.target}.dispositions in ${packageInput.path}, or remove the construct.`,
+  );
 }
 
 function unsupportedProjection(

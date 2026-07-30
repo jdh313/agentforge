@@ -1,0 +1,17 @@
+schema: agentforge.package/v1
+id: reader
+defaults:
+  name: reader
+  version: 1.0.0
+  description: Fixture package whose agent tools filter carries no declared disposition.
+artifacts:
+  - type: agent
+    pattern: agents/*.md
+targets:
+  codex:
+    # Deliberately declares no `dispositions:` — the agent's tools filter is a
+    # Claude-only construct that must fail compilation rather than vanish.
+    native:
+      interface:
+        displayName: Reader
+        category: Productivity

@@ -17,11 +17,13 @@ import { loadMarketplaceDefinition } from '../src/definitions.ts';
 // match `mcp__`. Both tests below currently compile without error, so both
 // fail against the current (silent) behavior.
 
-const CC_MARKETPLACE_FIXTURE = join(
+// A dedicated fixture rather than the shared cc-marketplace corpus: that corpus
+// declares its dispositions and must therefore compile. See JUN-341 ^r7.
+const UNDECLARED_TOOLS_FIXTURE = join(
   import.meta.dir,
   'fixtures',
   'definitions',
-  'cc-marketplace',
+  'codex-undeclared-tools',
   'MARKETPLACE.yaml',
 );
 
@@ -35,9 +37,9 @@ const MCP_SKILL_FIXTURE = join(
 
 describe('Codex compatibility dispositions', () => {
   test('fails Codex compilation for an agent tools: filter with no declared disposition', async () => {
-    // librarian/agents/vault-reader.md declares `tools: [Read, Grep]` and is
-    // enrolled in this fixture's Codex publication.
-    const loaded = await loadMarketplaceDefinition(CC_MARKETPLACE_FIXTURE);
+    // reader/agents/reader.md declares `tools: [Read, Grep]` and its package
+    // declares no disposition for that construct.
+    const loaded = await loadMarketplaceDefinition(UNDECLARED_TOOLS_FIXTURE);
 
     expect(() =>
       compileMarketplace(loaded, [

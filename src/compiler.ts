@@ -1,5 +1,6 @@
 import { deepMerge } from './deep-merge.ts';
 import type {
+  ConstructDispositionDefinition,
   LoadedArtifact,
   LoadedMarketplace,
   MarketplaceDefinition,
@@ -90,6 +91,7 @@ export interface CompilationPackage {
   artifacts: ReadonlyMap<string, readonly LoadedArtifact[]>;
   files: readonly string[];
   payloads: readonly PackagePayload[];
+  dispositions: readonly ConstructDispositionDefinition[];
 }
 
 export interface PublicationCompilation {
@@ -241,6 +243,7 @@ function resolvePackages(
       artifacts: loadedPackage.artifacts,
       files: loadedPackage.files,
       payloads: loadedPackage.payloads[publication.target] ?? [],
+      dispositions: target.dispositions ?? [],
     };
   });
 }
