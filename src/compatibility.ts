@@ -8,10 +8,11 @@ export interface DetectedConstruct {
   detail: string;
 }
 
-// Claude tool names are namespaced `mcp__<server>__<tool>`. Codex has no MCP
+// Claude tool names are namespaced `mcp__<server>__<tool>`, and the server
+// segment may contain hyphens (`mcp__obsidian-mcp__read_note`). Codex has no MCP
 // tool namespace, so a body naming one instructs the model to call something
 // that does not exist there.
-const MCP_TOOL_REFERENCE = /\bmcp__[A-Za-z0-9_]+/;
+const MCP_TOOL_REFERENCE = /\bmcp__[A-Za-z0-9_-]+/;
 
 // These constructs are invisible to the body-pattern check in `render.ts`, which
 // only scans skill bodies for literal Claude template syntax. An agent's
