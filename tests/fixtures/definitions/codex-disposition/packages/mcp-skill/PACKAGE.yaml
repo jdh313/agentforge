@@ -1,0 +1,15 @@
+schema: agentforge.package/v1
+id: mcp-skill
+defaults:
+  name: mcp-skill
+  version: 1.0.0
+  description: Fixture package exercising an mcp__ tool reference invisible to the body-pattern check.
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+targets:
+  codex:
+    native:
+      interface:
+        displayName: MCP Skill
+        category: Developer Tools

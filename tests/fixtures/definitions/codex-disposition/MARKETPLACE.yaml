@@ -1,0 +1,14 @@
+schema: agentforge.marketplace/v1
+id: codex-disposition
+defaults:
+  name: codex-disposition
+  description: Fixture marketplace for Codex compatibility disposition coverage.
+packages:
+  - packages/*/PACKAGE.yaml
+publications:
+  - id: codex
+    target: codex
+    destination: .agents/plugins/marketplace.json
+    enrollment:
+      mode: include
+      packages: [mcp-skill]

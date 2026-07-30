@@ -1,0 +1,18 @@
+schema: agentforge.package/v1
+id: guarded
+defaults:
+  name: guarded
+  version: 1.0.0
+  description: Fixture package exercising Codex PreToolUse hook projection.
+artifacts:
+  - type: hook
+    pattern: hooks/hooks.json
+targets:
+  codex:
+    payloads:
+      include:
+        - source: hooks/guard.sh
+    native:
+      interface:
+        displayName: Guarded
+        category: Developer Tools
