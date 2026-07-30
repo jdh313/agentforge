@@ -52,11 +52,38 @@ const PayloadDeclaration = z.strictObject({
   exclude: z.array(z.string().min(1)).optional(),
 });
 
-const PackageTarget = z.strictObject({
-  overrides: PackageDefaults.partial().optional(),
-  native: JsonObject.optional(),
-  payloads: PayloadDeclaration.optional(),
+// Constructs that carry meaning on Claude, have no equivalent on another
+// target, and would otherwise be dropped with nothing reported. Constructs that
+// are faithfully translated (a folded hook `args`) or already reported are not
+// listed here — a disposition gates silent loss, not every divergence.
+export const CLAUDE_ONLY_CONSTRUCTS = ['agent-tools-filter', 'mcp-tool-reference'] as const;
+
+export type ClaudeOnlyConstruct = (typeof CLAUDE_ONLY_CONSTRUCTS)[number];
+
+const ConstructDisposition = z.strictObject({
+  construct: z.enum(CLAUDE_ONLY_CONSTRUCTS),
+  disposition: z.enum(['stripped', 'retained-unenforced']),
+  note: z.string().min(1).optional(),
 });
+
+const PackageTarget = z
+  .strictObject({
+    overrides: PackageDefaults.partial().optional(),
+    native: JsonObject.optional(),
+    payloads: PayloadDeclaration.optional(),
+    dispositions: z.array(ConstructDisposition).min(1).optional(),
+  })
+  .superRefine((target, context) => {
+    reportDuplicates(
+      target.dispositions ?? [],
+      ({ construct }) => construct,
+      context,
+      'construct disposition',
+      ['dispositions'],
+    );
+  });
+
+export type ConstructDispositionDefinition = z.infer<typeof ConstructDisposition>;
 
 const ArtifactPattern = z.strictObject({
   type: Slug,

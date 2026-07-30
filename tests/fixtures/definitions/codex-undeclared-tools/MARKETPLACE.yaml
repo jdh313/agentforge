@@ -1,0 +1,14 @@
+schema: agentforge.marketplace/v1
+id: codex-undeclared-tools
+defaults:
+  name: codex-undeclared-tools
+  description: Fixture marketplace for an undeclared Claude-only agent tools filter.
+packages:
+  - packages/*/PACKAGE.yaml
+publications:
+  - id: codex
+    target: codex
+    destination: .agents/plugins/marketplace.json
+    enrollment:
+      mode: include
+      packages: [reader]
