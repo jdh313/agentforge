@@ -1,0 +1,15 @@
+schema: agentforge.package/v1
+id: notifier
+defaults:
+  name: notifier
+  version: 1.0.0
+  description: Fixture package exercising a command+args Codex hook shape.
+artifacts:
+  - type: hook
+    pattern: hooks/hooks.json
+targets:
+  codex:
+    native:
+      interface:
+        displayName: Notifier
+        category: Developer Tools
