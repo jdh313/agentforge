@@ -151,9 +151,16 @@ targets:
   naming the construct and the file. Each declaration that matches also emits a
   `declared-loss` note on every compile and check, so the loss
   stays visible rather than being silenced by having been declared once.
-  Constructs detected today: `agent-tools-filter` (an agent's `tools:`),
-  `command-tools-filter` (a command's `allowed-tools:`), and
-  `mcp-tool-reference` (an `mcp__*` tool name). `state` is `stripped` or
+  Constructs detected today, in frontmatter: `agent-tools-filter` (an agent's
+  `tools:`) and `command-tools-filter` (a command's `allowed-tools:`). In
+  artifact bodies and text resource files: `mcp-tool-reference` (an `mcp__*`
+  tool name), `body-template-variable` (`$ARGUMENTS`, `$1`–`$9`,
+  `${CLAUDE_*}`), `body-shell-injection` (`` !`…` `` and ` ```! `), and
+  `body-file-reference` (an `@dir/file` reference). A construct-shaped string
+  the capability table does not classify — a bare `$UPPER` such as `$PATH` —
+  is reported as an `unclassified-construct` warning and never gated, because
+  a declaration is only meaningful when there is a confirmed loss to record.
+  `state` is `stripped` or
   `retained-unenforced`; the optional `note` is what a user of that target does
   not get. **The declared `state` is checked against what the compiler actually
   emitted**, rather than taken on the author's word: a construct declared
