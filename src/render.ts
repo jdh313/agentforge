@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import matter from 'gray-matter';
 import JSZip from 'jszip';
+import { findConstructShapes, supportFor } from './capabilities.ts';
 import { deepMerge } from './deep-merge.ts';
 import { ARTIFACT_DEFS, CLAUDE_ONLY_KEYS } from './schema.ts';
 import { getArtifactConfig } from './targets/index.ts';
@@ -51,21 +52,20 @@ export interface ArtifactProjection {
   warnings: readonly Warning[];
 }
 
-// biome-ignore-start lint/suspicious/noTemplateCurlyInString: labels are literal docs of Claude-only patterns
-const CLAUDE_ONLY_BODY_PATTERNS: { pattern: RegExp; label: string }[] = [
-  { pattern: /\$ARGUMENTS\b/, label: '$ARGUMENTS' },
-  { pattern: /\$ARGUMENTS\[\d+\]/, label: '$ARGUMENTS[N]' },
-  { pattern: /(?<![A-Za-z_])\$\d+/, label: '$N positional' },
-  { pattern: /\$\{CLAUDE_SKILL_DIR\}/, label: '${CLAUDE_SKILL_DIR}' },
-  { pattern: /\$\{CLAUDE_SESSION_ID\}/, label: '${CLAUDE_SESSION_ID}' },
-  { pattern: /\$\{CLAUDE_EFFORT\}/, label: '${CLAUDE_EFFORT}' },
-  { pattern: /(^|\n)!`[^`]+`/, label: 'inline shell !`...`' },
-  { pattern: /(^|\n)```!/, label: 'fenced shell ```!' },
-];
-// biome-ignore-end lint/suspicious/noTemplateCurlyInString: labels are literal docs of Claude-only patterns
-
-const detectClaudeOnlyBodyFeatures = (body: string): string[] =>
-  CLAUDE_ONLY_BODY_PATTERNS.filter(({ pattern }) => pattern.test(body)).map(({ label }) => label);
+// The enumerated pattern table that used to live here is gone. It named eight
+// literals and was silent about everything else, so whatever Claude shipped next
+// passed unexamined. Both this path and marketplace compilation now resolve the
+// same construct shapes against the same capability table; only the reporting
+// differs, because a standalone render has no PACKAGE.yaml to declare a
+// disposition in and so can only warn.
+const detectClaudeOnlyBodyFeatures = (body: string, target: TargetName): string[] => {
+  const labels = new Set<string>();
+  for (const shape of findConstructShapes(body)) {
+    if (supportFor(target, 'skill', shape.token) === 'supported') continue;
+    labels.add(shape.literal);
+  }
+  return [...labels].toSorted();
+};
 
 const pickKeys = (
   obj: Record<string, unknown>,
@@ -128,7 +128,7 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
       });
     }
     if (overrideBody === undefined) {
-      const features = detectClaudeOnlyBodyFeatures(canonicalBody);
+      const features = detectClaudeOnlyBodyFeatures(canonicalBody, target);
       if (features.length > 0) {
         warnings.push({
           kind: 'claude-only-body-feature',

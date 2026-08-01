@@ -103,6 +103,9 @@ artifacts:
     pattern: commands/*.md
   - type: hook
     pattern: hooks/hooks.json
+documents:
+  - class: reference
+    pattern: references/*.md
 payloads:
   include:
     - source: LICENSE
@@ -128,6 +131,12 @@ targets:
         displayName: Librarian
 ```
 
+- `documents` is optional and marks files whose Claude-only constructs are
+  documentation *about* Claude rather than instructions to a model — an API
+  gotcha reference, or a skill that probes a specific endpoint. `class` is
+  `reference` or `diagnostic`; both exempt the file from construct scanning, and
+  the name records why. This is deliberately separate from `artifacts`, because
+  document class is orthogonal to whether a file projects to a target.
 - `id` is the stable AgentForge identity and cannot be changed by target data.
 - `defaults` is the normalized shared metadata set: `name`, `version`,
   `description`, `author`, `license`, and `keywords`.

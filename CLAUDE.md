@@ -178,10 +178,7 @@ bun build --compile src/cli.ts --outfile ~/.local/bin/agentforge
 
 ## Lint exceptions
 
-- `src/render.ts` disables `lint/suspicious/noTemplateCurlyInString` for the
-  `CLAUDE_ONLY_BODY_PATTERNS` table — the labels are intentional documentation
-  literals (`'${CLAUDE_SKILL_DIR}'` etc.), not template strings.
-- `src/capabilities.ts` disables the same rule for the same reason: its
+- `src/capabilities.ts` disables `lint/suspicious/noTemplateCurlyInString`: its
   capability-table tokens (`'${CLAUDE_*}'`) are literal documentation of
   Claude-only patterns.
 
