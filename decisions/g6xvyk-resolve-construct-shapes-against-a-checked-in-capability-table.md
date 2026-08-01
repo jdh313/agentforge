@@ -29,7 +29,7 @@ Detect Claude-only constructs as general shapes, then resolve each against a cap
 ## Scope
 
 - Binds: detection of Claude-only constructs across every artifact type and target.
-- Does not bind: what happens to a construct once classified, which the disposition surface owns.
+- Does not bind: what happens to a construct once classified, which the declared-loss surface owns.
 
 ## Commitments
 

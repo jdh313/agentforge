@@ -1,6 +1,6 @@
 ---
 id: "k9r6pc"
-title: Key disposition declarations by construct, not by occurrence
+title: Key loss declarations by construct, not by occurrence
 status: current
 decision_date: 2026-08-01
 author: Jacob Hoehler
@@ -22,15 +22,15 @@ informed_by:
   - 62pj9p
 ---
 
-# k9r6pc — Key disposition declarations by construct, not by occurrence
+# k9r6pc — Key loss declarations by construct, not by occurrence
 
 ## Decision
 
-A declared disposition is keyed by construct for a target and covers every occurrence of it in the package. Occurrence detail belongs in the compile-time report, not in the declaration.
+A declared loss is keyed by construct for a target and covers every occurrence of it in the package. Occurrence detail belongs in the compile-time report, not in the declaration.
 
 ## Scope
 
-- Binds: the key of a construct disposition declaration.
+- Binds: the key of a declared-loss entry.
 - Does not bind: what the compiler reports once a declaration matches.
 
 ## Commitments
@@ -40,7 +40,7 @@ A declared disposition is keyed by construct for a target and covers every occur
 
 ## Revisit if
 
-- Two occurrences of one construct in a package genuinely need different dispositions.
+- Two occurrences of one construct in a package genuinely need different states.
 - A package grows large enough that a package-wide declaration stops being reviewable.
 
 ## Context
@@ -49,7 +49,7 @@ A declared disposition is keyed by construct for a target and covers every occur
 - The governing decision's stated purpose is catching construct types nobody enumerated, not itemizing occurrences.
 - Its own revisit conditions name per-artifact declarations as a future trigger, not a present defect.
 - A separate decision warns that requiring declarations too broadly turns the surface into a checklist to satisfy rather than a statement to read.
-- In the observed corpus a disposition's value follows from what the target does, so it is uniform across occurrences of one construct.
+- In the observed corpus a declared loss's state follows from what the target does, so it is uniform across occurrences of one construct.
 
 ## Why
 
@@ -57,7 +57,7 @@ The finer key would multiply declarations exactly as detection coverage grows, w
 
 The specificity the finer key promised is available more cheaply. Naming every matched occurrence in the compile report gives a reviewer the same list without adding anything for an author to maintain, and it cannot drift from reality the way a hand-written site key can.
 
-Conviction is tentative because the corpus that supports the uniformity claim is one marketplace. A package needing two dispositions for one construct would falsify it directly.
+Conviction is tentative because the corpus that supports the uniformity claim is one marketplace. A package needing two states for one construct would falsify it directly.
 
 ## Alternatives
 

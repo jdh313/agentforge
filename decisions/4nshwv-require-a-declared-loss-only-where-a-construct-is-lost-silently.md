@@ -1,6 +1,6 @@
 ---
 id: "4nshwv"
-title: Require a disposition only where a construct is lost silently
+title: Require a declared loss only where a construct is lost silently
 status: current
 decision_date: 2026-07-30
 author: Jacob Hoehler
@@ -21,15 +21,15 @@ informed_by:
   - 2vv99y
 ---
 
-# 4nshwv — Require a disposition only where a construct is lost silently
+# 4nshwv — Require a declared loss only where a construct is lost silently
 
 ## Decision
 
-Require a declared disposition only for a construct whose meaning is lost with nothing reported. A construct that is translated losslessly, or that already emits a diagnostic, reports a warning instead and needs no declaration.
+Require a declared loss only for a construct whose meaning is lost with nothing reported. A construct that is translated losslessly, or that already emits a diagnostic, reports a warning instead and needs no declaration.
 
 ## Scope
 
-- Binds: which constructs enter the disposition gate.
+- Binds: which constructs enter the declared-loss gate.
 - Does not bind: what a declaration emits once made, or how a construct is translated.
 
 ## Commitments

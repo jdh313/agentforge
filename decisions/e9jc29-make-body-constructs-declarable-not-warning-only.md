@@ -24,7 +24,7 @@ informed_by:
 
 ## Decision
 
-Constructs found in an artifact body carry declarable construct names alongside frontmatter constructs, so any confirmed silent loss can be recorded as a disposition regardless of where it was found.
+Constructs found in an artifact body carry declarable construct names alongside frontmatter constructs, so any confirmed silent loss can be recorded as a declared loss regardless of where it was found.
 
 ## Scope
 
@@ -39,13 +39,13 @@ Constructs found in an artifact body carry declarable construct names alongside 
 ## Revisit if
 
 - The construct vocabulary grows past the point where an author can choose the right name.
-- A body construct needs a disposition value the current set cannot express.
+- A body construct needs a state the current set cannot express.
 
 ## Context
 
 - Body constructs and frontmatter constructs were previously detected by two separate mechanisms with different severities.
 - The body mechanism emitted a warning and offered no way to record a decision about what it found.
-- The governing decision requires a disposition precisely where a construct's meaning is lost with nothing reported.
+- The governing decision requires a declared loss precisely where a construct's meaning is lost with nothing reported.
 - A body construct with no target equivalent is exactly such a loss.
 
 ## Why

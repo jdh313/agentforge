@@ -23,7 +23,7 @@ informed_by:
 
 ## Decision
 
-A construct-shaped string the capability table does not classify is reported as a warning and never blocks compilation. Only a construct confirmed to be lost may require a declared disposition.
+A construct-shaped string the capability table does not classify is reported as a warning and never blocks compilation. Only a construct confirmed to be lost may require a declared loss.
 
 ## Scope
 
@@ -48,7 +48,7 @@ A construct-shaped string the capability table does not classify is reported as 
 
 ## Why
 
-Gating requires certainty that a declaration has something true to record. An unclassified shape carries no such certainty, so demanding a disposition for it would ask an author to assert a loss that may not exist, and would make the declaration surface a place where false statements accumulate.
+Gating requires certainty that a declaration has something true to record. An unclassified shape carries no such certainty, so demanding a declaration for it would ask an author to assert a loss that may not exist, and would make the declaration surface a place where false statements accumulate.
 
 Reporting rather than gating keeps the discovery loop open without paying that cost. The report is an invitation to classify, and classification is what promotes a shape into the gate. Staying silent instead would return to the failure this detection exists to remove, so silence is not the alternative to gating here.
 

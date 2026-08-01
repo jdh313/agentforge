@@ -32,7 +32,7 @@ Require plugin onboarding to produce a complete path-disposition inventory, prop
 ## Commitments
 
 - Reconcile machine-reported file counts against disposition rows with zero duplicates and zero unclassified paths.
-- Represent every target-specific or unsupported construct with an explicit disposition rather than treating warnings as acceptance.
+- Represent every target-specific or unsupported construct with an explicit declared loss rather than treating warnings as acceptance.
 - Keep trial compilation outside source repositories.
 
 ## Revisit if

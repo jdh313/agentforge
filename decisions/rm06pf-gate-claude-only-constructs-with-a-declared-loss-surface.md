@@ -1,6 +1,6 @@
 ---
 id: "rm06pf"
-title: Gate Claude-only constructs with a declared disposition surface
+title: Gate Claude-only constructs with a declared-loss surface
 status: current
 decision_date: 2026-07-30
 author: Jacob Hoehler
@@ -22,11 +22,11 @@ informed_by:
   - 2vv99y
 ---
 
-# rm06pf — Gate Claude-only constructs with a declared disposition surface
+# rm06pf — Gate Claude-only constructs with a declared-loss surface
 
 ## Decision
 
-Detect Claude-only constructs at artifact-level compilation and require each one to carry a declared disposition under `targets.<name>.dispositions` in canonical YAML. Fail compilation when a detected construct has no declaration.
+Detect Claude-only constructs at artifact-level compilation and require each one to carry a declared loss under `targets.<name>.losses` in canonical YAML. Fail compilation when a detected construct has no declaration.
 
 ## Scope
 
@@ -41,7 +41,7 @@ Detect Claude-only constructs at artifact-level compilation and require each one
 
 ## Revisit if
 
-- The disposition surface proves too coarse for body-level constructs.
+- The declared-loss surface proves too coarse for body-level constructs.
 - A target needs per-artifact rather than per-package declarations.
 
 ## Context
@@ -52,7 +52,7 @@ Detect Claude-only constructs at artifact-level compilation and require each one
 
 ## Why
 
-A declaration inverts the failure mode. An enumerated regex list is silent about what it does not know, so a new Claude-only construct ships unexamined and a target user loses behavior the source still claims. Requiring the package to state the disposition makes the unknown case loud: an undeclared construct stops the build rather than compiling into output that misrepresents runtime support.
+A declaration inverts the failure mode. An enumerated regex list is silent about what it does not know, so a new Claude-only construct ships unexamined and a target user loses behavior the source still claims. Requiring the package to declare the loss makes the unknown case loud: an undeclared construct stops the build rather than compiling into output that misrepresents runtime support.
 
 ## Alternatives
 
