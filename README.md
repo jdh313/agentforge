@@ -58,7 +58,7 @@ builds update it in place without another install step.
 Invoke `$agentforge-onboard-plugin` from this repository to migrate an existing
 Claude, Codex, or dual-runtime plugin into canonical `PACKAGE.yaml` and
 `MARKETPLACE.yaml` definitions. The project-local skill inventories every source
-path and previews proposed definitions plus target compatibility dispositions
+path and previews proposed definitions plus target compatibility losses
 before modifying plugin or marketplace sources.
 
 ## Package and marketplace definitions
@@ -122,9 +122,9 @@ targets:
   codex:
     overrides:
       description: Curate notes through shared workflows and isolated roles.
-    dispositions:
+    losses:
       - construct: agent-tools-filter
-        disposition: stripped
+        state: stripped
         note: Codex role procedures carry no tool allowlist.
     native:
       interface:
@@ -145,15 +145,15 @@ targets:
   types such as `hook` do not expand it. How a type is projected is the target's
   call: Claude copies `hook` through untouched, while Codex translates it into
   its own handler schema.
-- `targets.<name>.dispositions` declares what happens to a Claude-only construct
+- `targets.<name>.losses` declares what happens to a Claude-only construct
   that the target cannot express and that would otherwise disappear with nothing
   reported. **Compilation fails when a detected construct has no declaration**,
   naming the construct and the file. Each declaration that matches also emits a
-  `declared-construct-disposition` note on every compile and check, so the loss
+  `declared-loss` note on every compile and check, so the loss
   stays visible rather than being silenced by having been declared once.
   Constructs detected today: `agent-tools-filter` (an agent's `tools:`),
   `command-tools-filter` (a command's `allowed-tools:`), and
-  `mcp-tool-reference` (an `mcp__*` tool name). `disposition` is `stripped` or
+  `mcp-tool-reference` (an `mcp__*` tool name). `state` is `stripped` or
   `retained-unenforced`; the optional `note` is what a user of that target does
   not get. A construct that is translated rather than lost — a hook handler's
   `args` folded into Codex's single `command` string — warns instead of
