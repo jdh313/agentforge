@@ -52,12 +52,6 @@ export interface ArtifactProjection {
   warnings: readonly Warning[];
 }
 
-// The enumerated pattern table that used to live here is gone. It named eight
-// literals and was silent about everything else, so whatever Claude shipped next
-// passed unexamined. Both this path and marketplace compilation now resolve the
-// same construct shapes against the same capability table; only the reporting
-// differs, because a standalone render has no PACKAGE.yaml to declare a loss in
-// and so can only warn.
 // Everything agentforge emits today lands on a target's skill surface: Codex
 // commands project to skills rather than to custom prompts, and `output-style`
 // renders only to Claude, where every construct is native. If a target ever
