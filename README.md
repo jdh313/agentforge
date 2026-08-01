@@ -155,7 +155,11 @@ targets:
   `command-tools-filter` (a command's `allowed-tools:`), and
   `mcp-tool-reference` (an `mcp__*` tool name). `state` is `stripped` or
   `retained-unenforced`; the optional `note` is what a user of that target does
-  not get. A construct that is translated rather than lost — a hook handler's
+  not get. **The declared `state` is checked against what the compiler actually
+  emitted**, rather than taken on the author's word: a construct declared
+  `stripped` that in fact survives into the output — or the reverse — fails
+  compilation, naming both states and every occurrence site. A construct that is
+  translated rather than lost — a hook handler's
   `args` folded into Codex's single `command` string — warns instead of
   requiring a declaration.
 - `payloads.include` is an ordered list of package-relative source/destination
