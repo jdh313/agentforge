@@ -11,7 +11,7 @@ import { loadMarketplaceDefinition } from '../src/definitions.ts';
 //   `detectClaudeOnlyConstructs` (src/compatibility.ts) only ever sees the
 //   entries in a package's declared `artifacts:` map; a skill's `references/`
 //   resource file is swept in as a payload/resource, never as a scanned
-//   artifact, so it is invisible to the disposition gate.
+//   artifact, so it is invisible to the declared-loss gate.
 // - bullet 2: a construct-shaped string with no capability-table entry must
 //   be reported rather than silently passed. `$ARGUMENTS` is already a named,
 //   literal Claude-only body pattern (`CLAUDE_ONLY_BODY_PATTERNS` in
@@ -24,7 +24,7 @@ import { loadMarketplaceDefinition } from '../src/definitions.ts';
 //   nothing reported at all.
 // - bullet 4 (second clause): the same kind of identifier, confined to a
 //   document declared reference-or-diagnostic, must compile clean with no
-//   disposition required. No such declaration mechanism exists yet; this
+//   declared loss required. No such declaration mechanism exists yet; this
 //   fixture assumes the narrowest available surface — an `artifacts:` entry
 //   of `type: reference` — since `artifacts[].type` is already an open,
 //   package-defined slug (see README: "artifacts declares open package-level

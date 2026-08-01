@@ -18,9 +18,9 @@ targets:
     native:
       description: Full Claude-native Librarian package metadata
   codex:
-    dispositions:
+    losses:
       - construct: agent-tools-filter
-        disposition: stripped
+        state: stripped
         note: Codex role procedures carry no tool allowlist; vault-reader's read-only restriction is not enforced.
     overrides:
       description: Curates and retrieves notes through shared workflows and isolated roles.

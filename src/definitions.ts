@@ -55,14 +55,14 @@ const PayloadDeclaration = z.strictObject({
 // Constructs that carry meaning on Claude, have no equivalent on another
 // target, and would otherwise be dropped with nothing reported. Constructs that
 // are faithfully translated (a folded hook `args`) or already reported are not
-// listed here — a disposition gates silent loss, not every divergence.
+// listed here — a declared loss gates silent loss, not every divergence.
 export const CLAUDE_ONLY_CONSTRUCTS = [
   'agent-tools-filter',
   'command-tools-filter',
   'mcp-tool-reference',
   // Body constructs. Previously these were warning-only and undeclarable, so a
-  // body feature that was a hard silent loss could not carry a disposition at
-  // all — the one condition ndr:4nshwv says must.
+  // body feature that was a hard silent loss could not be declared at all — the
+  // one condition ndr:4nshwv says must.
   'body-template-variable',
   'body-shell-injection',
   'body-file-reference',
@@ -70,9 +70,9 @@ export const CLAUDE_ONLY_CONSTRUCTS = [
 
 export type ClaudeOnlyConstruct = (typeof CLAUDE_ONLY_CONSTRUCTS)[number];
 
-const ConstructDisposition = z.strictObject({
+const DeclaredLoss = z.strictObject({
   construct: z.enum(CLAUDE_ONLY_CONSTRUCTS),
-  disposition: z.enum(['stripped', 'retained-unenforced']),
+  state: z.enum(['stripped', 'retained-unenforced']),
   note: z.string().min(1).optional(),
 });
 
@@ -81,19 +81,15 @@ const PackageTarget = z
     overrides: PackageDefaults.partial().optional(),
     native: JsonObject.optional(),
     payloads: PayloadDeclaration.optional(),
-    dispositions: z.array(ConstructDisposition).min(1).optional(),
+    losses: z.array(DeclaredLoss).min(1).optional(),
   })
   .superRefine((target, context) => {
-    reportDuplicates(
-      target.dispositions ?? [],
-      ({ construct }) => construct,
-      context,
-      'construct disposition',
-      ['dispositions'],
-    );
+    reportDuplicates(target.losses ?? [], ({ construct }) => construct, context, 'declared loss', [
+      'losses',
+    ]);
   });
 
-export type ConstructDispositionDefinition = z.infer<typeof ConstructDisposition>;
+export type DeclaredLossDefinition = z.infer<typeof DeclaredLoss>;
 
 const ArtifactPattern = z.strictObject({
   type: Slug,

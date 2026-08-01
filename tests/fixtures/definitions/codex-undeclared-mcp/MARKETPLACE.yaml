@@ -1,8 +1,8 @@
 schema: agentforge.marketplace/v1
-id: construct-disposition-occurrences
+id: codex-undeclared-mcp
 defaults:
-  name: construct-disposition-occurrences
-  description: Fixture marketplace for a declared disposition matched by more than one occurrence.
+  name: codex-undeclared-mcp
+  description: Fixture marketplace for Codex compatibility coverage of an mcp__ reference carrying no declared loss.
 packages:
   - packages/*/PACKAGE.yaml
 publications:
@@ -11,4 +11,4 @@ publications:
     destination: .agents/plugins/marketplace.json
     enrollment:
       mode: include
-      packages: [twice]
+      packages: [mcp-skill]

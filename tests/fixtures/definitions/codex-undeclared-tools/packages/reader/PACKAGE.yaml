@@ -3,13 +3,13 @@ id: reader
 defaults:
   name: reader
   version: 1.0.0
-  description: Fixture package whose agent tools filter carries no declared disposition.
+  description: Fixture package whose agent tools filter carries no declared loss.
 artifacts:
   - type: agent
     pattern: agents/*.md
 targets:
   codex:
-    # Deliberately declares no `dispositions:` — the agent's tools filter is a
+    # Deliberately declares no `losses:` — the agent's tools filter is a
     # Claude-only construct that must fail compilation rather than vanish.
     native:
       interface:

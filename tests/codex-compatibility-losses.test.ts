@@ -6,7 +6,7 @@ import { loadMarketplaceDefinition } from '../src/definitions.ts';
 
 // Coverage for JUN-341, bullet 2 (first clause):
 // a Claude-only construct invisible to the 8-regex CLAUDE_ONLY_BODY_PATTERNS
-// check must fail Codex compilation against a named disposition, instead of
+// check must fail Codex compilation against a named loss, instead of
 // compiling silently. Two representative constructs from the contract's
 // examples are covered: an agent `tools:` filter, and an `mcp__*` reference.
 //
@@ -18,7 +18,7 @@ import { loadMarketplaceDefinition } from '../src/definitions.ts';
 // fail against the current (silent) behavior.
 
 // A dedicated fixture rather than the shared cc-marketplace corpus: that corpus
-// declares its dispositions and must therefore compile. See JUN-341 ^r7.
+// declares its losses and must therefore compile. See JUN-341 ^r7.
 const UNDECLARED_TOOLS_FIXTURE = join(
   import.meta.dir,
   'fixtures',
@@ -31,14 +31,14 @@ const MCP_SKILL_FIXTURE = join(
   import.meta.dir,
   'fixtures',
   'definitions',
-  'codex-disposition',
+  'codex-undeclared-mcp',
   'MARKETPLACE.yaml',
 );
 
-describe('Codex compatibility dispositions', () => {
-  test('fails Codex compilation for an agent tools: filter with no declared disposition', async () => {
+describe('Codex compatibility losses', () => {
+  test('fails Codex compilation for an agent tools: filter with no declared loss', async () => {
     // reader/agents/reader.md declares `tools: [Read, Grep]` and its package
-    // declares no disposition for that construct.
+    // declares no loss for that construct.
     const loaded = await loadMarketplaceDefinition(UNDECLARED_TOOLS_FIXTURE);
 
     expect(() =>
@@ -49,7 +49,7 @@ describe('Codex compatibility dispositions', () => {
     ).toThrow(CompilationError);
   });
 
-  test('fails Codex compilation for a skill referencing an mcp__ tool with no declared disposition', async () => {
+  test('fails Codex compilation for a skill referencing an mcp__ tool with no declared loss', async () => {
     const loaded = await loadMarketplaceDefinition(MCP_SKILL_FIXTURE);
 
     expect(() =>

@@ -27,7 +27,7 @@ const INFERRED_TRANSLATORS = new Map<string, ArtifactTranslator>([
 const PAYLOAD_POLICY = {
   passthroughArtifactTypes: new Set<string>(),
   translators: INFERRED_TRANSLATORS,
-  requireConstructDispositions: true,
+  requireDeclaredLosses: true,
 };
 
 // Codex lifecycle events, per the Codex hooks reference. Claude events outside

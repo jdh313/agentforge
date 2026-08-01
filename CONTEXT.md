@@ -54,8 +54,5 @@ _See_: ndr:grjvxz
 
 ## Flagged ambiguities
 
-**`disposition` in code and ledger**
-Code (`src/definitions.ts`, `src/targets/package-payload.ts`) and eight ledger atoms use `disposition` for two different things: the declared record, and the field naming what became of the construct. Canonical resolution is **declared loss** for the record and **state** for the field. The code and the `PACKAGE.yaml` key still read `dispositions`/`disposition`; the rename is unscheduled.
-
 **`state` against declarative-config convention**
 In most declarative config a `state` field names *desired* state. Here it names *resulting* state. The canonical meaning is the resulting one.

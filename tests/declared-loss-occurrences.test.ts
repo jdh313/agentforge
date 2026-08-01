@@ -6,16 +6,16 @@ import { loadMarketplaceDefinition } from '../src/definitions.ts';
 
 // Coverage for JUN-353, bullet 3:
 //
-// A declared disposition's compile note must list each matched occurrence
+// A declared loss's compile note must list each matched occurrence
 // with its file (and location), not just the construct name. Today,
-// `resolveConstructDispositions` (src/targets/package-payload.ts) collapses
+// `resolveDeclaredLosses` (src/targets/package-payload.ts) collapses
 // every occurrence of a declared construct into a single
-// `declared-construct-disposition` note keyed only by construct name:
+// `declared-loss` note keyed only by construct name:
 // `Claude-only construct "mcp-tool-reference" is retained-unenforced for
 // target "codex": <note>.` Two skills in this fixture each name a different
-// mcp__ tool, both matching the single declared `mcp-tool-reference`
-// disposition; today's note mentions neither source file, so it cannot
-// distinguish the two occurrences.
+// mcp__ tool, both matching the single declared `mcp-tool-reference` loss;
+// today's note mentions neither source file, so it cannot distinguish the
+// two occurrences.
 //
 // This test only asserts that both occurrences' files are named somewhere in
 // the emitted diagnostics — the finer-grained "location" the bullet also
@@ -28,22 +28,22 @@ const FIXTURE = join(
   import.meta.dir,
   'fixtures',
   'definitions',
-  'construct-disposition-occurrences',
+  'declared-loss-occurrences',
   'MARKETPLACE.yaml',
 );
 
-describe('construct disposition occurrence reporting', () => {
-  test('a declared disposition note lists each matched occurrence by file, not just the construct name', async () => {
+describe('declared loss occurrence reporting', () => {
+  test('a declared loss note lists each matched occurrence by file, not just the construct name', async () => {
     const loaded = await loadMarketplaceDefinition(FIXTURE);
 
     const plan = compileMarketplace(loaded, [codexMarketplaceAdapter]);
 
-    const dispositionMessages = plan.diagnostics
-      .filter((diagnostic) => diagnostic.code === 'declared-construct-disposition')
+    const lossMessages = plan.diagnostics
+      .filter((diagnostic) => diagnostic.code === 'declared-loss')
       .map((diagnostic) => diagnostic.message)
       .join('\n');
 
-    expect(dispositionMessages).toContain('skills/linear/SKILL.md');
-    expect(dispositionMessages).toContain('skills/obsidian/SKILL.md');
+    expect(lossMessages).toContain('skills/linear/SKILL.md');
+    expect(lossMessages).toContain('skills/obsidian/SKILL.md');
   });
 });

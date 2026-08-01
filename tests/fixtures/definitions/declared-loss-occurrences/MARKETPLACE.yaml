@@ -1,8 +1,8 @@
 schema: agentforge.marketplace/v1
-id: codex-disposition
+id: declared-loss-occurrences
 defaults:
-  name: codex-disposition
-  description: Fixture marketplace for Codex compatibility disposition coverage.
+  name: declared-loss-occurrences
+  description: Fixture marketplace for a declared loss matched by more than one occurrence.
 packages:
   - packages/*/PACKAGE.yaml
 publications:
@@ -11,4 +11,4 @@ publications:
     destination: .agents/plugins/marketplace.json
     enrollment:
       mode: include
-      packages: [mcp-skill]
+      packages: [twice]

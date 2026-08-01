@@ -28,7 +28,7 @@ export interface UnknownConstruct {
 }
 
 export interface DetectionResult {
-  // Confirmed silent losses. Each must carry a declared disposition (ndr:rm06pf).
+  // Confirmed silent losses. Each must carry a declared loss (ndr:rm06pf).
   detected: DetectedConstruct[];
   // Construct-shaped but unclassified. Reported, never gated — gating a
   // construct we cannot confirm is lost would violate ndr:4nshwv.

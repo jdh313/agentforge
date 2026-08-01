@@ -28,8 +28,8 @@ export interface PackagePayloadPolicy {
   passthroughArtifactTypes: ReadonlySet<string>;
   translators: ReadonlyMap<string, ArtifactTranslator>;
   // When set, a Claude-only construct that would be silently lost must carry a
-  // declared disposition for this target or compilation fails.
-  requireConstructDispositions?: boolean;
+  // declared loss for this target or compilation fails.
+  requireDeclaredLosses?: boolean;
 }
 
 export function compilePackagePayload(
@@ -42,8 +42,8 @@ export function compilePackagePayload(
   const packageDirectory = relativePackageDirectory(input.marketplace.path, packageInput.path);
   const packageRoot = dirname(packageInput.path);
 
-  if (policy.requireConstructDispositions) {
-    diagnostics.push(...resolveConstructDispositions(input, packageInput));
+  if (policy.requireDeclaredLosses) {
+    diagnostics.push(...resolveDeclaredLosses(input, packageInput));
   }
 
   for (const [artifactType, artifacts] of [...packageInput.artifacts.entries()].toSorted(
@@ -143,15 +143,13 @@ export function compilePackagePayload(
 
 // The body-pattern check in `render.ts` reads skill bodies only, so an agent's
 // `tools:` filter or an `mcp__*` reference passes it unexamined and disappears
-// from output with nothing said. Requiring a declared disposition turns that
-// silence into a compile error naming the construct.
-function resolveConstructDispositions(
+// from output with nothing said. Requiring a declared loss turns that silence
+// into a compile error naming the construct.
+function resolveDeclaredLosses(
   input: PublicationCompilation,
   packageInput: CompilationPackage,
 ): ProposedCompilationDiagnostic[] {
-  const declared = new Map(
-    packageInput.dispositions.map((disposition) => [disposition.construct, disposition]),
-  );
+  const declared = new Map(packageInput.losses.map((loss) => [loss.construct, loss]));
   const { detected, unknown } = detectClaudeOnlyConstructs({
     artifacts: packageInput.artifacts,
     resources: packageInput.resources,
@@ -172,8 +170,8 @@ function resolveConstructDispositions(
       )
       .join('\n');
     throw new CompilationError(
-      `package "${packageInput.id}" uses Claude-only constructs with no declared disposition for target "${input.publication.target}":\n${detail}\n` +
-        `Declare each under targets.${input.publication.target}.dispositions in ${packageInput.path}, or remove the construct.`,
+      `package "${packageInput.id}" uses Claude-only constructs with no declared loss for target "${input.publication.target}":\n${detail}\n` +
+        `Declare each under targets.${input.publication.target}.losses in ${packageInput.path}, or remove the construct.`,
     );
   }
 
@@ -192,7 +190,7 @@ function resolveConstructDispositions(
     });
   }
 
-  // Declaring a disposition must not buy silence (ndr:62pj9p). Report each
+  // Declaring a loss must not buy silence (ndr:62pj9p). Report each
   // declaration that actually matched, and name every occurrence it covers — a
   // note listing only the construct type gets less specific exactly as
   // detection coverage grows.
@@ -203,15 +201,15 @@ function resolveConstructDispositions(
     occurrences.set(construct, sites);
   }
 
-  for (const { construct, disposition, note } of declared.values()) {
+  for (const { construct, state, note } of declared.values()) {
     const sites = occurrences.get(construct);
     if (!sites) continue;
     diagnostics.push({
-      code: 'declared-construct-disposition',
+      code: 'declared-loss',
       severity: 'note',
       packageId: packageInput.id,
       message:
-        `Claude-only construct "${construct}" is ${disposition} for target "${input.publication.target}"${note ? `: ${note}` : '.'}` +
+        `Claude-only construct "${construct}" is ${state} for target "${input.publication.target}"${note ? `: ${note}` : '.'}` +
         ` Occurrences: ${sites.join(', ')}.`,
     });
   }

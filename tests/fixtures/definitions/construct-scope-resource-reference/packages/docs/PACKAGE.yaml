@@ -3,13 +3,13 @@ id: docs
 defaults:
   name: docs
   version: 1.0.0
-  description: Fixture package whose skill references/ resource file names an mcp__ tool with no declared disposition.
+  description: Fixture package whose skill references/ resource file names an mcp__ tool with no declared loss.
 artifacts:
   - type: skill
     pattern: skills/*/SKILL.md
 targets:
   codex:
-    # Deliberately declares no `dispositions:` — the mcp__ reference lives in
+    # Deliberately declares no `losses:` — the mcp__ reference lives in
     # skills/lookup/references/api.md, a resource file, not the skill body.
     native:
       interface:

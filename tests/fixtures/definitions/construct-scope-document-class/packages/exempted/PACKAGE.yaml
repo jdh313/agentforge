@@ -16,7 +16,7 @@ documents:
     pattern: skills/*/references/*.md
 targets:
   codex:
-    # Deliberately declares no `dispositions:` — the only mcp__ occurrence
+    # Deliberately declares no `losses:` — the only mcp__ occurrence
     # lives in a document declared reference-or-diagnostic, which must not
     # require one.
     native:

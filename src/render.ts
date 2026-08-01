@@ -56,8 +56,8 @@ export interface ArtifactProjection {
 // literals and was silent about everything else, so whatever Claude shipped next
 // passed unexamined. Both this path and marketplace compilation now resolve the
 // same construct shapes against the same capability table; only the reporting
-// differs, because a standalone render has no PACKAGE.yaml to declare a
-// disposition in and so can only warn.
+// differs, because a standalone render has no PACKAGE.yaml to declare a loss in
+// and so can only warn.
 // Everything agentforge emits today lands on a target's skill surface: Codex
 // commands project to skills rather than to custom prompts, and `output-style`
 // renders only to Claude, where every construct is native. If a target ever
@@ -69,8 +69,8 @@ const PROJECTED_SURFACE = 'skill';
 // literals and was silent about everything else, so whatever Claude shipped next
 // passed unexamined. Both this path and marketplace compilation now resolve the
 // same construct shapes against the same capability table; only the reporting
-// differs, because a standalone render has no PACKAGE.yaml to declare a
-// disposition in and so can only warn.
+// differs, because a standalone render has no PACKAGE.yaml to declare a loss in
+// and so can only warn.
 //
 // `unsupported` and `unknown` are kept apart. A confirmed loss and an
 // unrecognized shape warrant different words — collapsing them would report an

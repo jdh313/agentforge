@@ -9,9 +9,9 @@ artifacts:
     pattern: skills/*/SKILL.md
 targets:
   codex:
-    dispositions:
+    losses:
       - construct: mcp-tool-reference
-        disposition: retained-unenforced
+        state: retained-unenforced
         note: Skill prose keeps naming a Claude MCP tool; Codex has no matching tool.
     native:
       interface:
