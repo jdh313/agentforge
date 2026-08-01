@@ -1,0 +1,14 @@
+schema: agentforge.marketplace/v1
+id: declared-loss-state-mismatch
+defaults:
+  name: declared-loss-state-mismatch
+  description: Fixture marketplace whose declared loss state disagrees with the emitted output.
+packages:
+  - packages/*/PACKAGE.yaml
+publications:
+  - id: codex
+    target: codex
+    destination: .agents/plugins/marketplace.json
+    enrollment:
+      mode: include
+      packages: [lookup]

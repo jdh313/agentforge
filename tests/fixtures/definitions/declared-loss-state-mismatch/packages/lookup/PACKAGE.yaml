@@ -1,0 +1,22 @@
+schema: agentforge.package/v1
+id: lookup
+defaults:
+  name: lookup
+  version: 1.0.0
+  description: Fixture package that declares its mcp__ reference as stripped, but the construct actually survives into the emitted Codex skill body.
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+targets:
+  codex:
+    losses:
+      # Wrong on purpose: the mcp-tool-reference construct is body prose, so
+      # it is copied into the emitted skill body verbatim (retained-unenforced),
+      # not removed (stripped) as declared here.
+      - construct: mcp-tool-reference
+        state: stripped
+        note: Skill prose keeps naming a Claude MCP tool; Codex has no matching tool.
+    native:
+      interface:
+        displayName: Lookup
+        category: Developer Tools
