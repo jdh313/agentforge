@@ -100,12 +100,27 @@ const ArtifactPattern = z.strictObject({
   pattern: z.string().min(1),
 });
 
+// Document class is orthogonal to artifact type: it says whether a file's
+// Claude-only constructs are being *described* or *invoked*, not whether the
+// file projects to a target. Fusing the two — declaring an exempt file as an
+// artifact of type `reference` — would emit a spurious
+// `unsupported-artifact-projection` (ndr:2vv99y) for a file that was never
+// meant to be translated.
+//
+// Both classes are exempt from body scanning; the name records why, so a reader
+// can tell a gotcha reference from a connectivity probe (ndr:grjvxz).
+const DocumentClass = z.strictObject({
+  class: z.enum(['reference', 'diagnostic']),
+  pattern: z.string().min(1),
+});
+
 export const CanonicalPackage = z
   .strictObject({
     schema: z.literal('agentforge.package/v1'),
     id: Slug,
     defaults: PackageDefaults,
     artifacts: z.array(ArtifactPattern).min(1),
+    documents: z.array(DocumentClass).min(1).optional(),
     payloads: PayloadDeclaration.optional(),
     targets: z
       .partialRecord(TargetName, PackageTarget)
@@ -178,6 +193,10 @@ export interface LoadedPackage {
   artifacts: ReadonlyMap<string, readonly LoadedArtifact[]>;
   files: readonly string[];
   resources: readonly LoadedArtifact[];
+  // Absolute paths of files declared reference-or-diagnostic. Their Claude-only
+  // constructs are documentation about Claude, not instructions to a model, so
+  // they are exempt from body scanning.
+  exemptDocuments: ReadonlySet<string>;
   payloads: PackagePayloadPlans;
 }
 
@@ -280,6 +299,13 @@ export async function loadPackageDefinition(path: string): Promise<LoadedPackage
     throw cause;
   }
 
+  const exemptDocuments = new Set<string>();
+  for (const document of definition.documents ?? []) {
+    for (const match of await expandPattern(root, document.pattern)) {
+      exemptDocuments.add(match);
+    }
+  }
+
   // Artifacts are already loaded above; skip them so a file declared as an
   // artifact is not scanned twice under two identities.
   const artifactPaths = new Set([...artifacts.values()].flat().map(({ path: each }) => each));
@@ -295,6 +321,7 @@ export async function loadPackageDefinition(path: string): Promise<LoadedPackage
     artifacts,
     files,
     resources,
+    exemptDocuments,
     payloads,
   };
 }

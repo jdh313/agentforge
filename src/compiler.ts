@@ -91,6 +91,7 @@ export interface CompilationPackage {
   artifacts: ReadonlyMap<string, readonly LoadedArtifact[]>;
   files: readonly string[];
   resources: readonly LoadedArtifact[];
+  exemptDocuments: ReadonlySet<string>;
   payloads: readonly PackagePayload[];
   dispositions: readonly ConstructDispositionDefinition[];
 }
@@ -244,6 +245,7 @@ function resolvePackages(
       artifacts: loadedPackage.artifacts,
       files: loadedPackage.files,
       resources: loadedPackage.resources,
+      exemptDocuments: loadedPackage.exemptDocuments,
       payloads: loadedPackage.payloads[publication.target] ?? [],
       dispositions: target.dispositions ?? [],
     };

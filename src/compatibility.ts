@@ -51,12 +51,22 @@ const FAMILY_CONSTRUCTS: Readonly<Record<ConstructFamily, ClaudeOnlyConstruct>> 
 export interface DetectionInput {
   artifacts: ReadonlyMap<string, readonly LoadedArtifact[]>;
   resources?: readonly LoadedArtifact[];
+  // Files declared reference-or-diagnostic. Their constructs are documentation
+  // *about* Claude rather than instructions to a model, so an identifier there
+  // is the content, not a loss (ndr:grjvxz).
+  exemptDocuments?: ReadonlySet<string>;
   target: TargetName;
   surface?: ConstructSurface;
 }
 
 export function detectClaudeOnlyConstructs(input: DetectionInput): DetectionResult {
-  const { artifacts, resources = [], target, surface = 'skill' } = input;
+  const {
+    artifacts,
+    resources = [],
+    exemptDocuments = new Set(),
+    target,
+    surface = 'skill',
+  } = input;
   const detected: DetectedConstruct[] = [];
   const unknown: UnknownConstruct[] = [];
 
@@ -70,11 +80,14 @@ export function detectClaudeOnlyConstructs(input: DetectionInput): DetectionResu
       if (artifactType === 'command') {
         pushToolFilter(detected, artifact, artifactType, 'allowed-tools', 'command-tools-filter');
       }
-      scanBody(artifact, artifactType, target, surface, detected, unknown);
+      if (!exemptDocuments.has(artifact.path)) {
+        scanBody(artifact, artifactType, target, surface, detected, unknown);
+      }
     }
   }
 
   for (const resource of resources) {
+    if (exemptDocuments.has(resource.path)) continue;
     scanBody(resource, 'resource', target, surface, detected, unknown);
   }
 

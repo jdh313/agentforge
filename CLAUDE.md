@@ -51,6 +51,13 @@ src/
                       (filename + schema + layout per artifact),
                       CLAUDE_ONLY_KEYS, COMMON_KEYS, ALL_CLAUDE_KEYS,
                       OUTPUT_STYLE_KEYS
+  capabilities.ts   — construct-shape families + the checked-in capability
+                      table keyed by (target, surface); one doc citation per
+                      row. `supportFor` returns supported/unsupported/unknown,
+                      so an unlisted construct is reported, never passed.
+  compatibility.ts  — the single construct detector: frontmatter tool filters
+                      plus body shapes, over every artifact type and text
+                      resource file. Returns occurrences carrying `path:line`.
   deep-merge.ts     — small typed deep-merge (no lodash)
   agent-command.ts  — canonical agent/command behavior parsers
   render.ts         — pipeline: parse → validate → merge → filter →
@@ -174,6 +181,19 @@ bun build --compile src/cli.ts --outfile ~/.local/bin/agentforge
 - `src/render.ts` disables `lint/suspicious/noTemplateCurlyInString` for the
   `CLAUDE_ONLY_BODY_PATTERNS` table — the labels are intentional documentation
   literals (`'${CLAUDE_SKILL_DIR}'` etc.), not template strings.
+- `src/capabilities.ts` disables the same rule for the same reason: its
+  capability-table tokens (`'${CLAUDE_*}'`) are literal documentation of
+  Claude-only patterns.
+
+## Document class
+
+`PACKAGE.yaml` may declare `documents: [{class, pattern}]`, where `class` is
+`reference` or `diagnostic`. Both mark a file whose Claude-only constructs are
+documentation *about* Claude rather than instructions to a model — an API gotcha
+reference, or a skill that probes a specific endpoint — so the file is exempt
+from body scanning. This is deliberately **not** an `artifacts:` entry: document
+class is orthogonal to artifact type, and overloading `artifacts` would emit a
+spurious `unsupported-artifact-projection` for a file never meant to translate.
 
 ## Out of scope today
 

@@ -155,6 +155,7 @@ function resolveConstructDispositions(
   const { detected, unknown } = detectClaudeOnlyConstructs({
     artifacts: packageInput.artifacts,
     resources: packageInput.resources,
+    exemptDocuments: packageInput.exemptDocuments,
     target: input.publication.target,
   });
   const site = (sourcePath: string, line?: number) => {
