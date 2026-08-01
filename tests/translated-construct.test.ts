@@ -63,6 +63,7 @@ describe('translated constructs', () => {
 
     expect(hookNote).toBeDefined();
     expect(hookNote?.severity).toBe('note');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the literal Codex variable name is the assertion
     expect(hookNote?.message).toContain('${PLUGIN_ROOT}');
   });
 
@@ -78,6 +79,7 @@ describe('translated constructs', () => {
     // The observable behind "no exemption is expressed as an inline conditional
     // or a comment": both facts are readable from the table itself.
     expect(supportFor('codex', 'skill', 'disable-model-invocation')).toBe('translated');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the literal Claude variable name is the table key
     expect(supportFor('codex', 'skill', '${CLAUDE_PLUGIN_ROOT}')).toBe('translated');
   });
 

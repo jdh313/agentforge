@@ -29,10 +29,17 @@ export interface ConstructShape {
   line: number;
 }
 
-export type Support = 'supported' | 'unsupported' | 'unknown';
+export type Support = 'supported' | 'translated' | 'unsupported' | 'unknown';
 
 interface CapabilityRow {
   supported: readonly string[];
+  // Constructs this target's translator carries into a native form, keyed to
+  // what each one becomes. A translated construct is not a loss, so it never
+  // requires a declaration (ndr:4nshwv) — but it is still reported, because
+  // "not detected" and "handled" look identical in a compile report otherwise.
+  // This map is the single home for that fact: nothing else may encode it as an
+  // inline exemption.
+  translated?: Readonly<Record<string, string>>;
   unsupported: readonly string[];
   source: string;
 }
@@ -52,6 +59,17 @@ const CLAUDE_TOKENS = [
   'mcp-tool',
 ] as const;
 
+// Codex is the only target with translators today. `disable-model-invocation`
+// is a frontmatter key rather than a body shape, so it is keyed by its literal
+// name; the plugin-root variables are keyed by their literal spelling rather
+// than the normalized `${CLAUDE_*}` token, because only these two are
+// translated — `${CLAUDE_PROJECT_DIR}` and friends remain unsupported.
+const CODEX_TRANSLATIONS: Readonly<Record<string, string>> = {
+  'disable-model-invocation': 'agents/openai.yaml',
+  '${CLAUDE_PLUGIN_ROOT}': '${PLUGIN_ROOT}',
+  '${CLAUDE_PLUGIN_DATA}': '${PLUGIN_DATA}',
+};
+
 // One row per (target, surface). Each carries a doc citation so a future reader
 // can check the claim rather than trusting the table. Checked in deliberately —
 // fetching capability docs at compile time would make builds non-deterministic.
@@ -68,8 +86,10 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
     'codex/skill',
     {
       supported: [],
+      translated: CODEX_TRANSLATIONS,
       unsupported: CLAUDE_TOKENS,
-      source: 'https://learn.chatgpt.com/docs/build-skills.md — documents no body templating.',
+      source:
+        'https://learn.chatgpt.com/docs/build-skills.md — documents no body templating; agents/openai.yaml carries the invocation policy and ${PLUGIN_ROOT}/${PLUGIN_DATA} are the native hook variables.',
     },
   ],
   [
@@ -109,9 +129,33 @@ export function capabilitySource(
 export function supportFor(target: TargetName, surface: ConstructSurface, token: string): Support {
   const row = CAPABILITIES.get(`${target}/${surface}`);
   if (!row) return 'unknown';
+  // Translation is checked first and keyed on the literal token, so a specific
+  // translated variable wins over the normalized family token that would
+  // otherwise mark it unsupported.
+  if (row.translated && Object.hasOwn(row.translated, token)) return 'translated';
   if (row.supported.includes(token)) return 'supported';
   if (row.unsupported.includes(token)) return 'unsupported';
   return 'unknown';
+}
+
+// What a translated construct becomes on this target, for the diagnostic that
+// reports it. Undefined for every construct the target does not translate.
+export function translationFor(
+  target: TargetName,
+  surface: ConstructSurface,
+  token: string,
+): string | undefined {
+  return CAPABILITIES.get(`${target}/${surface}`)?.translated?.[token];
+}
+
+// Every construct this target translates, as (token, native form) pairs. A
+// translator reads its rewrite rules from here rather than keeping a second
+// literal list beside the table.
+export function translationsFor(
+  target: TargetName,
+  surface: ConstructSurface,
+): readonly (readonly [string, string])[] {
+  return Object.entries(CAPABILITIES.get(`${target}/${surface}`)?.translated ?? {});
 }
 
 const PATTERNS: readonly {

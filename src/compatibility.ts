@@ -4,6 +4,8 @@ import {
   type ConstructSurface,
   findConstructShapes,
   supportFor,
+  translationFor,
+  translationsFor,
 } from './capabilities.ts';
 import type { ClaudeOnlyConstruct, LoadedArtifact } from './definitions.ts';
 import type { TargetName } from './types.ts';
@@ -37,12 +39,28 @@ export interface UnknownConstruct {
   line: number;
 }
 
+export interface TranslatedConstruct {
+  token: string;
+  literal: string;
+  // The native form this construct becomes on the target, read off the
+  // capability table rather than restated here.
+  becomes: string;
+  artifactType: string;
+  sourcePath: string;
+  line?: number;
+}
+
 export interface DetectionResult {
   // Confirmed silent losses. Each must carry a declared loss (ndr:rm06pf).
   detected: DetectedConstruct[];
   // Construct-shaped but unclassified. Reported, never gated — gating a
   // construct we cannot confirm is lost would violate ndr:4nshwv.
   unknown: UnknownConstruct[];
+  // Carried into a native form by one of the target's translators. Reported,
+  // never gated: nothing was lost, so ndr:4nshwv rules out a declaration, but
+  // silence would make a handled construct indistinguishable from an unscanned
+  // one.
+  translated: TranslatedConstruct[];
 }
 
 // One pass replaces two. The old split — a fixed body-pattern list in render.ts
@@ -79,6 +97,7 @@ export function detectClaudeOnlyConstructs(input: DetectionInput): DetectionResu
   } = input;
   const detected: DetectedConstruct[] = [];
   const unknown: UnknownConstruct[] = [];
+  const translated: TranslatedConstruct[] = [];
 
   for (const [artifactType, loaded] of artifacts) {
     for (const artifact of loaded) {
@@ -90,15 +109,16 @@ export function detectClaudeOnlyConstructs(input: DetectionInput): DetectionResu
       if (artifactType === 'command') {
         pushToolFilter(detected, artifact, artifactType, 'allowed-tools', 'command-tools-filter');
       }
+      pushTranslatedFrontmatter(translated, artifact, artifactType, target, surface);
       if (!exemptDocuments.has(artifact.path)) {
-        scanBody(artifact, artifactType, target, surface, detected, unknown);
+        scanBody(artifact, artifactType, target, surface, detected, unknown, translated);
       }
     }
   }
 
   for (const resource of resources) {
     if (exemptDocuments.has(resource.path)) continue;
-    scanBody(resource, 'resource', target, surface, detected, unknown);
+    scanBody(resource, 'resource', target, surface, detected, unknown, translated);
   }
 
   detected.sort(
@@ -110,7 +130,13 @@ export function detectClaudeOnlyConstructs(input: DetectionInput): DetectionResu
   unknown.sort(
     (left, right) => compare(left.sourcePath, right.sourcePath) || left.line - right.line,
   );
-  return { detected, unknown };
+  translated.sort(
+    (left, right) =>
+      compare(left.sourcePath, right.sourcePath) ||
+      (left.line ?? 0) - (right.line ?? 0) ||
+      compare(left.token, right.token),
+  );
+  return { detected, unknown, translated };
 }
 
 function scanBody(
@@ -120,11 +146,11 @@ function scanBody(
   surface: ConstructSurface,
   detected: DetectedConstruct[],
   unknown: UnknownConstruct[],
+  translated: TranslatedConstruct[],
 ): void {
-  // Only prose reaches a model's context. A hook config or other structured
-  // artifact carries its own translator — `${CLAUDE_PLUGIN_ROOT}` in hooks.json
-  // is rewritten to `${PLUGIN_ROOT}`, a lossless translation that ndr:4nshwv
-  // says must not require a declaration.
+  // Only prose reaches a model's context, so only prose is scanned for what a
+  // model would have read. A structured artifact is the business of whichever
+  // translator emits it, and reports its own constructs from there.
   if (artifactType !== 'resource' && !isProse(file.path)) return;
 
   // Artifact frontmatter is covered by the tool-filter checks above; scanning it
@@ -138,6 +164,21 @@ function scanBody(
     if (shape.family === 'positional-argument' && isShellResource(file.path)) continue;
 
     const line = shape.line + offset;
+    // A translated construct is keyed by its literal spelling, since only some
+    // members of a normalized family are carried into a native form.
+    const becomes = translationFor(target, surface, shape.literal);
+    if (becomes !== undefined) {
+      translated.push({
+        token: shape.token,
+        literal: shape.literal,
+        becomes,
+        artifactType,
+        sourcePath: file.path,
+        line,
+      });
+      continue;
+    }
+
     const support = supportFor(target, surface, shape.token);
     if (support === 'supported') continue;
 
@@ -202,6 +243,39 @@ function pushToolFilter(
     detail: `${artifactType} frontmatter declares ${key}: ${tools}`,
     retention: { kind: 'frontmatter-key', key },
   });
+}
+
+// Frontmatter keys the target translates into a native artifact. Driven off the
+// capability table rather than a key name written here, so adding a translator
+// is a table edit and nothing else. Keys that are not frontmatter — a template
+// variable, say — simply never match a parsed key.
+function pushTranslatedFrontmatter(
+  translated: TranslatedConstruct[],
+  artifact: LoadedArtifact,
+  artifactType: string,
+  target: TargetName,
+  surface: ConstructSurface,
+): void {
+  const translations = translationsFor(target, surface);
+  if (translations.length === 0) return;
+
+  let data: Record<string, unknown>;
+  try {
+    data = matter(artifact.content).data;
+  } catch {
+    return;
+  }
+
+  for (const [token, becomes] of translations) {
+    if (data[token] === undefined || data[token] === null) continue;
+    translated.push({
+      token,
+      literal: `${token}: ${String(data[token])}`,
+      becomes,
+      artifactType,
+      sourcePath: artifact.path,
+    });
+  }
 }
 
 function isProse(path: string): boolean {

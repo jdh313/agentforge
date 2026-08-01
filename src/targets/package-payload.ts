@@ -253,6 +253,18 @@ function reportDeclaredLosses(
     });
   }
 
+  // A translated construct never needed a declaration (ndr:4nshwv), but it is
+  // still on the record. Without this the report cannot distinguish a construct
+  // the target handles from one nothing ever looked at.
+  for (const { literal, becomes, sourcePath, line } of detection.translated) {
+    diagnostics.push({
+      code: 'translated-construct',
+      severity: 'note',
+      packageId: packageInput.id,
+      message: `Claude-only construct "${literal}" at ${siteOf(packageInput, sourcePath, line)} is translated to ${becomes} for target "${target}"; nothing is lost, so no declared loss is required.`,
+    });
+  }
+
   const occurrences = new Map<ClaudeOnlyConstruct, DetectedConstruct[]>();
   for (const occurrence of detection.detected) {
     const matched = occurrences.get(occurrence.construct) ?? [];

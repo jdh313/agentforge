@@ -1,6 +1,7 @@
 import matter from 'gray-matter';
 import { z } from 'zod';
 import { parseAgentBehavior, parseCommandBehavior } from '../agent-command.ts';
+import { translationsFor } from '../capabilities.ts';
 import {
   CompilationError,
   type CompilationPackage,
@@ -51,13 +52,21 @@ const CODEX_HOOK_EVENTS = new Set([
 const SESSION_END_TIMEOUT_CAP_SECONDS = 3;
 
 // `CLAUDE_PLUGIN_ROOT` / `CLAUDE_PLUGIN_DATA` survive in Codex only as legacy
-// compatibility aliases. Emit the native names instead.
-// biome-ignore-start lint/suspicious/noTemplateCurlyInString: replacements are literal Codex env-var names
-const CLAUDE_HOOK_ENV_ALIASES: readonly (readonly [RegExp, string])[] = [
-  [/\$\{CLAUDE_PLUGIN_ROOT\}/g, '${PLUGIN_ROOT}'],
-  [/\$\{CLAUDE_PLUGIN_DATA\}/g, '${PLUGIN_DATA}'],
-];
-// biome-ignore-end lint/suspicious/noTemplateCurlyInString: replacements are literal Codex env-var names
+// compatibility aliases, so the native names are emitted instead. Which
+// variables those are, and what each becomes, is the capability table's to say;
+// keeping a second literal list here is how the fact drifted out of the model
+// in the first place.
+const HOOK_ENV_TRANSLATIONS = translationsFor('codex', 'skill').filter(([token]) =>
+  token.startsWith('${'),
+);
+
+const CLAUDE_HOOK_ENV_ALIASES: readonly (readonly [RegExp, string])[] = HOOK_ENV_TRANSLATIONS.map(
+  ([token, replacement]) => [new RegExp(escapeRegExp(token), 'g'), replacement] as const,
+);
+
+function escapeRegExp(value: string): string {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 const ClaudeHookHandler = z.looseObject({
   type: z.literal('command'),
@@ -238,6 +247,20 @@ function translateHookConfiguration({
   const diagnostics: ProposedCompilationDiagnostic[] = [];
   const hooks: Record<string, unknown[]> = {};
   const translatedEvents: string[] = [];
+
+  // A structured artifact reports its own constructs: the prose detector does
+  // not scan hook configs, so without this the rewrite below would be invisible
+  // in the compile report (ndr:4nshwv rules out declaring it, not reporting it).
+  for (const [token, becomes] of HOOK_ENV_TRANSLATIONS) {
+    if (!artifact.content.includes(token)) continue;
+    diagnostics.push({
+      code: 'translated-construct',
+      severity: 'note',
+      packageId: packageInput.id,
+      message: `Claude-only construct "${token}" in ${relativePath} is translated to ${becomes} for target "codex"; nothing is lost, so no declared loss is required.`,
+      retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
+    });
+  }
 
   for (const [event, groups] of Object.entries(source.hooks)) {
     if (!CODEX_HOOK_EVENTS.has(event)) {

@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import matter from 'gray-matter';
 import JSZip from 'jszip';
-import { findConstructShapes, supportFor } from './capabilities.ts';
+import { findConstructShapes, supportFor, translationFor } from './capabilities.ts';
 import { deepMerge } from './deep-merge.ts';
 import { ARTIFACT_DEFS, CLAUDE_ONLY_KEYS } from './schema.ts';
 import { getArtifactConfig } from './targets/index.ts';
@@ -131,10 +131,11 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
 
   const warnings: Warning[] = [];
   if (target !== 'claude') {
+    // A key the target translates into a native artifact is not stripped, so it
+    // does not belong in a stripped warning. The capability table is asked
+    // rather than the answer being restated as a condition here.
     const claudeOnlyPresent = Object.keys(canonicalFrontmatter).filter(
-      (key) =>
-        CLAUDE_ONLY_KEYS.has(key) &&
-        !(target === 'codex' && artifact === 'skill' && key === 'disable-model-invocation'),
+      (key) => CLAUDE_ONLY_KEYS.has(key) && supportFor(target, 'skill', key) !== 'translated',
     );
     if (claudeOnlyPresent.length > 0) {
       warnings.push({
@@ -169,15 +170,22 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
       : nameFromSourceDir(dirname(sourcePath));
 
   const rendered = matter.stringify(body, filtered);
+  // Where the translation lands is the capability table's answer, so the note
+  // that reports it and the file that satisfies it cannot drift apart. Only the
+  // emitted content is this translator's own business.
+  const invocationPolicyPath =
+    artifact === 'skill' && merged['disable-model-invocation'] === true
+      ? translationFor(target, 'skill', 'disable-model-invocation')
+      : undefined;
   const generatedFiles =
-    target === 'codex' && artifact === 'skill' && merged['disable-model-invocation'] === true
-      ? [
+    invocationPolicyPath === undefined
+      ? []
+      : [
           {
-            relativePath: 'agents/openai.yaml',
+            relativePath: invocationPolicyPath,
             content: 'policy:\n  allow_implicit_invocation: false\n',
           },
-        ]
-      : [];
+        ];
   const sourceDir = dirname(sourcePath);
   const resources = resourcePaths
     .map((resourcePath) => ({
