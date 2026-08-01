@@ -215,4 +215,6 @@ spurious `unsupported-artifact-projection` for a file never meant to translate.
 
 - Default to `git` for all commits in this repo. The user's
   `04-git-workflow.md` rules apply.
-- No GitHub remote; deferred to a later milestone.
+- `origin` is `git@github.com:jdh313/agentforge.git`, tracked by `main`. Push
+  only when asked; there is no CI, so a push is publication rather than a
+  trigger.
