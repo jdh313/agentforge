@@ -8,6 +8,15 @@ import {
 import type { ClaudeOnlyConstruct, LoadedArtifact } from './definitions.ts';
 import type { TargetName } from './types.ts';
 
+// How to tell whether this construct survived into a target's output. A
+// frontmatter construct is a key that either appears in the emitted frontmatter
+// or does not; a body construct is text that either survives verbatim or does
+// not. `detail` reads well but is prose — parsing a literal back out of it
+// would couple the check to a message's wording.
+export type RetentionCheck =
+  | { kind: 'frontmatter-key'; key: string }
+  | { kind: 'body-literal'; literal: string };
+
 export interface DetectedConstruct {
   construct: ClaudeOnlyConstruct;
   artifactType: string;
@@ -16,6 +25,7 @@ export interface DetectedConstruct {
   // file without a line — the key's position is not what identifies it.
   line?: number;
   detail: string;
+  retention: RetentionCheck;
 }
 
 export interface UnknownConstruct {
@@ -158,6 +168,7 @@ function scanBody(
         shape.family === 'mcp-tool'
           ? `references Claude MCP tool "${shape.literal}"`
           : `body uses ${shape.literal}`,
+      retention: { kind: 'body-literal', literal: shape.literal },
     });
   }
 }
@@ -189,6 +200,7 @@ function pushToolFilter(
     artifactType,
     sourcePath: artifact.path,
     detail: `${artifactType} frontmatter declares ${key}: ${tools}`,
+    retention: { kind: 'frontmatter-key', key },
   });
 }
 
