@@ -1,0 +1,19 @@
+schema: agentforge.package/v1
+id: twice
+defaults:
+  name: twice
+  version: 1.0.0
+  description: Fixture package with two skills that each name a different mcp__ tool, both matching the mcp-tool-reference construct.
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+targets:
+  codex:
+    dispositions:
+      - construct: mcp-tool-reference
+        disposition: retained-unenforced
+        note: Skill prose keeps naming a Claude MCP tool; Codex has no matching tool.
+    native:
+      interface:
+        displayName: Twice
+        category: Developer Tools

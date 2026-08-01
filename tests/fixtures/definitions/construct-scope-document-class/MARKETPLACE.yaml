@@ -1,0 +1,14 @@
+schema: agentforge.marketplace/v1
+id: construct-scope-document-class
+defaults:
+  name: construct-scope-document-class
+  description: Fixture marketplace for an mcp__ identifier confined to a document declared reference-or-diagnostic.
+packages:
+  - packages/*/PACKAGE.yaml
+publications:
+  - id: codex
+    target: codex
+    destination: .agents/plugins/marketplace.json
+    enrollment:
+      mode: include
+      packages: [exempted]

@@ -1,0 +1,14 @@
+schema: agentforge.marketplace/v1
+id: construct-scope-resource-reference
+defaults:
+  name: construct-scope-resource-reference
+  description: Fixture marketplace for an mcp__ reference inside a skill's references/ resource file.
+packages:
+  - packages/*/PACKAGE.yaml
+publications:
+  - id: codex
+    target: codex
+    destination: .agents/plugins/marketplace.json
+    enrollment:
+      mode: include
+      packages: [docs]

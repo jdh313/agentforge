@@ -1,0 +1,14 @@
+schema: agentforge.marketplace/v1
+id: construct-disposition-occurrences
+defaults:
+  name: construct-disposition-occurrences
+  description: Fixture marketplace for a declared disposition matched by more than one occurrence.
+packages:
+  - packages/*/PACKAGE.yaml
+publications:
+  - id: codex
+    target: codex
+    destination: .agents/plugins/marketplace.json
+    enrollment:
+      mode: include
+      packages: [twice]

@@ -1,0 +1,14 @@
+schema: agentforge.marketplace/v1
+id: construct-scope-unlisted
+defaults:
+  name: construct-scope-unlisted
+  description: Fixture marketplace for a Claude-only body placeholder with no capability-table entry.
+packages:
+  - packages/*/PACKAGE.yaml
+publications:
+  - id: codex
+    target: codex
+    destination: .agents/plugins/marketplace.json
+    enrollment:
+      mode: include
+      packages: [echoer]

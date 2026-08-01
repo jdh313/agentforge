@@ -1,0 +1,18 @@
+schema: agentforge.package/v1
+id: echoer
+defaults:
+  name: echoer
+  version: 1.0.0
+  description: Fixture package whose command body uses the Claude-only $ARGUMENTS placeholder with no declared disposition and no allowed-tools filter.
+artifacts:
+  - type: command
+    pattern: commands/*.md
+targets:
+  codex:
+    # Deliberately declares no `dispositions:` — $ARGUMENTS is a
+    # construct-shaped string (already named in CLAUDE_ONLY_BODY_PATTERNS)
+    # with no entry in CLAUDE_ONLY_CONSTRUCTS today.
+    native:
+      interface:
+        displayName: Echoer
+        category: Developer Tools

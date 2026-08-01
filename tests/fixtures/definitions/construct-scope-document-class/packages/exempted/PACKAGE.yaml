@@ -1,0 +1,20 @@
+schema: agentforge.package/v1
+id: exempted
+defaults:
+  name: exempted
+  version: 1.0.0
+  description: Fixture package whose reference document names an mcp__ tool but is declared reference-or-diagnostic, so it carries no instruction-document report.
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+  - type: reference
+    pattern: skills/*/references/*.md
+targets:
+  codex:
+    # Deliberately declares no `dispositions:` — the only mcp__ occurrence
+    # lives in a document declared reference-or-diagnostic (type: reference
+    # above), which must not require one.
+    native:
+      interface:
+        displayName: Exempted
+        category: Developer Tools
