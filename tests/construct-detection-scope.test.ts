@@ -73,7 +73,18 @@ describe('construct detection scope', () => {
   test('reports a construct-shaped string with no capability-table entry rather than passing it silently', async () => {
     const loaded = await loadMarketplaceDefinition(UNLISTED_CONSTRUCT_FIXTURE);
 
-    expect(() => compileMarketplace(loaded, [codexMarketplaceAdapter])).toThrow(CompilationError);
+    // Reported, not gated: an unclassified construct warns and compilation
+    // still succeeds. Confirming a loss is the precondition for requiring a
+    // declaration (ndr:4nshwv), and this shape has not been confirmed.
+    const plan = compileMarketplace(loaded, [codexMarketplaceAdapter]);
+    const unclassified = plan.diagnostics.filter(
+      (diagnostic) => diagnostic.code === 'unclassified-construct',
+    );
+
+    expect(unclassified).toHaveLength(1);
+    expect(unclassified[0]?.severity).toBe('warning');
+    expect(unclassified[0]?.message).toContain('$FOOBAR');
+    expect(unclassified[0]?.message).toContain('commands/echo.md:7');
   });
 
   test('compiles clean when the only mcp__ occurrence lives in a document declared reference-or-diagnostic', async () => {
