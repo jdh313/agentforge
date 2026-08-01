@@ -1,0 +1,15 @@
+schema: agentforge.package/v1
+id: explicit-skill
+defaults:
+  name: explicit-skill
+  version: 1.0.0
+  description: Fixture package whose skill is explicit-invocation only.
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+targets:
+  codex:
+    native:
+      interface:
+        displayName: Explicit Skill
+        category: Developer Tools

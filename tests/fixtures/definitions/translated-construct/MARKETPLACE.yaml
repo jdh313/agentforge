@@ -1,0 +1,14 @@
+schema: agentforge.marketplace/v1
+id: translated-construct
+defaults:
+  name: translated-construct
+  description: Fixture marketplace for constructs a Codex translator carries into a native form.
+packages:
+  - packages/*/PACKAGE.yaml
+publications:
+  - id: codex
+    target: codex
+    destination: .agents/plugins/marketplace.json
+    enrollment:
+      mode: include
+      packages: [explicit-skill, hook-env]

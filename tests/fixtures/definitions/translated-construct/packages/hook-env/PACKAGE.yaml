@@ -1,0 +1,15 @@
+schema: agentforge.package/v1
+id: hook-env
+defaults:
+  name: hook-env
+  version: 1.0.0
+  description: Fixture package whose hook configuration uses a Claude plugin-root variable.
+artifacts:
+  - type: hook
+    pattern: hooks/hooks.json
+targets:
+  codex:
+    native:
+      interface:
+        displayName: Hook Env
+        category: Developer Tools
