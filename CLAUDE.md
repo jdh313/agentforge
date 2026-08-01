@@ -105,9 +105,14 @@ tests/
 - Warnings (skill artifact, non-Claude targets only):
   - `claude-only-frontmatter-stripped` — listed Claude-only keys lost in
     output.
-  - `claude-only-body-feature` — canonical body uses `$ARGUMENTS`,
-    `${CLAUDE_*}`, `` !`…` ``, ` ```! `, or `$N`, and no `targets.<name>.body`
+  - `claude-only-body-feature` — canonical body carries a construct the
+    capability table marks **unsupported** on this target (`$ARGUMENTS`,
+    `${CLAUDE_*}`, `` !`…` ``, ` ```! `, `$N`), and no `targets.<name>.body`
     override is set.
+  - `unclassified-body-construct` — canonical body carries a construct-shaped
+    string the table does not classify (a bare `$UPPER` such as `$PATH`). Kept
+    separate on purpose: an unrecognized shape is not a confirmed loss, and
+    wording it as one would cry wolf on every mention of an env var.
 
 ## Common commands
 

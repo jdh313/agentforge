@@ -58,13 +58,35 @@ export interface ArtifactProjection {
 // same construct shapes against the same capability table; only the reporting
 // differs, because a standalone render has no PACKAGE.yaml to declare a
 // disposition in and so can only warn.
-const detectClaudeOnlyBodyFeatures = (body: string, target: TargetName): string[] => {
-  const labels = new Set<string>();
+// Everything agentforge emits today lands on a target's skill surface: Codex
+// commands project to skills rather than to custom prompts, and `output-style`
+// renders only to Claude, where every construct is native. If a target ever
+// gains a second surface for a projected artifact, this needs to be derived
+// rather than assumed.
+const PROJECTED_SURFACE = 'skill';
+
+// The enumerated pattern table that used to live here is gone. It named eight
+// literals and was silent about everything else, so whatever Claude shipped next
+// passed unexamined. Both this path and marketplace compilation now resolve the
+// same construct shapes against the same capability table; only the reporting
+// differs, because a standalone render has no PACKAGE.yaml to declare a
+// disposition in and so can only warn.
+//
+// `unsupported` and `unknown` are kept apart. A confirmed loss and an
+// unrecognized shape warrant different words — collapsing them would report an
+// ordinary `$PATH` as a Claude-only feature the target is about to drop.
+const detectClaudeOnlyBodyFeatures = (
+  body: string,
+  target: TargetName,
+): { lost: string[]; unclassified: string[] } => {
+  const lost = new Set<string>();
+  const unclassified = new Set<string>();
   for (const shape of findConstructShapes(body)) {
-    if (supportFor(target, 'skill', shape.token) === 'supported') continue;
-    labels.add(shape.literal);
+    const support = supportFor(target, PROJECTED_SURFACE, shape.token);
+    if (support === 'unsupported') lost.add(shape.literal);
+    else if (support === 'unknown') unclassified.add(shape.literal);
   }
-  return [...labels].toSorted();
+  return { lost: [...lost].toSorted(), unclassified: [...unclassified].toSorted() };
 };
 
 const pickKeys = (
@@ -128,12 +150,19 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
       });
     }
     if (overrideBody === undefined) {
-      const features = detectClaudeOnlyBodyFeatures(canonicalBody, target);
-      if (features.length > 0) {
+      const { lost, unclassified } = detectClaudeOnlyBodyFeatures(canonicalBody, target);
+      if (lost.length > 0) {
         warnings.push({
           kind: 'claude-only-body-feature',
           target,
-          detail: `body uses ${features.join(', ')} but no targets.${target}.body override`,
+          detail: `body uses ${lost.join(', ')} but no targets.${target}.body override`,
+        });
+      }
+      if (unclassified.length > 0) {
+        warnings.push({
+          kind: 'unclassified-body-construct',
+          target,
+          detail: `body uses ${unclassified.join(', ')}, which no capability-table entry covers`,
         });
       }
     }

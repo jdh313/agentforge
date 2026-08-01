@@ -14,6 +14,11 @@ export const ARTIFACT_TYPES: readonly ArtifactType[] = ['skill', 'output-style']
 export type WarningKind =
   | 'claude-only-frontmatter-stripped'
   | 'claude-only-body-feature'
+  // Construct-shaped but unclassified. Kept separate from
+  // `claude-only-body-feature` so "we know this is lost" and "we do not
+  // recognize this" stay distinguishable — collapsing them would make an
+  // ordinary `$PATH` read as a confirmed Claude-only loss.
+  | 'unclassified-body-construct'
   | 'artifact-not-supported';
 
 export interface Warning {
