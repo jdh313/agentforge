@@ -60,6 +60,12 @@ export const CLAUDE_ONLY_CONSTRUCTS = [
   'agent-tools-filter',
   'command-tools-filter',
   'mcp-tool-reference',
+  // Body constructs. Previously these were warning-only and undeclarable, so a
+  // body feature that was a hard silent loss could not carry a disposition at
+  // all — the one condition ndr:4nshwv says must.
+  'body-template-variable',
+  'body-shell-injection',
+  'body-file-reference',
 ] as const;
 
 export type ClaudeOnlyConstruct = (typeof CLAUDE_ONLY_CONSTRUCTS)[number];
@@ -171,12 +177,48 @@ export interface LoadedPackage {
   definition: PackageDefinition;
   artifacts: ReadonlyMap<string, readonly LoadedArtifact[]>;
   files: readonly string[];
+  resources: readonly LoadedArtifact[];
   payloads: PackagePayloadPlans;
 }
 
 export interface LoadedArtifact {
   path: string;
   content: string;
+}
+
+// Resource files reach a target's model context verbatim, so a Claude-only
+// construct in `references/api.md` misleads exactly as much as one in SKILL.md.
+// Their text is read here, at load time, so compilation stays free of
+// filesystem I/O (ndr:cp4rfn).
+const RESOURCE_SUBDIRS = ['references', 'scripts', 'assets'];
+const TEXT_EXTENSIONS = [
+  '.md',
+  '.markdown',
+  '.txt',
+  '.sh',
+  '.bash',
+  '.py',
+  '.yaml',
+  '.yml',
+  '.json',
+];
+
+export function isResourcePath(root: string, path: string): boolean {
+  const relative = portableRelativePath(root, path);
+  const segments = relative.split('/');
+  if (
+    !segments.some(
+      (segment, index) => index < segments.length - 1 && RESOURCE_SUBDIRS.includes(segment),
+    )
+  ) {
+    return false;
+  }
+  return TEXT_EXTENSIONS.some((extension) => relative.toLowerCase().endsWith(extension));
+}
+
+function portableRelativePath(root: string, path: string): string {
+  const normalizedRoot = root.endsWith('/') ? root : `${root}/`;
+  return path.startsWith(normalizedRoot) ? path.slice(normalizedRoot.length) : path;
 }
 
 export interface LoadedMarketplace {
@@ -238,11 +280,21 @@ export async function loadPackageDefinition(path: string): Promise<LoadedPackage
     throw cause;
   }
 
+  // Artifacts are already loaded above; skip them so a file declared as an
+  // artifact is not scanned twice under two identities.
+  const artifactPaths = new Set([...artifacts.values()].flat().map(({ path: each }) => each));
+  const resources = await Promise.all(
+    files
+      .filter((file) => !artifactPaths.has(file) && isResourcePath(root, file))
+      .map(async (file) => ({ path: file, content: await readFile(file, 'utf8') })),
+  );
+
   return {
     path: resolvedPath,
     definition,
     artifacts,
     files,
+    resources,
     payloads,
   };
 }

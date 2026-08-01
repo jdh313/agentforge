@@ -31,6 +31,9 @@ targets:
       - construct: command-tools-filter
         disposition: stripped
         note: The spec-flow command's Skill-only allowlist is not enforced on Codex.
+      - construct: body-template-variable
+        disposition: retained-unenforced
+        note: The command body names $ARGUMENTS; Codex projects commands to skills, which substitute nothing, so the placeholder reaches the model literally.
     payloads:
       include:
         - source: config/

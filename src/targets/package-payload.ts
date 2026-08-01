@@ -152,14 +152,22 @@ function resolveConstructDispositions(
   const declared = new Map(
     packageInput.dispositions.map((disposition) => [disposition.construct, disposition]),
   );
-  const detected = detectClaudeOnlyConstructs(packageInput.artifacts);
+  const { detected, unknown } = detectClaudeOnlyConstructs({
+    artifacts: packageInput.artifacts,
+    resources: packageInput.resources,
+    target: input.publication.target,
+  });
+  const site = (sourcePath: string, line?: number) => {
+    const relative = relativePackageArtifactPath(packageInput.path, sourcePath);
+    return line === undefined ? relative : `${relative}:${line}`;
+  };
   const undeclared = detected.filter(({ construct }) => !declared.has(construct));
 
   if (undeclared.length > 0) {
     const detail = undeclared
       .map(
-        ({ construct, sourcePath, detail: why }) =>
-          `  - ${construct}: ${relativePackageArtifactPath(packageInput.path, sourcePath)} ${why}`,
+        ({ construct, sourcePath, line, detail: why }) =>
+          `  - ${construct}: ${site(sourcePath, line)} ${why}`,
       )
       .join('\n');
     throw new CompilationError(
@@ -168,18 +176,46 @@ function resolveConstructDispositions(
     );
   }
 
-  // Declaring a disposition must not buy silence. Report each one that actually
-  // matched, so the author's note about what a user does not get travels with
-  // every compile and check rather than resting in the YAML.
-  const matched = new Set(detected.map(({ construct }) => construct));
-  return [...declared.values()]
-    .filter(({ construct }) => matched.has(construct))
-    .map(({ construct, disposition, note }) => ({
-      code: 'declared-construct-disposition',
-      severity: 'note' as const,
+  const diagnostics: ProposedCompilationDiagnostic[] = [];
+
+  // A construct-shaped string the capability table does not classify is
+  // reported, never gated. The old enumerated list was silent about everything
+  // it did not name, so a construct Claude ships next shipped unexamined
+  // (ndr:rm06pf); gating one we cannot confirm is lost would breach ndr:4nshwv.
+  for (const { literal, sourcePath, line } of unknown) {
+    diagnostics.push({
+      code: 'unclassified-construct',
+      severity: 'warning',
       packageId: packageInput.id,
-      message: `Claude-only construct "${construct}" is ${disposition} for target "${input.publication.target}"${note ? `: ${note}` : '.'}`,
-    }));
+      message: `Unclassified Claude-only construct "${literal}" at ${site(sourcePath, line)} for target "${input.publication.target}"; no capability-table entry covers it.`,
+    });
+  }
+
+  // Declaring a disposition must not buy silence (ndr:62pj9p). Report each
+  // declaration that actually matched, and name every occurrence it covers — a
+  // note listing only the construct type gets less specific exactly as
+  // detection coverage grows.
+  const occurrences = new Map<string, string[]>();
+  for (const { construct, sourcePath, line } of detected) {
+    const sites = occurrences.get(construct) ?? [];
+    sites.push(site(sourcePath, line));
+    occurrences.set(construct, sites);
+  }
+
+  for (const { construct, disposition, note } of declared.values()) {
+    const sites = occurrences.get(construct);
+    if (!sites) continue;
+    diagnostics.push({
+      code: 'declared-construct-disposition',
+      severity: 'note',
+      packageId: packageInput.id,
+      message:
+        `Claude-only construct "${construct}" is ${disposition} for target "${input.publication.target}"${note ? `: ${note}` : '.'}` +
+        ` Occurrences: ${sites.join(', ')}.`,
+    });
+  }
+
+  return diagnostics;
 }
 
 function unsupportedProjection(
