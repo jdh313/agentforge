@@ -169,6 +169,15 @@ targets:
   translated rather than lost — a hook handler's
   `args` folded into Codex's single `command` string — warns instead of
   requiring a declaration.
+- A construct the target's translator carries into a native form is **not** a
+  loss, so it never takes a declaration. The capability table records what each
+  one becomes, and every occurrence emits a `translated-construct` note on each
+  compile and check — otherwise a handled construct and one nothing ever scanned
+  look identical in the report. Translated today, both on Codex:
+  `disable-model-invocation` becomes an `agents/openai.yaml` invocation policy,
+  and `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}` in a hook configuration
+  become `${PLUGIN_ROOT}` / `${PLUGIN_DATA}`. Other `${CLAUDE_*}` variables are
+  untranslated and stay a declarable loss.
 - `payloads.include` is an ordered list of package-relative source/destination
   entries. Exact files keep their source path by default; directories and globs
   preserve paths below their static source root and require directory

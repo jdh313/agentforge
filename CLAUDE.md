@@ -186,6 +186,9 @@ bun build --compile src/cli.ts --outfile ~/.local/bin/agentforge
 - `src/capabilities.ts` disables `lint/suspicious/noTemplateCurlyInString`: its
   capability-table tokens (`'${CLAUDE_*}'`) are literal documentation of
   Claude-only patterns.
+- `tests/translated-construct.test.ts` suppresses the same rule on two lines,
+  for the same reason: the literal variable names are what the assertions are
+  about.
 
 ## Document class
 

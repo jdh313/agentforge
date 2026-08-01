@@ -40,9 +40,14 @@ _Avoid_: disposition, waiver, exemption, exception
 _See_: ndr:4nshwv, ndr:k9r6pc
 
 **State**
-What became of a construct on a target: `stripped` (removed from the output) or `retained-unenforced` (present in the output, ignored by the target).
+What became of a construct on a target: `stripped` (removed from the output) or `retained-unenforced` (present in the output, ignored by the target). A state only ever describes a loss — a construct that survived has no state.
 _Avoid_: disposition, effect, outcome, action
 _See_: ndr:e9jc29
+
+**Translated**
+A construct a target's translator carries into a native equivalent, named in the capability table alongside what it becomes. Not a loss, so never declared; still reported, because an unreported translation is indistinguishable from an unscanned file. Distinct from an output's `translated` producer, which says how a *file* was made rather than what became of a *construct*.
+_Avoid_: disposition, supported
+_See_: ndr:4nshwv
 
 **Document class**
 Whether a file's constructs are described or invoked. `reference` and `diagnostic` both mark a document whose constructs are documentation about Claude; both are exempt from construct scanning. Orthogonal to artifact type.
