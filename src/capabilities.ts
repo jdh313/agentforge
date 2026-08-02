@@ -89,7 +89,7 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
       translated: CODEX_TRANSLATIONS,
       unsupported: CLAUDE_TOKENS,
       source:
-        'https://learn.chatgpt.com/docs/build-skills.md — documents no body templating; agents/openai.yaml carries the invocation policy and ${PLUGIN_ROOT}/${PLUGIN_DATA} are the native hook variables.',
+        'https://learn.chatgpt.com/docs/build-skills.md — documents no body templating; agents/openai.yaml carries the invocation policy and ${PLUGIN_ROOT}/${PLUGIN_DATA} are the native hook variables. On allow_implicit_invocation the published page says only that Codex "won\'t implicitly invoke the skill", which reads as auto-trigger gating; the codex 0.146.0 binary\'s embedded skill-creator doc is the complete statement — "the skill is not injected into the model context by default, but can still be invoked explicitly via $skill". Verified 2026-08-02: a policy-gated skill is absent from the model\'s catalog and still runs from the $-picker, so the translation is faithful.',
     },
   ],
   [
