@@ -156,10 +156,14 @@ targets:
   artifact bodies and text resource files: `mcp-tool-reference` (an `mcp__*`
   tool name), `body-template-variable` (`$ARGUMENTS`, `$1`–`$9`,
   `${CLAUDE_*}`), `body-shell-injection` (`` !`…` `` and ` ```! `), and
-  `body-file-reference` (an `@dir/file` reference). A construct-shaped string
-  the capability table does not classify — a bare `$UPPER` such as `$PATH` —
-  is reported as an `unclassified-construct` warning and never gated, because
-  a declaration is only meaningful when there is a confirmed loss to record.
+  `body-file-reference` (an `@dir/file` reference). Two things this scan
+  deliberately does not see: `$1`–`$9` inside a shell resource — a file under
+  `scripts/` or named `*.sh` / `*.bash` — is that script's own positional
+  argument, and a file marked by `documents` is exempt whatever it contains.
+  A construct-shaped string the capability table does not classify — a bare
+  `$UPPER` such as `$PATH` — is reported as an `unclassified-construct`
+  warning and never gated, because a declaration is only meaningful when there
+  is a confirmed loss to record.
   `state` is `stripped` or
   `retained-unenforced`; the optional `note` is what a user of that target does
   not get. **The declared `state` is checked against what the compiler actually
