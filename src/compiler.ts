@@ -92,6 +92,9 @@ export interface CompilationPackage {
   files: readonly string[];
   resources: readonly LoadedArtifact[];
   exemptDocuments: ReadonlySet<string>;
+  // Frontmatter keys declared authoring-layer: stripped from every target's
+  // output, reported nowhere.
+  authoringKeys: ReadonlySet<string>;
   payloads: readonly PackagePayload[];
   losses: readonly DeclaredLossDefinition[];
 }
@@ -246,6 +249,7 @@ function resolvePackages(
       files: loadedPackage.files,
       resources: loadedPackage.resources,
       exemptDocuments: loadedPackage.exemptDocuments,
+      authoringKeys: new Set(loadedPackage.definition['authoring-keys'] ?? []),
       payloads: loadedPackage.payloads[publication.target] ?? [],
       losses: target.losses ?? [],
     };

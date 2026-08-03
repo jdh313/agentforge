@@ -32,6 +32,13 @@ export interface ArtifactProjectionOptions {
   target: TargetName;
   artifact: ArtifactType;
   resourcePaths?: readonly string[];
+  // Frontmatter keys the package declared authoring-layer. They belong to the
+  // source repo, not to any runtime, so they are removed before projection
+  // begins — every downstream step then sees frontmatter that never carried
+  // them, and no step reports them. Canonical source is untouched, which is the
+  // point: the tooling that reads and rewrites these keys works against the
+  // repo, not against published output.
+  authoringKeys?: ReadonlySet<string>;
 }
 
 export interface ProjectedResource {
@@ -102,8 +109,27 @@ const omitKey = <T extends Record<string, unknown>>(
   return rest;
 };
 
+const omitKeys = (
+  obj: Record<string, unknown>,
+  omitted: ReadonlySet<string>,
+): Record<string, unknown> => {
+  if (omitted.size === 0) return obj;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(obj)) {
+    if (!omitted.has(key)) out[key] = obj[key];
+  }
+  return out;
+};
+
 export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjection => {
-  const { sourcePath, source, target, artifact, resourcePaths = [] } = opts;
+  const {
+    sourcePath,
+    source,
+    target,
+    artifact,
+    resourcePaths = [],
+    authoringKeys = new Set<string>(),
+  } = opts;
   const artifactDef = ARTIFACT_DEFS[artifact];
   const artifactConfig = getArtifactConfig(target, artifact);
   if (!artifactConfig) {
@@ -116,13 +142,23 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
   };
   const canonicalBody = parsed.content;
 
-  const { targets, ...canonicalFrontmatter } = data;
+  // Authoring-layer keys are removed here, before anything else looks at the
+  // frontmatter, so no later step can report or emit one. Stripping a declared
+  // key is not a loss to record (ndr:4nshwv) — the author already said it was
+  // never addressed to a runtime — so this is deliberately silent, and
+  // deliberately not `unrecognized-frontmatter-key`, which reports a key nobody
+  // has ruled on.
+  const { targets, ...declaredFrontmatter } = data;
+  const canonicalFrontmatter = omitKeys(declaredFrontmatter, authoringKeys);
   const overrideRaw = (targets?.[target] as Record<string, unknown> | undefined) ?? {};
   const overrideBody =
     typeof (overrideRaw as { body?: unknown }).body === 'string'
       ? (overrideRaw as { body: string }).body
       : undefined;
-  const overrideFields = omitKey(overrideRaw as Record<string, unknown>, 'body');
+  const overrideFields = omitKeys(
+    omitKey(overrideRaw as Record<string, unknown>, 'body'),
+    authoringKeys,
+  );
 
   const merged = deepMerge(canonicalFrontmatter as Record<string, unknown>, overrideFields);
   const body = overrideBody ?? canonicalBody;

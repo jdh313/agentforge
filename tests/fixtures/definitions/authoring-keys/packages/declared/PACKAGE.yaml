@@ -1,0 +1,17 @@
+schema: agentforge.package/v1
+id: declared
+defaults:
+  name: declared
+  version: 1.0.0
+  description: Fixture package declaring `upstream` as an authoring-layer key, so it never reaches a target.
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+# `upstream` is adaptation provenance that a repo-local review workflow reads
+# and rewrites in canonical source. It is addressed to this repo, not to any
+# runtime, so a copy of it in published output is inert. Declared rather than
+# inferred: the compiler has no business knowing this repo's conventions.
+authoring-keys:
+  - upstream
+targets:
+  claude: {}

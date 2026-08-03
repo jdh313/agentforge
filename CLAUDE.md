@@ -95,13 +95,18 @@ tests/
   Otherwise: deep-merge `targets.<name>` over top-level frontmatter
   (excluding `body`), filter to `allowedFrontmatterKeys`, validate with
   `outputFrontmatterSchema`.
-- Canonical frontmatter schemas are `z.looseObject`, so a key they do not
-  enumerate survives parse instead of being discarded. Where it goes is the
-  target's call: `ArtifactConfig.unrecognizedFrontmatter` is `'retain'` on
-  Claude (the source dialect — an unrecognized canonical key is a Claude key
-  agentforge has not learned yet) and defaults to `'strip'` everywhere else,
-  because emitting a key is a claim the target accepts it. Either way the key
-  is reported.
+- Three categories of frontmatter key, and they are not interchangeable:
+  1. **Known Claude key** (schema-enumerated, in `CLAUDE_ONLY_KEYS`) — retained
+     on Claude, stripped elsewhere under `claude-only-frontmatter-stripped`.
+  2. **Unrecognized key** — canonical schemas are `z.looseObject`, so a key they
+     do not enumerate survives parse instead of being discarded.
+     `ArtifactConfig.unrecognizedFrontmatter` is `'retain'` on Claude and
+     defaults to `'strip'` everywhere else, because emitting a key is a claim
+     the target accepts it. Reported either way, as
+     `unrecognized-frontmatter-key`.
+  3. **Authoring-layer key** (`authoring-keys` in `PACKAGE.yaml`) — belongs to
+     the source repo, addressed to no runtime. Stripped from **every** target
+     including Claude, reported nowhere. See § Authoring keys.
 - Body precedence: `targets.<name>.body` (full replacement) ⟶ canonical body.
   No partial templating, no prefix/suffix stitching.
 - Layout per artifact: `directory` (skill) materializes
@@ -122,11 +127,15 @@ tests/
     wording it as one would cry wolf on every mention of an env var.
   - `unrecognized-frontmatter-key` — **every** target, Claude included:
     canonical frontmatter carries a key the artifact's schema does not
-    enumerate. The detail says whether it was retained or dropped. Kept apart
-    from `claude-only-frontmatter-stripped` for the same reason
+    enumerate **and** no `authoring-keys` declaration covers. The detail says
+    whether it was retained or dropped. Kept apart from
+    `claude-only-frontmatter-stripped` for the same reason
     `unclassified-body-construct` is kept apart from `claude-only-body-feature`:
     that warning claims Claude owns the key and the target loses it, and an
     unrecognized key supports neither half.
+  - A key covered by `authoring-keys` emits **nothing**. That is not an
+    oversight: a declared strip is not a loss, and only a confirmed loss is
+    worth recording (ndr:4nshwv).
 
 ## Common commands
 
@@ -213,6 +222,29 @@ reference, or a skill that probes a specific endpoint — so the file is exempt
 from body scanning. This is deliberately **not** an `artifacts:` entry: document
 class is orthogonal to artifact type, and overloading `artifacts` would emit a
 spurious `unsupported-artifact-projection` for a file never meant to translate.
+
+## Authoring keys
+
+`PACKAGE.yaml` may declare `authoring-keys: [<frontmatter key>, …]` — a flat
+list of frontmatter keys that belong to the **authoring layer of the source
+repo** and are addressed to no runtime. A declared key is stripped from every
+target's output, Claude included, and reported nowhere.
+
+The motivating case is `upstream:`, which carries adaptation provenance
+(`repo`, `path`, `reviewed_sha`, `status`) that a repo-local review workflow
+reads *and rewrites in canonical source*. A copy of it in published output is
+inert — refreshing a reviewed SHA into a published artifact means nothing.
+
+Declared rather than inferred, on the `documents:` precedent: these are
+repo-local conventions whose vocabulary the compiler has no business knowing,
+and `skillsmith` will grow more of them. Guessing which unrecognized keys are
+authoring-layer is exactly the intent-guessing a declaration exists to avoid.
+
+Note the distinction this closes. Stripping `upstream:` was always the right
+outcome; the defect was that nothing had **decided** it — the same silence that
+destroyed `disallowed-tools`, where the outcome genuinely was wrong. The
+declaration converts an accident into a decision. Opt-in: an undeclared
+unrecognized key keeps the category-2 behavior above.
 
 ## Out of scope today
 

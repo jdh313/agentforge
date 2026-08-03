@@ -1,0 +1,17 @@
+schema: agentforge.marketplace/v1
+id: authoring-keys
+defaults:
+  name: authoring-keys
+  description: Fixture marketplace pairing a package that declares an authoring-layer frontmatter key with one that does not.
+  owner:
+    name: Fixture Owner
+    email: owner@example.com
+packages:
+  - packages/*/PACKAGE.yaml
+publications:
+  - id: claude
+    target: claude
+    destination: .claude-plugin/marketplace.json
+    enrollment:
+      mode: include
+      packages: [declared, undeclared]

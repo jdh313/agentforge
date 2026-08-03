@@ -77,6 +77,7 @@ export function compilePackagePayload(
           sourcePath: artifact.path,
           source: artifact.content,
           resourcePaths: packageInput.files,
+          authoringKeys: packageInput.authoringKeys,
         });
         const skillDirectory = `${packageDirectory}/skills/${projection.artifactName}`;
         outputs.push({
