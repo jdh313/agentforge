@@ -229,3 +229,68 @@ the mechanism.
 
 **Where to look.** `src/capabilities.ts:92` — the `codex/skill` row's `source`
 string, which now carries both citations and the verification date.
+
+---
+
+## L-006 — A compiled Codex projection only reaches a runtime if the marketplace root points at the compile output
+
+**Gap.** Both the in-repo `.agents/plugins/marketplace.json` and the compiled
+one carry the identical relative entry `"path": "./plugins/<name>"`. That path
+resolves to the canonical Claude source when read from inside the repo, and to
+the Codex projection when read from inside AgentForge compile output.
+Registering the repo itself as a Codex marketplace therefore installs canonical
+source in place of the projection. Nothing errors, warns, or validates against
+it — the manifest is well-formed and every path in it resolves.
+
+**Manifests as.** Installed Codex plugins carry Claude-only frontmatter
+verbatim — `disable-model-invocation`, `allowed-tools`, `argument-hint`,
+`effort` — and lack every generated artifact: `agents/openai.yaml` invocation
+policies, translated hook configurations, inferred role procedures. Declared
+intent looks satisfied when you read the source, while nothing enforces it at
+runtime.
+
+The failure is silent in both directions: the keys Codex cannot read are
+present, and the files that would have done the work are absent.
+
+**Affects.** Every Codex-enrolled plugin as installed on this machine today —
+`commit`, `craft`, `feedback`, `librarian`, `linear`, `spec-flow`, and now
+`compass`. Only artifacts hand-committed into the source tree survive the wrong
+path, which is why `craft`'s `grok` and `zoom-out` policies work by accident
+while `librarian`'s four generated policies do not.
+
+**Evidence.** Verified 2026-08-03. `codex plugin marketplace list` shows
+`cc-marketplace` rooted at `/Users/jacob/Projects/cc-marketplace`. Compiling
+`MARKETPLACE.yaml` with the pinned compiler emits
+`codex/plugins/compass/skills/reflect/agents/openai.yaml`, and the same for
+`mull` and `converge`; the installed cache at
+`~/.codex/plugins/cache/cc-marketplace/compass/0.9.0` contains none of them. A
+fresh Codex session reports `compass:converge`, `compass:mull`, and
+`compass:reflect` all present in its catalog — implicitly invocable, the
+opposite of what their `disable-model-invocation: true` declarations intend —
+while `craft:zoom-out` is correctly absent. A frontmatter diff of `reflect`'s
+`SKILL.md` shows five Claude-only keys present in the installed copy that the
+projection strips.
+
+**Status.** open. The compiler is **not** at fault — it emits the projection
+correctly. This is a setup and documentation gap in how a Codex runtime is
+pointed at that output. It belongs in this register because the tooling permits
+the mistake silently.
+
+**Where to look.** `src/targets/codex-marketplace.ts:519` — `compilePackage`
+builds `source: './<packageDirectory>'` from the *source* tree layout, which is
+why the compiled manifest and the in-repo manifest agree byte-for-byte on the
+path. `src/targets/codex-marketplace.ts:200-205` — where that string becomes
+the manifest's plugin entry. cc-marketplace `README.md:78-85` — documents
+compiling to `/tmp/cc-marketplace-agentforge` and validating there, but does
+not say that the Codex runtime must be **registered** against that path rather
+than against the repo.
+
+**Why this one went undetected.** This trap survived six plugin enrollments and
+two smoke tests that were run and recorded as passes: the JUN-342 `feedback`
+Codex acceptance, and the `craft:zoom-out` invocation verification. Neither
+surfaced it — `feedback` has no generated artifacts to be missing, and
+`craft`'s policies happen to be committed into the source tree, so both passed
+against canonical source without ever exercising the projection. A passing
+smoke test on the wrong root is indistinguishable from a passing smoke test on
+the right one. That is the strongest argument for this register existing at
+all.
