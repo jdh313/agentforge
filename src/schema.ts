@@ -28,6 +28,7 @@ export const CanonicalSkillFrontmatter = z.object({
   'disable-model-invocation': z.boolean().optional(),
   'user-invocable': z.boolean().optional(),
   'allowed-tools': z.union([z.string(), z.array(z.string())]).optional(),
+  'disallowed-tools': z.union([z.string(), z.array(z.string())]).optional(),
   model: z.string().optional(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
   context: z.enum(['fork']).optional(),
@@ -63,6 +64,10 @@ export const CLAUDE_ONLY_KEYS: ReadonlySet<string> = new Set([
   'disable-model-invocation',
   'user-invocable',
   'allowed-tools',
+  // Claude honors a deny list alongside the allow list. It is Claude-only in
+  // the same sense `allowed-tools` is: no other target enforces a tool filter,
+  // so every non-Claude projection strips it and says so.
+  'disallowed-tools',
   'model',
   'effort',
   'context',

@@ -2,6 +2,9 @@
 name: claude-rich
 description: Test fixture exercising Claude-only frontmatter and $ARGUMENTS body substitution.
 allowed-tools: Bash(git *) Read
+disallowed-tools:
+  - WebSearch
+  - Agent
 disable-model-invocation: true
 argument-hint: "[issue-number]"
 ---

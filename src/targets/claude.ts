@@ -13,6 +13,7 @@ const ClaudeSkillFrontmatter = z.object({
   'disable-model-invocation': z.boolean().optional(),
   'user-invocable': z.boolean().optional(),
   'allowed-tools': z.union([z.string(), z.array(z.string())]).optional(),
+  'disallowed-tools': z.union([z.string(), z.array(z.string())]).optional(),
   model: z.string().optional(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
   context: z.enum(['fork']).optional(),
