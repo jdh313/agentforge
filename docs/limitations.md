@@ -332,7 +332,13 @@ string, which now carries both citations and the verification date.
 
 ---
 
-## L-006 — A compiled Codex projection only reaches a runtime if the marketplace root points at the compile output
+## L-006 — A compiled Codex projection only reaches a runtime if the marketplace root points at the compile output *and* installed plugins are rebuilt from it
+
+> **Amendment history.** Written 2026-08-03 as a marketplace-root gap. Widened
+> the same day: pointing the root correctly is necessary but not sufficient —
+> already-installed plugins keep serving their pre-existing cache until
+> reinstalled, with nothing reporting the staleness. Same ID; see "Scope
+> widened" below.
 
 **Gap.** Both the in-repo `.agents/plugins/marketplace.json` and the compiled
 one carry the identical relative entry `"path": "./plugins/<name>"`. That path
@@ -377,17 +383,47 @@ This is a setup and documentation gap in how a Codex runtime is pointed at that
 output, and nothing in the tooling has changed to prevent the same mistake in
 another consumer, so the entry stays here rather than being marked `fixed-in`.
 
+**Scope widened 2026-08-03: pointing the root correctly is necessary but not
+sufficient.** Re-registering the marketplace at the compile output does **not**
+refresh plugins that are already installed. Each keeps serving its existing
+cache under `~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/` until it
+is explicitly reinstalled, and nothing reports the staleness: `codex plugin
+list` prints the *marketplace* path for every entry, so a plugin serving
+months-old bytes is visually indistinguishable from one serving the new
+projection. The version directory is keyed by version, so an unchanged version
+number means a stale cache is never invalidated. `codex plugin add <name>@<mkt>`
+on an already-installed plugin rebuilds it in place.
+
 **Evidence, 2026-08-03 (resolution).** cc-marketplace `9e83c78` commits complete
 publications under `marketplaces/` and points each runtime at its own root.
 After `codex plugin marketplace add
 /Users/jacob/Projects/cc-marketplace/marketplaces/codex`, all seven pilots
-resolve under that root, and `librarian`'s four generated `agents/openai.yaml`
-policies — the ones this entry recorded as absent — are present. Reinstalling
-`compass` puts three sidecars in `~/.codex/plugins/cache/cc-marketplace/compass/0.9.0`
-where the entry previously recorded none, and the installed `reflect/SKILL.md`
-frontmatter now carries only `name` and `description`: the projection, not the
-canonical Claude source with its five Claude-only keys. The stale
-`cc-codex-test` marketplace rooted at `/private/tmp` has been removed.
+resolve under that root and the publication carries all ten generated
+`agents/openai.yaml` policies.
+
+The caches did not follow. Immediately after the repoint, `spec-flow`'s cache
+held no sidecar at all while `librarian`'s four were dated `2026-07-12` —
+pre-migration bytes that happened to contain sidecars for historical reasons,
+not the new projection. A fresh `codex exec` session confirmed the consequence:
+`spec-flow:spec-flow` was present in the loaded skill catalog despite being
+policy-gated. Reinstalling all seven brought every cache to exactly the
+publication's ten sidecars (compass 3, craft 2, librarian 4, spec-flow 1;
+commit, feedback, and linear correctly zero).
+
+Re-probed after the refresh, and the translation verifies end to end: all ten
+policy-gated skills are absent from the loaded catalog while `spec-flow:draft`,
+`commit:commit`, and `librarian:wiki-query` remain present, and
+`$compass:reflect` still loads the gated skill body on explicit invocation,
+quoting its first instruction verbatim. Installed frontmatter is the projection
+— `name` and `description` only, not canonical Claude source with its five
+Claude-only keys. The stale `cc-codex-test` marketplace rooted at `/private/tmp`
+has been removed.
+
+**An earlier draft of this paragraph called the gap resolved on the strength of
+the publication alone.** It was measured against `marketplaces/codex/`, which is
+compiler output, not against what the runtime had loaded. That is the same
+mistake this entry exists to record, one layer down: reading the artifact you
+produced instead of the artifact the runtime resolved.
 
 **Where to look.** `src/targets/codex-marketplace.ts:519` — `compilePackage`
 builds `source: './<packageDirectory>'` from the *source* tree layout, which is
