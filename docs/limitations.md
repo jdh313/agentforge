@@ -394,3 +394,64 @@ against canonical source without ever exercising the projection. A passing
 smoke test on the wrong root is indistinguishable from a passing smoke test on
 the right one. That is the strongest argument for this register existing at
 all.
+
+---
+
+## L-007 — Files the compiler does not carry are dropped with nothing reported
+
+**Gap.** A skill's publication surface is `SKILL.md` plus the three allowlisted
+resource subdirs (`scripts/`, `references/`, `assets/`); a package's is what
+`payloads:` declares. Anything else in a source directory is not copied — and,
+unlike a stripped frontmatter key or an untranslatable body construct, its
+omission produces no warning, note, or diagnostic. The compiler reports lossy
+*translation* thoroughly and lossy *omission* not at all.
+
+**Manifests as.** An installed skill whose body links to a sibling file that
+does not exist. The reader follows a `[GLOSSARY.md](GLOSSARY.md)` pointer in
+the published `SKILL.md` and finds nothing there. Because canonical source and
+publication were colocated before cc-marketplace `9e83c78`, the link resolved
+against the source tree and the gap was invisible; separating the publication
+is what exposed it.
+
+**Affects.** Claude and Codex, every skill artifact. Confirmed today in
+cc-marketplace: `skillsmith/writing-great-skills` linked `GLOSSARY.md` and
+`ADDENDA.md` from its body with neither in the publication (fixed at source by
+moving both into `references/`); `pm/skills/breakdown/UPSTREAM.md` and
+`skillsmith/skills/writing-great-skills/UPSTREAM.md` are dropped but
+deliberately unreferenced, so harmless; and 14 package-level `README.md` files
+are dropped from the Claude publication because no `PACKAGE.yaml` declares one
+as a payload.
+
+**Evidence.** Verified 2026-08-03 against the pinned compiler `0ebebbb`. A link
+check resolving every relative `.md` link in all 296 published files reported
+exactly two broken targets, both in `writing-great-skills`. Enumerating source
+files under each package and subtracting the Claude publication returned 18
+absent files: 14 `README.md`, 2 `UPSTREAM.md`, 1 `GLOSSARY.md`, 1 `ADDENDA.md`.
+No compile diagnostic mentioned any of them; the same run emitted 40+ notes and
+warnings about stripped keys and untranslatable constructs.
+
+**Status.** open. The omission itself is by design — an allowlist is the right
+default, and `payloads:` is the intended escape hatch for package files. What
+is not by design is the silence: a package author has no way to learn that a
+file they wrote was left out, and the failure surfaces only as a dead link in
+an installed artifact. Contrast L-001, where the fix was precisely to report a
+key rather than to stop discarding it; the same argument applies here.
+
+**Where to look.** `src/render.ts:221-226` — `resourcePaths` walks only the
+subdirs in `artifactConfig.resourceSubdirs`, so a sibling file at the skill root
+is never enumerated. `src/render.ts:195-198` — a second filter drops anything
+whose first path segment is not an allowlisted subdir. `src/targets/claude.ts:38`
+and the matching lines in `codex.ts:18`, `opencode.ts:18`, `claude-chat.ts:18` —
+where the three-subdir allowlist is declared, identically, on every target.
+`src/package-payload-plan.ts:34-92` — the package-level `payloads:` path, which
+errors on a declared source matching no files but says nothing about an
+undeclared file that exists.
+
+**Why this one went undetected.** The same reason as L-006, one level down.
+While canonical source and publication shared a directory, every intra-skill
+link resolved whether or not the compiler published its target, so no reader
+could tell the difference. Committing the publication as a separate tree is
+what made the omission observable, and a link check across the published tree
+is what turned it into a finding. A cheap invariant — every relative link in a
+published body resolves inside the publication — would have caught it years
+earlier and belongs in the compiler rather than in a consumer's CI.
