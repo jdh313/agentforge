@@ -1,0 +1,11 @@
+schema: agentforge.package/v1
+id: undeclared
+defaults:
+  name: undeclared
+  version: 1.0.0
+  description: Fixture package carrying the same key with no declaration, so it stays an unrecognized key.
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+targets:
+  claude: {}

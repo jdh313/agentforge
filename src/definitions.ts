@@ -110,6 +110,20 @@ const DocumentClass = z.strictObject({
   pattern: z.string().min(1),
 });
 
+// Frontmatter keys that belong to the authoring layer of the source repo and
+// are not addressed to any runtime. `upstream:` is the motivating case: it
+// carries adaptation provenance that a repo-local skill reads and *rewrites* in
+// canonical source, so a copy of it in published output is inert at best and
+// misleading at worst.
+//
+// Declared rather than inferred, for the same reason `documents` is: these are
+// repo-local conventions whose vocabulary the compiler has no business knowing,
+// and guessing which unrecognized keys are authoring-layer is exactly the kind
+// of intent-guessing that declaration exists to avoid. A declared key is
+// stripped from every target and reported nowhere — a deliberate strip is not a
+// loss, and only a confirmed loss is worth recording (ndr:4nshwv).
+const AuthoringKey = z.string().min(1);
+
 export const CanonicalPackage = z
   .strictObject({
     schema: z.literal('agentforge.package/v1'),
@@ -117,6 +131,7 @@ export const CanonicalPackage = z
     defaults: PackageDefaults,
     artifacts: z.array(ArtifactPattern).min(1),
     documents: z.array(DocumentClass).min(1).optional(),
+    'authoring-keys': z.array(AuthoringKey).min(1).optional(),
     payloads: PayloadDeclaration.optional(),
     targets: z
       .partialRecord(TargetName, PackageTarget)
@@ -130,6 +145,9 @@ export const CanonicalPackage = z
       'artifact projection',
       ['artifacts'],
     );
+    reportDuplicates(definition['authoring-keys'] ?? [], (key) => key, context, 'authoring key', [
+      'authoring-keys',
+    ]);
   });
 
 export type PackageDefinition = z.infer<typeof CanonicalPackage>;
