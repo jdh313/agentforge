@@ -49,48 +49,100 @@ When an entry's status changes, edit it in place and add a dated line to
 **Evidence**. Do not delete fixed entries: a register whose fixed rows are
 pruned cannot tell you whether something was ever a problem.
 
+When new evidence shows an entry was **scoped too narrowly** — wrong targets,
+wrong severity, wrong blast radius — amend it in place under the same ID rather
+than filing a second one. Two IDs for one gap is how a register starts lying
+about how many gaps it has. Lead the amended entry with a dated note saying what
+the earlier framing got wrong, so a reader who cited the old version can tell
+whether their citation still holds.
+
 ---
 
-## L-001 — `disallowed-tools` is invisible to the compiler
+## L-001 — `disallowed-tools` is destroyed at parse, on every target including Claude
 
-**Gap.** A Claude skill or command may carry a `disallowed-tools:` frontmatter
-key. `CanonicalSkillFrontmatter` has no such key, so `z.object` drops it during
-parse. It is absent from `CLAUDE_ONLY_KEYS`, so the
-`claude-only-frontmatter-stripped` warning never mentions it. It is absent from
-`CLAUDE_ONLY_CONSTRUCTS`, so a package cannot declare it as a loss even
-deliberately — `losses: [{construct: disallowed-tools}]` fails schema
-validation. The key is dropped with nothing reported, on every target.
+> Escalated 2026-08-03. This entry was first written as a Codex-scoped
+> visibility gap. Both halves of that framing were wrong: the key is destroyed
+> in the **Claude** projection too, for a runtime that supports it, and the
+> defect is already **published**. Widened rather than superseded — same ID.
 
-**Manifests as.** A skill that forbids a tool on Claude permits it everywhere
-else, with no warning at render time and no line in the compatibility report. A
-reviewer reading the rendered output has no way to tell the constraint ever
-existed.
+**Gap.** A Claude skill may carry a `disallowed-tools:` frontmatter key.
+`CanonicalSkillFrontmatter` is a **closed** `z.object` enumerating `name`,
+`description`, and thirteen Claude-only keys; `disallowed-tools` is not among
+them, so zod strips it at parse — before any target adapter runs, and before
+the construct detector sees the artifact. Everything downstream follows from
+that single fact:
 
-**Affects.** `compass`, `craft`, `librarian`.
+- No warning. The key is absent from `CLAUDE_ONLY_KEYS`, so
+  `claude-only-frontmatter-stripped` never names it — and could not, since the
+  value is already gone.
+- No declarable loss. It is absent from `CLAUDE_ONLY_CONSTRUCTS`, so
+  `losses: [{construct: disallowed-tools}]` fails schema validation. A package
+  cannot write the loss down even deliberately.
+- **No Claude output.** This is not a target-capability gap. Claude *supports*
+  `disallowed-tools`. The key is destroyed in the projection for a runtime that
+  can honor it.
+
+**Manifests as.** A skill that forbids a tool in canonical source permits it in
+every projection, including the Claude one. Nothing errors, nothing warns,
+nothing appears in the compatibility report. A reviewer reading canonical source
+sees the constraint; a reviewer reading compiled output has no way to tell it
+ever existed; and the runtime that installs the compiled output enforces
+nothing.
+
+**Affects.** Every target, including `claude`. `compass`, `craft`, `librarian`.
 
 Load-bearing for `compass`. Its `reflect` and `mull` skills enforce a
-never-web-search, never-delegate stance *only* through `disallowed-tools`. On
-Codex the stance separation that justifies keeping three separate skills would
-silently not hold — the skills would render as three near-identical bodies with
-none of the boundary that made them distinct.
+never-web-search, never-delegate stance *only* through `disallowed-tools`.
+Stripped, the stance separation that justifies keeping three separate skills
+does not hold — the skills reduce to near-identical bodies with none of the
+boundary that made them distinct.
 
-**Evidence.** Established 2026-08-02 during a drafting session. Re-verified
-2026-08-03 against the leaf renderer: a probe skill carrying
-`disallowed-tools: WebSearch, Task` rendered to both `claude` and `codex`
-produced output frontmatter of `name` + `description` only, with zero warnings
-on either target. The key does not even survive to the Claude output on the
-leaf-render path. (On the marketplace path, Claude command and agent files are
-emitted as verbatim source bytes, so the key survives there — but nothing in
-the compiler's model knows it exists, so nothing reports its absence from the
-Codex projection.)
+**Evidence.** Established 2026-08-02 during a drafting session. Escalated
+2026-08-03 on four findings:
 
-**Status.** open.
+1. **The Claude projection drops it.** Canonical source at
+   `plugins/compass/skills/reflect/SKILL.md` carries `disallowed-tools` with
+   `WebSearch`, `WebFetch`, and `Agent`. The compiled `claude/` projection of
+   that same file does not.
+2. **It is already published.**
+   `~/.claude/plugins/marketplaces/jdh/plugins/compass/skills/reflect/SKILL.md`
+   — the `jdh313/shared-claude-plugins` mirror that any other machine installs
+   from — has no `disallowed-tools`. `reflect` and `mull`, whose entire stance
+   is never-web-search and never-delegate, **ship today in a form where nothing
+   prevents either**. This is a live correctness defect in published output, not
+   a latent gap.
+3. **Local Claude does not show it** because the cc-marketplace Claude
+   marketplace is registered as a Directory pointed at the repo, so it reads
+   canonical source, where the key survives. This is the same accident as L-006:
+   a wrong-path install preserving what the right-path projection destroys.
+4. **Leaf-renderer probe.** A probe skill carrying
+   `disallowed-tools: WebSearch, Task` rendered to both `claude` and `codex`
+   produced output frontmatter of `name` + `description` only, zero warnings on
+   either target.
 
-**Where to look.** `src/schema.ts` — `CanonicalSkillFrontmatter`,
-`CLAUDE_ONLY_KEYS`. `src/definitions.ts` — `CLAUDE_ONLY_CONSTRUCTS`,
-`DeclaredLoss`. `src/render.ts:140` — the stripped-keys warning.
-`src/agent-command.ts` — `CommandFrontmatter` (a `looseObject`, so the key
-lands in `sourceFrontmatter`, which nothing consumes).
+Commands and agents are the lone exception, and only by accident: they are
+emitted as verbatim source bytes on the Claude marketplace path
+(`claude-marketplace.ts:109`), so the key rides along unexamined. Nothing in
+the compiler's model knows it exists there either.
+
+**Status.** open — and the most severe entry in this register. Every other
+entry describes something a consumer must *know*; this one describes published
+artifacts that do not do what they say.
+
+**Where to look.** `src/schema.ts` — `CanonicalSkillFrontmatter` (the closed
+`z.object`) and `CLAUDE_ONLY_KEYS`. `src/definitions.ts` —
+`CLAUDE_ONLY_CONSTRUCTS`, `DeclaredLoss`. `src/render.ts:140` — the
+stripped-keys warning that cannot fire. `src/agent-command.ts` —
+`CommandFrontmatter`, a `looseObject`, so the key lands in `sourceFrontmatter`,
+which nothing consumes.
+
+**The asymmetry is the bug.** `ndr:17dhph` deliberately validates generated
+native documents with `z.looseObject` *specifically* to retain unrecognized
+keys — see the loose schemas throughout `src/targets/codex-marketplace.ts` and
+`src/targets/claude-marketplace.ts`. The output side is open by decision. The
+input side is closed by default. Canonical frontmatter is the one place in the
+pipeline where an unrecognized key is silently discarded rather than carried,
+and it is the one place where the author's intent enters.
 
 ---
 
