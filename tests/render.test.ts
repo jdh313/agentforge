@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import matter from 'gray-matter';
 import JSZip from 'jszip';
 import { render } from '../src/render.ts';
 import { ARTIFACT_DEFS } from '../src/schema.ts';
@@ -98,6 +99,47 @@ describe('render skill', () => {
       });
     }
   }
+
+  // `disallowed-tools` was absent from the canonical schema, so zod stripped it
+  // at parse and the Claude projection of a skill that forbade a tool permitted
+  // it. Claude enforces the key, so this is a round-trip requirement, not a
+  // capability question — asserted here rather than only in a snapshot so the
+  // requirement survives a snapshot regeneration.
+  test('round-trips disallowed-tools into the Claude projection', async () => {
+    const outDir = join(TMP_ROOT, 'disallowed-tools', 'claude');
+    const result = await render({
+      sourceDir: FIXTURE_DIR('claude-rich'),
+      target: 'claude',
+      outDir,
+      artifact: 'skill',
+    });
+
+    const frontmatter = matter(readFileSync(result.outputPath, 'utf-8')).data;
+    expect(frontmatter['disallowed-tools']).toEqual(['WebSearch', 'Agent']);
+    expect(result.warnings).toEqual([]);
+  });
+
+  test('names disallowed-tools in the stripped warning for a non-Claude target', async () => {
+    const outDir = join(TMP_ROOT, 'disallowed-tools', 'codex');
+    const result = await render({
+      sourceDir: FIXTURE_DIR('claude-rich'),
+      target: 'codex',
+      outDir,
+      artifact: 'skill',
+    });
+
+    expect(matter(readFileSync(result.outputPath, 'utf-8')).data).not.toHaveProperty(
+      'disallowed-tools',
+    );
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'claude-only-frontmatter-stripped',
+          detail: expect.stringContaining('disallowed-tools'),
+        }),
+      ]),
+    );
+  });
 
   test('translates explicit-only Claude skills into Codex invocation policy', async () => {
     const outDir = join(TMP_ROOT, 'explicit-only-codex');

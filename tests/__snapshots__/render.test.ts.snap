@@ -9,6 +9,9 @@ description: >-
 argument-hint: '[issue-number]'
 disable-model-invocation: true
 allowed-tools: Bash(git *) Read
+disallowed-tools:
+  - WebSearch
+  - Agent
 ---
 
 Fix GitHub issue $ARGUMENTS following the project's coding standards.
@@ -42,7 +45,7 @@ Fix GitHub issue $ARGUMENTS following the project's coding standards.
 exports[`render skill claude-rich → opencode: warnings 1`] = `
 [
   {
-    "detail": "stripped argument-hint, disable-model-invocation, allowed-tools",
+    "detail": "stripped argument-hint, disable-model-invocation, allowed-tools, disallowed-tools",
     "kind": "claude-only-frontmatter-stripped",
     "target": "opencode",
   },
@@ -75,7 +78,7 @@ Fix GitHub issue $ARGUMENTS following the project's coding standards.
 exports[`render skill claude-rich → codex: warnings 1`] = `
 [
   {
-    "detail": "stripped argument-hint, allowed-tools",
+    "detail": "stripped argument-hint, allowed-tools, disallowed-tools",
     "kind": "claude-only-frontmatter-stripped",
     "target": "codex",
   },
@@ -108,7 +111,7 @@ Fix GitHub issue $ARGUMENTS following the project's coding standards.
 exports[`render skill claude-rich → claude-chat: warnings 1`] = `
 [
   {
-    "detail": "stripped argument-hint, disable-model-invocation, allowed-tools",
+    "detail": "stripped argument-hint, disable-model-invocation, allowed-tools, disallowed-tools",
     "kind": "claude-only-frontmatter-stripped",
     "target": "claude-chat",
   },
