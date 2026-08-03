@@ -14,7 +14,15 @@ const TargetsBlock = z
   })
   .optional();
 
-export const CanonicalSkillFrontmatter = z.object({
+// Loose on purpose. A closed object here discards an unrecognized key before any
+// target adapter runs, before `allowedFrontmatterKeys` filtering, and before the
+// construct detector scans — so a key agentforge has not learned yet ceases to
+// exist with nothing reported. That is the inverse of ndr:17dhph, which keeps
+// generated native documents open precisely to retain unrecognized keys; the
+// input side, where the author's intent enters, has the stronger claim on the
+// same rule. What each target then does with a retained-but-unrecognized key is
+// `ArtifactConfig.unrecognizedFrontmatter`, not this schema's business.
+export const CanonicalSkillFrontmatter = z.looseObject({
   name: z
     .string()
     .regex(/^[a-z0-9-]+$/, 'name must be lowercase letters, digits, and hyphens')
@@ -42,7 +50,7 @@ export const CanonicalSkillFrontmatter = z.object({
 
 export type CanonicalSkillFrontmatterT = z.infer<typeof CanonicalSkillFrontmatter>;
 
-export const CanonicalOutputStyleFrontmatter = z.object({
+export const CanonicalOutputStyleFrontmatter = z.looseObject({
   name: z
     .string()
     .regex(/^[a-z0-9-]+$/, 'name must be lowercase letters, digits, and hyphens')
@@ -91,18 +99,28 @@ export const OUTPUT_STYLE_KEYS: ReadonlySet<string> = new Set([
 export interface ArtifactDefinition {
   canonicalFilename: string;
   canonicalSchema: z.ZodType;
+  // The keys this artifact's canonical schema enumerates. Read off the schema
+  // rather than restated, so a fourteenth key is recognized by adding it in one
+  // place. A key outside this set is one agentforge has never heard of — which
+  // is a different fact from a key a particular target does not accept, and the
+  // two must not be reported with the same words.
+  canonicalKeys: ReadonlySet<string>;
   layout: 'directory' | 'file';
 }
+
+const keysOf = (schema: z.ZodObject): ReadonlySet<string> => new Set(Object.keys(schema.shape));
 
 export const ARTIFACT_DEFS: Record<ArtifactType, ArtifactDefinition> = {
   skill: {
     canonicalFilename: 'SKILL.md',
     canonicalSchema: CanonicalSkillFrontmatter,
+    canonicalKeys: keysOf(CanonicalSkillFrontmatter),
     layout: 'directory',
   },
   'output-style': {
     canonicalFilename: 'OUTPUT_STYLE.md',
     canonicalSchema: CanonicalOutputStyleFrontmatter,
+    canonicalKeys: keysOf(CanonicalOutputStyleFrontmatter),
     layout: 'file',
   },
 };

@@ -95,6 +95,13 @@ tests/
   Otherwise: deep-merge `targets.<name>` over top-level frontmatter
   (excluding `body`), filter to `allowedFrontmatterKeys`, validate with
   `outputFrontmatterSchema`.
+- Canonical frontmatter schemas are `z.looseObject`, so a key they do not
+  enumerate survives parse instead of being discarded. Where it goes is the
+  target's call: `ArtifactConfig.unrecognizedFrontmatter` is `'retain'` on
+  Claude (the source dialect — an unrecognized canonical key is a Claude key
+  agentforge has not learned yet) and defaults to `'strip'` everywhere else,
+  because emitting a key is a claim the target accepts it. Either way the key
+  is reported.
 - Body precedence: `targets.<name>.body` (full replacement) ⟶ canonical body.
   No partial templating, no prefix/suffix stitching.
 - Layout per artifact: `directory` (skill) materializes
@@ -102,7 +109,7 @@ tests/
   writes `<outDir>/<name>.md` directly, no resources.
 - Resource subdirs (`scripts/`, `references/`, `assets/`) copy passthrough
   when present (directory layout only).
-- Warnings (skill artifact, non-Claude targets only):
+- Warnings (skill artifact, non-Claude targets only, except where noted):
   - `claude-only-frontmatter-stripped` — listed Claude-only keys lost in
     output.
   - `claude-only-body-feature` — canonical body carries a construct the
@@ -113,6 +120,13 @@ tests/
     string the table does not classify (a bare `$UPPER` such as `$PATH`). Kept
     separate on purpose: an unrecognized shape is not a confirmed loss, and
     wording it as one would cry wolf on every mention of an env var.
+  - `unrecognized-frontmatter-key` — **every** target, Claude included:
+    canonical frontmatter carries a key the artifact's schema does not
+    enumerate. The detail says whether it was retained or dropped. Kept apart
+    from `claude-only-frontmatter-stripped` for the same reason
+    `unclassified-body-construct` is kept apart from `claude-only-body-feature`:
+    that warning claims Claude owns the key and the target loses it, and an
+    unrecognized key supports neither half.
 
 ## Common commands
 

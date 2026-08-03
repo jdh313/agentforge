@@ -126,10 +126,37 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
 
   const merged = deepMerge(canonicalFrontmatter as Record<string, unknown>, overrideFields);
   const body = overrideBody ?? canonicalBody;
-  const filtered = pickKeys(merged, artifactConfig.allowedFrontmatterKeys);
+  // A key the artifact's schema does not enumerate used to be gone by now — zod
+  // discarded it at parse, so there was nothing here to route or report. The
+  // canonical schemas are loose, so the key survives to this point and the
+  // target says what happens to it.
+  const unrecognized = Object.keys(merged)
+    .filter((key) => !artifactDef.canonicalKeys.has(key))
+    .toSorted();
+  const retainUnrecognized = artifactConfig.unrecognizedFrontmatter === 'retain';
+  const filtered = pickKeys(
+    merged,
+    retainUnrecognized
+      ? new Set([...artifactConfig.allowedFrontmatterKeys, ...unrecognized])
+      : artifactConfig.allowedFrontmatterKeys,
+  );
   artifactConfig.outputFrontmatterSchema.parse(filtered);
 
   const warnings: Warning[] = [];
+  // Reported on every target, Claude included: retaining a key agentforge does
+  // not recognize is a pass-through, not an endorsement, and silence would make
+  // "we understand this key" and "we have never heard of it" look identical in
+  // output. Never gated — an unrecognized key is not a confirmed loss
+  // (ndr:szdn5s), so it warns and compilation proceeds.
+  if (unrecognized.length > 0) {
+    warnings.push({
+      kind: 'unrecognized-frontmatter-key',
+      target,
+      detail: retainUnrecognized
+        ? `${unrecognized.join(', ')} not in the canonical schema; passed through to ${target} unvalidated`
+        : `${unrecognized.join(', ')} not in the canonical schema; dropped for ${target}`,
+    });
+  }
   if (target !== 'claude') {
     // A key the target translates into a native artifact is not stripped, so it
     // does not belong in a stripped warning. The capability table is asked

@@ -372,3 +372,106 @@ You are reviewing code as a senior engineer. Surface the single highest-priority
 exports[`render output-style output-style-rich → claude: warnings 1`] = `[]`;
 
 exports[`render output-style output-style-rich → claude: resources 1`] = `[]`;
+
+exports[`render skill unrecognized-key → claude: canonical 1`] = `
+"---
+name: unrecognized-key
+description: >-
+  Test fixture carrying a frontmatter key the canonical schema does not
+  enumerate.
+future-claude-key:
+  - one
+  - two
+---
+
+A plain body. The interesting part is the frontmatter key above: it stands in
+for whatever key Claude ships next, before agentforge has learned it.
+"
+`;
+
+exports[`render skill unrecognized-key → claude: warnings 1`] = `
+[
+  {
+    "detail": "future-claude-key not in the canonical schema; passed through to claude unvalidated",
+    "kind": "unrecognized-frontmatter-key",
+    "target": "claude",
+  },
+]
+`;
+
+exports[`render skill unrecognized-key → claude: resources 1`] = `[]`;
+
+exports[`render skill unrecognized-key → opencode: canonical 1`] = `
+"---
+name: unrecognized-key
+description: >-
+  Test fixture carrying a frontmatter key the canonical schema does not
+  enumerate.
+---
+
+A plain body. The interesting part is the frontmatter key above: it stands in
+for whatever key Claude ships next, before agentforge has learned it.
+"
+`;
+
+exports[`render skill unrecognized-key → opencode: warnings 1`] = `
+[
+  {
+    "detail": "future-claude-key not in the canonical schema; dropped for opencode",
+    "kind": "unrecognized-frontmatter-key",
+    "target": "opencode",
+  },
+]
+`;
+
+exports[`render skill unrecognized-key → opencode: resources 1`] = `[]`;
+
+exports[`render skill unrecognized-key → codex: canonical 1`] = `
+"---
+name: unrecognized-key
+description: >-
+  Test fixture carrying a frontmatter key the canonical schema does not
+  enumerate.
+---
+
+A plain body. The interesting part is the frontmatter key above: it stands in
+for whatever key Claude ships next, before agentforge has learned it.
+"
+`;
+
+exports[`render skill unrecognized-key → codex: warnings 1`] = `
+[
+  {
+    "detail": "future-claude-key not in the canonical schema; dropped for codex",
+    "kind": "unrecognized-frontmatter-key",
+    "target": "codex",
+  },
+]
+`;
+
+exports[`render skill unrecognized-key → codex: resources 1`] = `[]`;
+
+exports[`render skill unrecognized-key → claude-chat: canonical 1`] = `
+"---
+name: unrecognized-key
+description: >-
+  Test fixture carrying a frontmatter key the canonical schema does not
+  enumerate.
+---
+
+A plain body. The interesting part is the frontmatter key above: it stands in
+for whatever key Claude ships next, before agentforge has learned it.
+"
+`;
+
+exports[`render skill unrecognized-key → claude-chat: warnings 1`] = `
+[
+  {
+    "detail": "future-claude-key not in the canonical schema; dropped for claude-chat",
+    "kind": "unrecognized-frontmatter-key",
+    "target": "claude-chat",
+  },
+]
+`;
+
+exports[`render skill unrecognized-key → claude-chat: resources 1`] = `[]`;
