@@ -11,6 +11,15 @@ export interface ArtifactConfig {
   resourceSubdirs: ReadonlySet<string>;
   outputFrontmatterSchema: z.ZodType;
   bundle?: 'dir' | 'zip';
+  // What to do with a canonical frontmatter key `allowedFrontmatterKeys` does
+  // not list. Omitted means `strip`: emitting a key onto a target is a claim
+  // that the target accepts it, and agentforge cannot make that claim about a
+  // key it does not recognize. `retain` is an explicit per-target opt-in, held
+  // today only by Claude, which is the source dialect — an unrecognized
+  // canonical key is by construction a Claude key not yet enumerated here, so
+  // withholding it from Claude loses data a runtime would have honored.
+  // Either way the key is reported (`unrecognized-frontmatter-key`).
+  unrecognizedFrontmatter?: 'retain' | 'strip';
 }
 
 export interface TargetAdapter {

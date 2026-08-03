@@ -14,6 +14,7 @@ const SKILL_FIXTURES = [
   'with-overrides',
   'with-resources',
   'common-subset',
+  'unrecognized-key',
 ] as const;
 const OUTPUT_STYLE_FIXTURES = ['output-style-basic', 'output-style-rich'] as const;
 
@@ -138,6 +139,71 @@ describe('render skill', () => {
           detail: expect.stringContaining('disallowed-tools'),
         }),
       ]),
+    );
+  });
+
+  // The regression guard for the class `disallowed-tools` was one instance of.
+  // A closed canonical schema discarded any key it did not enumerate before a
+  // target adapter ever saw it, so key fourteen would reproduce the same defect
+  // the moment someone added it. This asserts survival on the target that
+  // accepts unrecognized keys, and a loud drop on one that does not.
+  test('an unrecognized canonical key survives into the Claude projection', async () => {
+    const outDir = join(TMP_ROOT, 'unrecognized-key', 'claude');
+    const result = await render({
+      sourceDir: FIXTURE_DIR('unrecognized-key'),
+      target: 'claude',
+      outDir,
+      artifact: 'skill',
+    });
+
+    const frontmatter = matter(readFileSync(result.outputPath, 'utf-8')).data;
+    expect(frontmatter['future-claude-key']).toEqual(['one', 'two']);
+    expect(result.warnings).toEqual([
+      {
+        kind: 'unrecognized-frontmatter-key',
+        target: 'claude',
+        detail:
+          'future-claude-key not in the canonical schema; passed through to claude unvalidated',
+      },
+    ]);
+  });
+
+  test.each([
+    'opencode',
+    'codex',
+    'claude-chat',
+  ] as const)('an unrecognized canonical key is dropped with a warning for %s', async (target) => {
+    const outDir = join(TMP_ROOT, 'unrecognized-key', target);
+    const result = await render({
+      sourceDir: FIXTURE_DIR('unrecognized-key'),
+      target,
+      outDir,
+      artifact: 'skill',
+    });
+
+    const content = await readCanonicalOutput(result.outputPath, 'SKILL.md');
+    expect(matter(content).data).not.toHaveProperty('future-claude-key');
+    expect(result.warnings).toEqual([
+      {
+        kind: 'unrecognized-frontmatter-key',
+        target,
+        detail: `future-claude-key not in the canonical schema; dropped for ${target}`,
+      },
+    ]);
+  });
+
+  // An unrecognized key is not a confirmed loss, so it must not borrow the
+  // vocabulary of one (the same split ndr:szdn5s draws for body constructs).
+  test('does not report an unrecognized key as a Claude-only stripped key', async () => {
+    const result = await render({
+      sourceDir: FIXTURE_DIR('unrecognized-key'),
+      target: 'codex',
+      outDir: join(TMP_ROOT, 'unrecognized-key', 'codex-kind'),
+      artifact: 'skill',
+    });
+
+    expect(result.warnings.map(({ kind }) => kind)).not.toContain(
+      'claude-only-frontmatter-stripped',
     );
   });
 

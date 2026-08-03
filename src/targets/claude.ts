@@ -4,7 +4,10 @@ import { z } from 'zod';
 import { ALL_CLAUDE_KEYS, OUTPUT_STYLE_KEYS } from '../schema.ts';
 import type { TargetAdapter } from './index.ts';
 
-const ClaudeSkillFrontmatter = z.object({
+// Loose for the same reason ndr:17dhph keeps generated native documents loose:
+// Claude retains unrecognized canonical keys, so the schema that validates what
+// Claude receives must not be the thing that rejects them.
+const ClaudeSkillFrontmatter = z.looseObject({
   name: z.string().optional(),
   description: z.string(),
   when_to_use: z.string().optional(),
@@ -23,7 +26,7 @@ const ClaudeSkillFrontmatter = z.object({
   shell: z.enum(['bash', 'powershell']).optional(),
 });
 
-const ClaudeOutputStyleFrontmatter = z.object({
+const ClaudeOutputStyleFrontmatter = z.looseObject({
   name: z.string().optional(),
   description: z.string(),
   'keep-coding-instructions': z.boolean().optional(),
@@ -38,12 +41,14 @@ export const claudeTarget: TargetAdapter = {
       allowedFrontmatterKeys: ALL_CLAUDE_KEYS,
       resourceSubdirs: new Set(['scripts', 'references', 'assets']),
       outputFrontmatterSchema: ClaudeSkillFrontmatter,
+      unrecognizedFrontmatter: 'retain',
     },
     'output-style': {
       outputBaseDir: () => join(homedir(), '.claude/output-styles'),
       allowedFrontmatterKeys: OUTPUT_STYLE_KEYS,
       resourceSubdirs: new Set(),
       outputFrontmatterSchema: ClaudeOutputStyleFrontmatter,
+      unrecognizedFrontmatter: 'retain',
     },
   },
 };
