@@ -371,10 +371,23 @@ while `craft:zoom-out` is correctly absent. A frontmatter diff of `reflect`'s
 `SKILL.md` shows five Claude-only keys present in the installed copy that the
 projection strips.
 
-**Status.** open. The compiler is **not** at fault — it emits the projection
-correctly. This is a setup and documentation gap in how a Codex runtime is
-pointed at that output. It belongs in this register because the tooling permits
-the mistake silently.
+**Status.** resolved for cc-marketplace 2026-08-03; the underlying gap stays
+**open**. The compiler is **not** at fault — it emits the projection correctly.
+This is a setup and documentation gap in how a Codex runtime is pointed at that
+output, and nothing in the tooling has changed to prevent the same mistake in
+another consumer, so the entry stays here rather than being marked `fixed-in`.
+
+**Evidence, 2026-08-03 (resolution).** cc-marketplace `9e83c78` commits complete
+publications under `marketplaces/` and points each runtime at its own root.
+After `codex plugin marketplace add
+/Users/jacob/Projects/cc-marketplace/marketplaces/codex`, all seven pilots
+resolve under that root, and `librarian`'s four generated `agents/openai.yaml`
+policies — the ones this entry recorded as absent — are present. Reinstalling
+`compass` puts three sidecars in `~/.codex/plugins/cache/cc-marketplace/compass/0.9.0`
+where the entry previously recorded none, and the installed `reflect/SKILL.md`
+frontmatter now carries only `name` and `description`: the projection, not the
+canonical Claude source with its five Claude-only keys. The stale
+`cc-codex-test` marketplace rooted at `/private/tmp` has been removed.
 
 **Where to look.** `src/targets/codex-marketplace.ts:519` — `compilePackage`
 builds `source: './<packageDirectory>'` from the *source* tree layout, which is
