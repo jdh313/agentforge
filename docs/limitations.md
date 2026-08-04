@@ -504,3 +504,123 @@ what made the omission observable, and a link check across the published tree
 is what turned it into a finding. A cheap invariant — every relative link in a
 published body resolves inside the publication — would have caught it years
 earlier and belongs in the compiler rather than in a consumer's CI.
+
+---
+
+## L-008 — An agent's `model:` and `effort:` pins are dropped with nothing naming them
+
+**Gap.** The construct detector reads exactly one field out of agent
+frontmatter: `tools:`, which feeds `agent-tools-filter`. Nothing reads `model:`
+or `effort:`. A target that cannot honour a model pin therefore drops it with no
+construct to attach a diagnostic to, and `CLAUDE_ONLY_CONSTRUCTS` is a closed
+enum, so an author cannot declare the loss either — a `losses` entry naming a
+construct outside that enum fails schema validation rather than passing through.
+The gap is not that the pin is unenforceable on Codex, which is expected; it is
+that neither the compiler nor the author has any way to say so.
+
+**Manifests as.** An agent the author deliberately pinned to a stronger model
+runs at whatever the session model happens to be, and no output distinguishes
+that from an agent that never expressed a preference. The
+`inferred-artifact-projection` note does say "Claude model, turn, and tool
+constraints remain in the retained source and are not enforced by Codex", but it
+is fixed boilerplate emitted for every projected agent and never names the
+pinned value — so it reads identically whether an agent pins `opus` or inherits.
+A reader auditing the diagnostics cannot tell the two apart.
+
+**Affects.** Codex, every projected agent. Confirmed today in cc-marketplace:
+`shake-tune` tiers five analyzer agents deliberately — `opus`/high on
+`belt-analyzer`, `shaper-analyzer`, and `vibration-analyzer` (the PSD and
+spectrogram interpretation roles), `inherit`/low on `axes-map-analyzer` and
+`excitate-analyzer` (mechanical checks) — and none of that survives or is
+reported. `coach` (3 agents), `debate` (4), `librarian` (4), `skillsmith` (1),
+and `spec-flow` (2) project agents through the same path; `librarian` and
+`spec-flow` have shipped this way since the pilot.
+
+**Evidence.** Verified 2026-08-03 against the pinned compiler `0ebebbb`.
+Grepping `src/compatibility.ts` for agent-frontmatter reads returns `tools` only
+(`compatibility.ts:107`); `model` and `effort` appear nowhere in the detector.
+`CLAUDE_ONLY_CONSTRUCTS` (`src/definitions.ts:59-69`) enumerates
+`agent-tools-filter`, `command-tools-filter`, `mcp-tool-reference`,
+`body-template-variable`, `body-shell-injection`, and `body-file-reference`; a
+`losses` entry's `construct` is `z.enum(CLAUDE_ONLY_CONSTRUCTS)`
+(`definitions.ts:74`), so an invented `agent-model-pin` is rejected at
+validation. A full compile of the fourteen-package Codex publication emitted no
+diagnostic naming any pinned model.
+
+**Status.** open. The workaround in the field today is prose: `shake-tune`
+documents its tiering inside the note attached to its `agent-tools-filter`
+declaration, which keeps the fact visible but attaches it to an unrelated
+construct and only works for a package that happens to declare some other loss.
+An agent-bearing package with no `tools:` filter has nowhere to put it at all.
+
+**Where to look.** `src/compatibility.ts:107` — the agent-frontmatter read,
+which handles `tools` and stops. `src/definitions.ts:59-69` — the closed
+construct enum. `src/definitions.ts:74` — the `z.enum` that makes the set closed
+in practice rather than by convention. `src/targets/codex-marketplace.ts` — the
+`inferred-artifact-projection` emitter, whose message is a constant rather than
+a description of what this particular agent lost.
+
+**Why this one went undetected.** L-001's shape, one field over. A stripped
+`disallowed-tools` was invisible because nothing enumerated the key; a dropped
+`model:` is invisible because nothing enumerates the key *and* a plausible-looking
+note already appears next to the agent, which reads like coverage. The boilerplate
+is the active harm here: a reader who sees "Claude model … constraints are not
+enforced" reasonably concludes the case is handled and reported, when the sentence
+would print identically if the field did not exist. Silence is easier to notice
+than a generic sentence that is technically true.
+
+---
+
+## L-009 — Hook-event support lives outside the capability table
+
+**Gap.** `ConstructSurface` admits `skill` and `prompt` only, so the capability
+table has no `hook` surface and `supportFor` cannot be asked whether a hook event
+exists on a target. That fact instead lives in a hardcoded `Set` inside the Codex
+marketplace adapter, whose only citation is a code comment. Every other capability
+claim in the compiler carries a per-row doc citation precisely because a target's
+behaviour cannot be observed locally; hook events are exempt from that discipline
+by accident of where they are stored.
+
+**Manifests as.** Nothing visible while the list is correct — which is the
+problem. A Claude hook event absent from the set is silently treated as having no
+Codex analog, and one wrongly present would translate into a handler for an event
+the target never fires. Neither outcome produces a diagnostic distinguishable
+from a correct one, and the three-valued `supported`/`unsupported`/`unknown`
+result that keeps the rest of the table honest is unavailable here: the `Set`
+answers yes or no, never "not established".
+
+**Affects.** Codex, every hook-bearing package. Today that is `commit`
+(`PreToolUse`) in the publication, and `langfuse` (`Stop`, `SessionStart`) in
+source but deliberately unenrolled — see the `langfuse` entry in cc-marketplace
+`docs/agentforge-compatibility.md` and `ndr:7gf4vb`. Small blast radius now,
+growing with every hook a package adds.
+
+**Evidence.** Verified 2026-08-03 against the pinned compiler `0ebebbb`.
+`src/capabilities.ts:8` defines `ConstructSurface` as `'skill' | 'prompt'`;
+no `hook` row exists anywhere in the table. `CODEX_HOOK_EVENTS`
+(`src/targets/codex-marketplace.ts:36-48`) lists `PreToolUse`,
+`PermissionRequest`, `PostToolUse`, `PreCompact`, `PostCompact`,
+`UserPromptSubmit`, `SubagentStart`, `SubagentStop`, `Stop`, `SessionStart`, and
+`SessionEnd`, above a comment reading "per the Codex hooks reference". The set
+was checked independently against the embedded JSON schemas in the codex 0.146.0
+binary and is accurate as of that version — but that check was manual and leaves
+no artifact in the repo, which is exactly what a citation column exists to fix.
+
+**Status.** open. The list is correct today; the gap is that nothing structural
+keeps it correct, and nothing records how it was last confirmed.
+
+**Where to look.** `src/capabilities.ts:8` — the two-member `ConstructSurface`
+union that excludes hooks from the table. `src/capabilities.ts` — `supportFor`
+and its three-valued return, the discipline hooks are currently outside of.
+`src/targets/codex-marketplace.ts:36-48` — the literal set and its comment-only
+citation. `src/targets/codex-marketplace.ts:53` — `SESSION_END_TIMEOUT_CAP_SECONDS`,
+a second uncited Codex behavioural fact sitting beside it.
+
+**Why this one went undetected.** The adjacent code got it right, which is what
+hid it. `HOOK_ENV_TRANSLATIONS` a few lines below pulls its data from the
+capability table and carries a comment explaining that keeping a second literal
+list "is how the fact drifted out of the model in the first place" — so the file
+demonstrates the correct pattern and the incorrect one within twenty lines of
+each other. A reviewer reading for table-sourced facts would find one and stop.
+The gap surfaced only when a package needed an answer the table could not be
+asked for, and the correct answer had to be recovered from a vendor binary.
