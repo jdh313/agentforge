@@ -26,7 +26,7 @@
     "install:bin": "bun run build && ln -sf \"$PWD/dist/agentforge\" ~/.local/bin/agentforge"
   },
   "dependencies": {
-    "commander": "^14.0.3",
+    "commander": "^15.0.0",
     "gray-matter": "^4.0.3",
     "jszip": "^3.10.1",
     "zod": "^4.4.3"
