@@ -1,0 +1,24 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "minimumReleaseAge": "7 days",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The pinned Biome schema URL in biome.json. Renovate's npm manager bumps the `@biomejs/biome` devDependency but has no idea this URL encodes the same version, so a plain bump leaves the schema one version behind — biome then validates the config against the wrong schema and the drift is silent. Same class of split as homelab's tag/digest managers: two places holding one version, only one of which any built-in manager can see.",
+      "managerFilePatterns": ["/^biome\\.json$/"],
+      "matchStrings": [
+        "\"\\$schema\":\\s*\"https://biomejs\\.dev/schemas/(?<currentValue>[\\d.]+)/schema\\.json\""
+      ],
+      "depNameTemplate": "@biomejs/biome",
+      "datasourceTemplate": "npm"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Biome moves biome.json and can churn test snapshots; keep it in its own PR rather than batched with unrelated bumps.",
+      "matchPackageNames": ["@biomejs/biome"],
+      "groupName": "biome"
+    }
+  ]
+}
