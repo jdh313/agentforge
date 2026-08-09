@@ -44,6 +44,11 @@ What became of a construct on a target: `stripped` (removed from the output) or 
 _Avoid_: disposition, effect, outcome, action
 _See_: ndr:e9jc29
 
+**Omission**
+Something in source that is absent from output with no diagnostic naming it — a file the compiler does not carry, or a declaration it never reads. A sibling of loss, not a kind of it: a loss is a *construct* whose meaning does not survive and therefore has a state, while an omission has no construct and no state, and the thing missing may be a whole file. The two also fail differently — a loss is reported and may be declared; an omission is by definition unreported, which is what makes it hard to notice.
+_Avoid_: drop, skip, silent loss
+_See_: ndr:4nshwv, docs/limitations.md L-007
+
 **Translated**
 A construct a target's translator carries into a native equivalent, named in the capability table alongside what it becomes. Not a loss, so never declared; still reported, because an unreported translation is indistinguishable from an unscanned file. Distinct from an output's `translated` producer, which says how a *file* was made rather than what became of a *construct*.
 _Avoid_: disposition, supported
@@ -56,6 +61,11 @@ _See_: ndr:8b6rtp
 **Instruction document**
 A document that tells a model what to do, as opposed to one that documents a tool. Instruction documents name intent rather than tool identifiers.
 _See_: ndr:grjvxz
+
+**Compilation report**
+A file rendering one compilation's diagnostics — and, later, its counts and omissions — for a reader outside the terminal. Written outside the publication tree, so it is never an output. Always two words in prose: bare *report* stays the verb, meaning to emit a single diagnostic. The CLI flag `--report` is exempt, since no second sense competes inside an argv token.
+_Avoid_: output report, run report, diagnostics file
+_See_: ndr:3qqk1d
 
 ## Flagged ambiguities
 
