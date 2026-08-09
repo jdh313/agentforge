@@ -5,7 +5,14 @@ import type { TargetName } from './types.ts';
 // templating for skills, so "does Codex support $ARGUMENTS" has no single
 // answer. Keying the table on target alone would encode a falsehood
 // (ndr:grjvxz's sibling finding; see .docs/model-review-2026-07-31-*).
-export type ConstructSurface = 'skill' | 'prompt';
+//
+// `hook` is a surface whose token vocabulary is lifecycle event names rather
+// than body constructs. It is here for the same reason the other two are: the
+// answer differs per target, cannot be observed locally, and so must carry a
+// citation (ndr:g6xvyk). Before this row the fact lived in a hardcoded `Set` in
+// the Codex adapter whose only citation was a code comment, and which could
+// answer yes or no but never "not established" (L-009).
+export type ConstructSurface = 'skill' | 'prompt' | 'hook';
 
 // Families are shapes, not an enumerated blocklist. A body construct that
 // matches a family but carries a token nobody listed resolves to `unknown` and
@@ -70,6 +77,25 @@ const CODEX_TRANSLATIONS: Readonly<Record<string, string>> = {
   '${CLAUDE_PLUGIN_DATA}': '${PLUGIN_DATA}',
 };
 
+// The `codex/hook` token vocabulary: Codex lifecycle event names. Lives here
+// rather than in the adapter that consumes it, because a translator reads what
+// it may translate from the table (ndr:mfchxa) — a second literal list beside
+// the translator is how this fact escaped the citation discipline to begin
+// with. See the row's `source` for how the set was established.
+const CODEX_HOOK_EVENTS = [
+  'PreToolUse',
+  'PermissionRequest',
+  'PostToolUse',
+  'PreCompact',
+  'PostCompact',
+  'UserPromptSubmit',
+  'SubagentStart',
+  'SubagentStop',
+  'Stop',
+  'SessionStart',
+  'SessionEnd',
+] as const;
+
 // One row per (target, surface). Each carries a doc citation so a future reader
 // can check the claim rather than trusting the table. Checked in deliberately —
 // fetching capability docs at compile time would make builds non-deterministic.
@@ -99,6 +125,17 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
       unsupported: ['${CLAUDE_*}', 'inline-shell', 'fenced-shell', 'file-reference', 'mcp-tool'],
       source:
         'https://learn.chatgpt.com/docs/custom-prompts — supports $ARGUMENTS, $1-$9, named $UPPER; "No inline shell execution is supported."',
+    },
+  ],
+  [
+    'codex/hook',
+    {
+      supported: CODEX_HOOK_EVENTS,
+      // Confirmed absent rather than merely unlisted, which is why it is here
+      // and not left to resolve as `unknown`.
+      unsupported: ['Notification'],
+      source:
+        'codex-cli 0.147.0 binary, `HookEventsToml` field set. Verified 2026-08-09 with: `strings -a "$(readlink -f "$(which codex)")" | grep -o \'trusted_hash[A-Za-z]\\{0,140\\}\' | sort -u`. The maximal hook-context blob reads PreToolUse PermissionRequest PostToolUse PreCompact PostCompact SessionStart SessionEnd UserPromptSubmit SubagentStart SubagentStop Stop; shorter blobs are string-interning artifacts of the same set, and their union adds nothing. `Notification` occurs 189 times in the binary overall (JSON-RPC and MCP notifications) and in zero hook blobs, so its absence is a finding rather than an omission. Supersedes the manual 0.146.0 check that left no artifact in the repo.',
     },
   ],
   [

@@ -11,4 +11,4 @@ publications:
     destination: .agents/plugins/marketplace.json
     enrollment:
       mode: include
-      packages: [guarded, notifier]
+      packages: [guarded, notifier, triage]

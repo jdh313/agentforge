@@ -83,6 +83,43 @@ describe('Codex hook projection', () => {
     expect(translated.hooks.SessionStart).toBeDefined();
     expect(JSON.stringify(translated)).not.toContain('"args"');
   });
+
+  // L-009. A confirmed-absent event and a never-ruled-on event must not report
+  // as the same thing: the `Set` this replaced could only answer yes or no, so
+  // an unreviewed event was indistinguishable from an established absence.
+  test('separates a confirmed-absent hook event from one the capability table does not classify', async () => {
+    const loaded = await loadMarketplaceDefinition(FIXTURE);
+    const plan = compileMarketplace(loaded, [
+      { target: 'claude', compilePublication: () => ({ outputs: [] }) },
+      codexMarketplaceAdapter,
+    ]);
+
+    expect(plan.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'unsupported-hook-event',
+          severity: 'warning',
+          message: expect.stringContaining('"Notification"'),
+          provenance: expect.objectContaining({ packageId: 'triage' }),
+        }),
+        expect.objectContaining({
+          code: 'unclassified-hook-event',
+          severity: 'warning',
+          message: expect.stringContaining('"PreResponse"'),
+          provenance: expect.objectContaining({ packageId: 'triage' }),
+        }),
+      ]),
+    );
+
+    // Neither gates the compile, and neither reaches Codex output; the
+    // supported sibling event still projects.
+    const hookOutput = findGenerated(plan.outputs, (destination) =>
+      destination.endsWith('/triage/hooks/hooks.json'),
+    );
+    expect(hookOutput).toBeDefined();
+    const translated = JSON.parse(hookOutput?.content ?? '{}');
+    expect(Object.keys(translated.hooks)).toEqual(['PostToolUse']);
+  });
 });
 
 function findGenerated(

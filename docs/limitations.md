@@ -573,6 +573,12 @@ than a generic sentence that is technically true.
 
 ## L-009 — Hook-event support lives outside the capability table
 
+> **Amendment history.** Written 2026-08-03. Fixed 2026-08-09 — a `hook` surface
+> now exists in the table and the adapter's `Set` is gone. The 0.147.0
+> re-verification also confirmed the old list was **correct**, which is the point
+> worth keeping: this entry was never about a wrong answer, it was about an
+> unciteable one.
+
 **Gap.** `ConstructSurface` admits `skill` and `prompt` only, so the capability
 table has no `hook` surface and `supportFor` cannot be asked whether a hook event
 exists on a target. That fact instead lives in a hardcoded `Set` inside the Codex
@@ -606,15 +612,54 @@ was checked independently against the embedded JSON schemas in the codex 0.146.0
 binary and is accurate as of that version — but that check was manual and leaves
 no artifact in the repo, which is exactly what a citation column exists to fix.
 
-**Status.** open. The list is correct today; the gap is that nothing structural
-keeps it correct, and nothing records how it was last confirmed.
+**Evidence, 2026-08-09 (resolution).** Re-probed against codex-cli **0.147.0**,
+reproducibly this time — the command is now in the row's `source` string, so the
+next reader re-runs it instead of trusting a claim. `strings` over the binary,
+filtered to hook-context blobs, yields a maximal `HookEventsToml` field set of
+exactly the eleven events the old `Set` listed. `Notification` occurs 189 times
+in the binary overall and in **zero** hook blobs: an established absence, not an
+unreviewed one, which is why it is listed as `unsupported` rather than left to
+resolve as `unknown`.
 
-**Where to look.** `src/capabilities.ts:8` — the two-member `ConstructSurface`
-union that excludes hooks from the table. `src/capabilities.ts` — `supportFor`
-and its three-valued return, the discipline hooks are currently outside of.
-`src/targets/codex-marketplace.ts:36-48` — the literal set and its comment-only
-citation. `src/targets/codex-marketplace.ts:53` — `SESSION_END_TIMEOUT_CAP_SECONDS`,
-a second uncited Codex behavioural fact sitting beside it.
+Two traps worth recording, because both produce a confident wrong answer:
+
+1. `grep -cx` against the binary returns **zero for every event**, including
+   ones Codex certainly fires. Rust interns strings into concatenated blobs, so
+   nothing is ever alone on a line. A whole-line match here reads as "Codex
+   supports no hooks at all"; the probe was broken, not the answer.
+2. Counting a bare substring is equally useless in the other direction —
+   `Notification`'s 189 hits are JSON-RPC and MCP traffic. Only adjacency to
+   `HookEventsToml` / `trusted_hash` discriminates.
+
+**Status.** fixed-in working tree (uncommitted as of 2026-08-09). A
+`codex/hook` row now carries the event set plus the probe that established it,
+and `translateHookConfiguration` branches on `supportFor('codex', 'hook', …)`.
+The three-valued return is what the `Set` could not express: an event outside
+the table now reports `unclassified-hook-event` ("we have never ruled on this")
+rather than `unsupported-hook-event` ("we established Codex does not fire
+this"). Neither gates the compile and both drop the event — emitting a handler
+for an event the target may never fire is the worse failure — per ndr:szdn5s,
+which already governs the same split for body constructs.
+
+**Not fixed: the second uncited fact.** `SESSION_END_TIMEOUT_CAP_SECONDS`
+remains a literal. `CapabilityRow` carries token lists, not numeric limits, so
+housing it would mean extending the row shape — a separate change. It now at
+least carries a verification date and a note saying why it is not in the table.
+ndr:bm3m2j governs the behavior (warn, do not clamp) wherever the number lives.
+
+**Where to look.** `src/capabilities.ts` — the three-member `ConstructSurface`
+union, `CODEX_HOOK_EVENTS`, and the `codex/hook` row with its reproducible
+citation. `src/targets/codex-marketplace.ts` — `translateHookConfiguration`'s
+three-way branch, and `SESSION_END_TIMEOUT_CAP_SECONDS` with its standing-gap
+note. `tests/codex-hook-projection.test.ts` — the `triage` fixture asserting
+that a confirmed-absent and an unclassified event report differently while a
+supported sibling still projects.
+
+**No `claude/hook` row exists, deliberately.** Nothing queries one: the Claude
+marketplace path emits hook configurations verbatim. A row would have to
+enumerate every Claude event to be honest, and an under-populated one would make
+real events resolve as `unknown` on the source dialect — worse than the absent
+row, which nothing consults.
 
 **Why this one went undetected.** The adjacent code got it right, which is what
 hid it. `HOOK_ENV_TRANSLATIONS` a few lines below pulls its data from the

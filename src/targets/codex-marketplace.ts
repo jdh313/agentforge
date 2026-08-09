@@ -1,7 +1,7 @@
 import matter from 'gray-matter';
 import { z } from 'zod';
 import { parseAgentBehavior, parseCommandBehavior } from '../agent-command.ts';
-import { translationsFor } from '../capabilities.ts';
+import { supportFor, translationsFor } from '../capabilities.ts';
 import {
   CompilationError,
   type CompilationPackage,
@@ -31,24 +31,16 @@ const PAYLOAD_POLICY = {
   requireDeclaredLosses: true,
 };
 
-// Codex lifecycle events, per the Codex hooks reference. Claude events outside
-// this set (for example `Notification`) have no Codex analog.
-const CODEX_HOOK_EVENTS = new Set([
-  'PreToolUse',
-  'PermissionRequest',
-  'PostToolUse',
-  'PreCompact',
-  'PostCompact',
-  'UserPromptSubmit',
-  'SubagentStart',
-  'SubagentStop',
-  'Stop',
-  'SessionStart',
-  'SessionEnd',
-]);
+// Which lifecycle events Codex fires is the capability table's to say
+// (ndr:g6xvyk, ndr:mfchxa); this file used to keep its own `Set`, which is how
+// the fact escaped the per-row citation discipline. See the `codex/hook` row.
 
 // Codex caps a configured `SessionEnd` timeout at three seconds; every other
-// event allows the full default.
+// event allows the full default. Verified against codex-cli 0.147.0 alongside
+// the `codex/hook` event set. Still a literal rather than a table row because
+// `CapabilityRow` carries token lists, not numeric limits — extending the row
+// shape is a separate change, and ndr:bm3m2j governs the behavior (warn, do not
+// clamp) regardless of where the number lives.
 const SESSION_END_TIMEOUT_CAP_SECONDS = 3;
 
 // `CLAUDE_PLUGIN_ROOT` / `CLAUDE_PLUGIN_DATA` survive in Codex only as legacy
@@ -263,14 +255,32 @@ function translateHookConfiguration({
   }
 
   for (const [event, groups] of Object.entries(source.hooks)) {
-    if (!CODEX_HOOK_EVENTS.has(event)) {
-      diagnostics.push({
-        code: 'unsupported-hook-event',
-        severity: 'warning',
-        packageId: packageInput.id,
-        message: `Hook event "${event}" in ${relativePath} has no Codex analog and is absent from Codex output.`,
-        retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
-      });
+    const support = supportFor('codex', 'hook', event);
+    if (support !== 'supported') {
+      // Two different claims, kept apart for the reason ndr:szdn5s keeps
+      // `unclassified-body-construct` apart from `claude-only-body-feature`:
+      // "we established Codex does not fire this" and "we have never ruled on
+      // this event" are not the same fact, and collapsing them would let an
+      // unreviewed event read as a confirmed absence. Neither gates the
+      // compile; both drop the event, because emitting a handler for an event
+      // the target may never fire is the worse failure.
+      diagnostics.push(
+        support === 'unsupported'
+          ? {
+              code: 'unsupported-hook-event',
+              severity: 'warning',
+              packageId: packageInput.id,
+              message: `Hook event "${event}" in ${relativePath} has no Codex analog and is absent from Codex output.`,
+              retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
+            }
+          : {
+              code: 'unclassified-hook-event',
+              severity: 'warning',
+              packageId: packageInput.id,
+              message: `Hook event "${event}" in ${relativePath} is not classified by the "codex/hook" capability table row, so whether Codex fires it is unestablished; the event is absent from Codex output. Add a table row entry once confirmed.`,
+              retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
+            },
+      );
       continue;
     }
 

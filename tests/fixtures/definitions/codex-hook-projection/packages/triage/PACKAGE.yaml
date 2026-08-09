@@ -1,0 +1,15 @@
+schema: agentforge.package/v1
+id: triage
+defaults:
+  name: triage
+  version: 1.0.0
+  description: Fixture package exercising unsupported and unclassified hook events.
+artifacts:
+  - type: hook
+    pattern: hooks/hooks.json
+targets:
+  codex:
+    native:
+      interface:
+        displayName: Triage
+        category: Developer Tools
