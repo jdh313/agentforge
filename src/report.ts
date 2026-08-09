@@ -16,8 +16,54 @@ const SCOPE_NOTICE =
 
 export type ReportFormat = 'json' | 'md';
 
+// What actually became of the thing, which is the question a reader brings to a
+// report. Severity does not answer it: `declared-loss` is a note and is a real
+// loss, while `translated-construct` is also a note and is not one, so grouping
+// by severity files a confirmed loss beside a non-loss. Disposition is derived
+// from the code rather than stored on the diagnostic, so the compiler stays
+// unaware a report exists — same as counts.
+export type Disposition =
+  | 'lost-undeclared'
+  | 'lost-declared'
+  | 'carried-form-changed'
+  | 'carried-unenforced'
+  | 'not-established';
+
+const DISPOSITION_BY_CODE: Readonly<Record<string, Disposition>> = {
+  'claude-only-frontmatter-stripped': 'lost-undeclared',
+  'claude-only-body-feature': 'lost-undeclared',
+  'unsupported-artifact-projection': 'lost-undeclared',
+  'unsupported-hook-event': 'lost-undeclared',
+  'declared-loss': 'lost-declared',
+  'translated-construct': 'carried-form-changed',
+  'translated-hook-handler-args': 'carried-form-changed',
+  'hook-timeout-capped-by-runtime': 'carried-form-changed',
+  'inferred-artifact-projection': 'carried-unenforced',
+  'unclassified-construct': 'not-established',
+  'unclassified-body-construct': 'not-established',
+  'unrecognized-frontmatter-key': 'not-established',
+  'unclassified-hook-event': 'not-established',
+};
+
+// Order the reader scans in: confirmed losses first, unknowns last.
+const DISPOSITION_ORDER: readonly Disposition[] = [
+  'lost-undeclared',
+  'lost-declared',
+  'carried-form-changed',
+  'carried-unenforced',
+  'not-established',
+];
+
+// An unmapped code resolves here rather than to a loss or a non-loss. Claiming
+// either would be the same mistake severity-grouping made: asserting a
+// disposition the table has not established (ndr:szdn5s).
+export function dispositionOf(code: string): Disposition {
+  return DISPOSITION_BY_CODE[code] ?? 'not-established';
+}
+
 export interface ReportedDiagnostic {
   code: string;
+  disposition: Disposition;
   severity: 'note' | 'warning';
   message: string;
   target: string;
@@ -28,6 +74,7 @@ export interface ReportedDiagnostic {
 
 export interface ReportCounts {
   total: number;
+  byDisposition: Record<string, number>;
   bySeverity: Record<string, number>;
   byCode: Record<string, number>;
 }
@@ -37,16 +84,24 @@ export interface ReportGroup {
   diagnostics: ReportedDiagnostic[];
 }
 
-export interface CompilationReport {
-  schemaVersion: number;
-  marketplaceId: string;
-  scope: string;
+export interface ReportTarget {
   counts: ReportCounts;
   packages: Record<string, ReportGroup>;
   // Diagnostics with no `packageId` — publication-level rather than
   // package-level. A sibling key rather than a synthetic package name, which
   // could collide with a real package id (companion decision row 9).
   publication?: ReportGroup;
+}
+
+export interface CompilationReport {
+  schemaVersion: number;
+  marketplaceId: string;
+  scope: string;
+  counts: ReportCounts;
+  // Keyed by target even while only one reports today: which target lost what
+  // is the question, and a single-key map says that plainly where a flat one
+  // would imply the distinction does not exist.
+  targets: Record<string, ReportTarget>;
 }
 
 export function formatFromPath(path: string): ReportFormat | undefined {
@@ -66,9 +121,31 @@ export function buildReport(plan: CompilationPlan): CompilationReport {
   const root = marketplaceRoot(plan);
   const reported = plan.diagnostics.map((diagnostic) => toReported(diagnostic, root));
 
+  const byTarget = new Map<string, ReportedDiagnostic[]>();
+  for (const diagnostic of reported) {
+    const bucket = byTarget.get(diagnostic.target);
+    if (bucket) bucket.push(diagnostic);
+    else byTarget.set(diagnostic.target, [diagnostic]);
+  }
+
+  const targets: Record<string, ReportTarget> = {};
+  for (const [target, diagnostics] of byTarget) {
+    targets[target] = buildTarget(diagnostics);
+  }
+
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    marketplaceId: plan.marketplaceId,
+    scope: SCOPE_NOTICE,
+    counts: countOf(reported),
+    targets: sortKeys(targets),
+  };
+}
+
+function buildTarget(diagnostics: readonly ReportedDiagnostic[]): ReportTarget {
   const packages: Record<string, ReportGroup> = {};
   const unscoped: ReportedDiagnostic[] = [];
-  for (const diagnostic of reported) {
+  for (const diagnostic of diagnostics) {
     if (diagnostic.packageId === undefined) {
       unscoped.push(diagnostic);
       continue;
@@ -81,18 +158,28 @@ export function buildReport(plan: CompilationPlan): CompilationReport {
 
   for (const group of Object.values(packages)) {
     group.counts = countOf(group.diagnostics);
+    // Within a package the reader wants one source file at a time, worst
+    // disposition first — not the compiler's emission order.
+    group.diagnostics.sort(bySourceThenDisposition);
   }
 
   return {
-    schemaVersion: SCHEMA_VERSION,
-    marketplaceId: plan.marketplaceId,
-    scope: SCOPE_NOTICE,
-    counts: countOf(reported),
+    counts: countOf(diagnostics),
     packages: sortKeys(packages),
     ...(unscoped.length === 0
       ? {}
       : { publication: { counts: countOf(unscoped), diagnostics: unscoped } }),
   };
+}
+
+function bySourceThenDisposition(left: ReportedDiagnostic, right: ReportedDiagnostic): number {
+  const bySource = compare(sourceOf(left), sourceOf(right));
+  if (bySource !== 0) return bySource;
+  return DISPOSITION_ORDER.indexOf(left.disposition) - DISPOSITION_ORDER.indexOf(right.disposition);
+}
+
+function sourceOf(diagnostic: ReportedDiagnostic): string {
+  return diagnostic.retainedSource?.sourcePath ?? '';
 }
 
 function marketplaceRoot(plan: CompilationPlan): string {
@@ -105,6 +192,7 @@ function marketplaceRoot(plan: CompilationPlan): string {
 function toReported(diagnostic: CompilationDiagnostic, root: string): ReportedDiagnostic {
   return {
     code: diagnostic.code,
+    disposition: dispositionOf(diagnostic.code),
     severity: diagnostic.severity,
     message: diagnostic.message,
     target: diagnostic.target,
@@ -124,17 +212,31 @@ function toReported(diagnostic: CompilationDiagnostic, root: string): ReportedDi
 }
 
 function emptyCounts(): ReportCounts {
-  return { total: 0, bySeverity: {}, byCode: {} };
+  return { total: 0, byDisposition: {}, bySeverity: {}, byCode: {} };
 }
 
 function countOf(diagnostics: readonly ReportedDiagnostic[]): ReportCounts {
+  const byDisposition: Record<string, number> = {};
   const bySeverity: Record<string, number> = {};
   const byCode: Record<string, number> = {};
-  for (const { severity, code } of diagnostics) {
+  for (const { disposition, severity, code } of diagnostics) {
+    byDisposition[disposition] = (byDisposition[disposition] ?? 0) + 1;
     bySeverity[severity] = (bySeverity[severity] ?? 0) + 1;
     byCode[code] = (byCode[code] ?? 0) + 1;
   }
-  return { total: diagnostics.length, bySeverity: sortKeys(bySeverity), byCode: sortKeys(byCode) };
+  // Disposition keeps its declared order — it is a scale from confirmed loss to
+  // unknown, and alphabetizing it would scramble that into nonsense.
+  return {
+    total: diagnostics.length,
+    byDisposition: Object.fromEntries(
+      DISPOSITION_ORDER.filter((key) => byDisposition[key] !== undefined).map((key) => [
+        key,
+        byDisposition[key] as number,
+      ]),
+    ),
+    bySeverity: sortKeys(bySeverity),
+    byCode: sortKeys(byCode),
+  };
 }
 
 // Deterministic key order so two compiles of unchanged input produce
@@ -151,10 +253,13 @@ function compare(left: string, right: string): number {
   return 0;
 }
 
-// Warnings before notes within a group: a loss is what a reader is scanning
-// for, and a note sitting above it is what the flat terminal stream already
-// gets wrong.
-const SEVERITY_ORDER: readonly ('warning' | 'note')[] = ['warning', 'note'];
+const DISPOSITION_LABEL: Readonly<Record<Disposition, string>> = {
+  'lost-undeclared': 'lost, undeclared',
+  'lost-declared': 'lost, declared',
+  'carried-form-changed': 'carried, form changed',
+  'carried-unenforced': 'carried, unenforced',
+  'not-established': 'not established',
+};
 
 function renderMarkdown(report: CompilationReport): string {
   const lines: string[] = [
@@ -162,46 +267,66 @@ function renderMarkdown(report: CompilationReport): string {
     '',
     `> ${report.scope}`,
     '',
-    ...countsTable(report.counts),
+    ...dispositionTable(report.counts),
     '',
   ];
 
-  for (const [packageId, group] of Object.entries(report.packages)) {
-    lines.push(...groupSection(`Package: ${packageId}`, group));
-  }
-  if (report.publication) {
-    lines.push(...groupSection('Publication-level (no package)', report.publication));
+  for (const [target, targetReport] of Object.entries(report.targets)) {
+    lines.push(`## Target: ${target}`, '', ...dispositionTable(targetReport.counts), '');
+    for (const [packageId, group] of Object.entries(targetReport.packages)) {
+      lines.push(...groupSection(`${target} / ${packageId}`, group));
+    }
+    if (targetReport.publication) {
+      lines.push(...groupSection(`${target} / (no package)`, targetReport.publication));
+    }
   }
 
   return `${lines.join('\n').trimEnd()}\n`;
 }
 
-function countsTable(counts: ReportCounts): string[] {
-  const rows = [
-    ...SEVERITY_ORDER.filter((severity) => counts.bySeverity[severity] !== undefined).map(
-      (severity) => `| ${severity} | ${counts.bySeverity[severity]} |`,
-    ),
-    ...Object.entries(counts.byCode).map(([code, count]) => `| \`${code}\` | ${count} |`),
+// Disposition leads, because "what became of it" is the question. Severity and
+// per-code totals stay available underneath rather than being dropped.
+function dispositionTable(counts: ReportCounts): string[] {
+  const rows = Object.entries(counts.byDisposition).map(
+    ([key, count]) => `| ${DISPOSITION_LABEL[key as Disposition] ?? key} | ${count} |`,
+  );
+  return [
+    '| Disposition | Count |',
+    '| --- | --- |',
+    ...rows,
+    `| **total** | ${counts.total} |`,
+    '',
+    `<sub>by severity: ${formatInline(counts.bySeverity)} · by code: ${formatInline(counts.byCode)}</sub>`,
   ];
-  return ['| Category | Count |', '| --- | --- |', `| **total** | ${counts.total} |`, ...rows];
 }
 
+function formatInline(record: Record<string, number>): string {
+  return Object.entries(record)
+    .map(([key, count]) => `${key} ${count}`)
+    .join(', ');
+}
+
+// One section per package, diagnostics already ordered by source file then
+// disposition, with a subheading per file so a reader can answer "what did this
+// file lose?" without reading the whole section.
 function groupSection(heading: string, group: ReportGroup): string[] {
-  const lines = [`## ${heading}`, '', ...countsTable(group.counts), ''];
-  for (const severity of SEVERITY_ORDER) {
-    const matching = group.diagnostics.filter((diagnostic) => diagnostic.severity === severity);
-    if (matching.length === 0) continue;
-    lines.push(`### ${severity} (${matching.length})`, '');
-    for (const diagnostic of matching) {
-      const source = diagnostic.retainedSource
-        ? ` — \`${diagnostic.retainedSource.sourcePath}\` (${diagnostic.retainedSource.artifactType})`
-        : '';
-      lines.push(
-        `- **\`${diagnostic.code}\`** [${diagnostic.target}]${source}`,
-        `  ${diagnostic.message}`,
-      );
+  const lines = [`### ${heading}`, '', ...dispositionTable(group.counts), ''];
+
+  let currentSource: string | undefined;
+  for (const diagnostic of group.diagnostics) {
+    const source = diagnostic.retainedSource?.sourcePath ?? '(no source file)';
+    if (source !== currentSource) {
+      currentSource = source;
+      lines.push(`#### \`${source}\``, '');
     }
-    lines.push('');
+    const artifact = diagnostic.retainedSource
+      ? ` (${diagnostic.retainedSource.artifactType})`
+      : '';
+    lines.push(
+      `- **${DISPOSITION_LABEL[diagnostic.disposition]}** — \`${diagnostic.code}\`${artifact}`,
+      `  ${diagnostic.message}`,
+    );
   }
+  lines.push('');
   return lines;
 }

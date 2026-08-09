@@ -12,8 +12,14 @@ import { join } from 'node:path';
 // nothing reported" — the report's header must say it covers translation,
 // not omission, so a reader does not mistake it for a complete account.
 //
-// `--report` does not exist yet, so every test below fails on "unknown
-// option '--report'" — the flag is unimplemented, not misused.
+// Bullets 1 and 2 were amended after the user signed off on grouping by
+// *disposition* ("what became of it") rather than severity: severity does
+// not track loss (`declared-loss` is a note and is a real loss;
+// `translated-construct` is also a note and is not one), so a severity-led
+// report would file a confirmed loss beside a non-loss. `src/report.ts`
+// derives `Disposition` from each diagnostic's code via `dispositionOf` —
+// never stored on the diagnostic — and nests JSON under `targets` rather
+// than a top-level `packages` map. Bullets 3 and 4 are unchanged.
 
 const REPO_ROOT = join(import.meta.dir, '..');
 const CLI = join(REPO_ROOT, 'src', 'cli.ts');
@@ -49,6 +55,35 @@ const EXPECTED_COUNTS_BY_CODE = {
 };
 const EXPECTED_PACKAGE_DIAGNOSTIC_COUNTS = { guarded: 2, notifier: 4, triage: 5 };
 
+// Disposition order runs confirmed-loss-first, unknown-last — a scale, not an
+// alphabet — so it is asserted as an ORDERED array, not just a set of pairs.
+const EXPECTED_DISPOSITION_ORDER = [
+  'lost-undeclared',
+  'carried-form-changed',
+  'carried-unenforced',
+  'not-established',
+] as const;
+const EXPECTED_COUNTS_BY_DISPOSITION = {
+  'lost-undeclared': 2,
+  'carried-form-changed': 5,
+  'carried-unenforced': 3,
+  'not-established': 1,
+};
+const EXPECTED_DISPOSITION_BY_CODE: Record<string, string> = {
+  'inferred-artifact-projection': 'carried-unenforced',
+  'translated-construct': 'carried-form-changed',
+  'translated-hook-handler-args': 'carried-form-changed',
+  'unsupported-hook-event': 'lost-undeclared',
+  'unclassified-hook-event': 'not-established',
+};
+// Human-readable labels the markdown renderer must use next to each bullet.
+const DISPOSITION_LABEL: Record<string, string> = {
+  'lost-undeclared': 'lost, undeclared',
+  'carried-form-changed': 'carried, form changed',
+  'carried-unenforced': 'carried, unenforced',
+  'not-established': 'not established',
+};
+
 let temporaryRoot: string;
 
 beforeAll(() => {
@@ -62,7 +97,7 @@ afterAll(() => {
 });
 
 describe('compile --report', () => {
-  test('writes a JSON report carrying every diagnostic with retainedSource intact, plus counts by code and by severity', () => {
+  test('writes a JSON report carrying every diagnostic with retainedSource intact, plus counts by code, severity and disposition', () => {
     const outDir = join(temporaryRoot, 'json-report-out');
     const reportPath = join(temporaryRoot, 'json-report', 'report.json');
 
@@ -77,19 +112,34 @@ describe('compile --report', () => {
     expect(report.marketplaceId).toBe('codex-hook-projection');
     expect(report.counts.bySeverity).toEqual(EXPECTED_COUNTS_BY_SEVERITY);
     expect(report.counts.byCode).toEqual(EXPECTED_COUNTS_BY_CODE);
+    expect(report.counts.byDisposition).toEqual(EXPECTED_COUNTS_BY_DISPOSITION);
 
-    const packageIds = Object.keys(report.packages).toSorted();
+    // Disposition is a scale from confirmed loss to unknown, so its key order
+    // is meaningful and must survive serialization rather than being sorted.
+    expect(Object.keys(report.counts.byDisposition)).toEqual([...EXPECTED_DISPOSITION_ORDER]);
+
+    // Target is the outer axis. Only codex reports today; claude is the source
+    // dialect and passes source through, so it contributes nothing.
+    expect(Object.keys(report.targets)).toEqual(['codex']);
+    const codex = report.targets.codex;
+    expect(codex.counts.byDisposition).toEqual(EXPECTED_COUNTS_BY_DISPOSITION);
+
+    const packageIds = Object.keys(codex.packages).toSorted();
     expect(packageIds).toEqual(['guarded', 'notifier', 'triage']);
 
     let totalDiagnostics = 0;
     for (const [packageId, expectedCount] of Object.entries(EXPECTED_PACKAGE_DIAGNOSTIC_COUNTS)) {
-      const pkg = report.packages[packageId];
+      const pkg = codex.packages[packageId];
       expect(pkg.diagnostics).toHaveLength(expectedCount);
       totalDiagnostics += pkg.diagnostics.length;
 
       for (const diagnostic of pkg.diagnostics) {
         expect(typeof diagnostic.code).toBe('string');
         expect(['note', 'warning']).toContain(diagnostic.severity);
+        // Disposition is derived from the code, and must not merely track
+        // severity — `declared-loss` is a note that IS a loss, and
+        // `translated-construct` is a note that is not one.
+        expect(diagnostic.disposition).toBe(EXPECTED_DISPOSITION_BY_CODE[diagnostic.code]);
         expect(diagnostic.retainedSource).toBeDefined();
         expect(diagnostic.retainedSource.artifactType).toBe('hook');
         // Relative to the marketplace root, not an absolute machine-specific path.
@@ -100,7 +150,7 @@ describe('compile --report', () => {
     expect(totalDiagnostics).toBe(EXPECTED_TOTAL_DIAGNOSTICS);
   });
 
-  test('writes a markdown report grouped by package then severity, led by a counts table', () => {
+  test('writes a markdown report grouped by target, package and source file, led by a disposition table', () => {
     const outDir = join(temporaryRoot, 'md-report-out');
     const reportPath = join(temporaryRoot, 'md-report', 'report.md');
 
@@ -111,39 +161,40 @@ describe('compile --report', () => {
 
     const content = readFileSync(reportPath, 'utf8');
 
-    // A leading counts table: a markdown table mentioning each severity and
-    // its count, before any per-package section.
-    const tableIndex = content.indexOf('|');
+    // The document leads with a disposition table, not a severity one. The
+    // first table header in the file is the assertion: severity grouping filed
+    // a confirmed loss beside a non-loss, which is what disposition replaced.
+    const tableIndex = content.indexOf('| Disposition | Count |');
     expect(tableIndex).toBeGreaterThan(-1);
-    expect(content).toMatch(/\|.*note.*\|.*6.*\|/i);
-    expect(content).toMatch(/\|.*warning.*\|.*5.*\|/i);
+    expect(content.indexOf('|')).toBe(tableIndex);
+    for (const [key, count] of Object.entries(EXPECTED_COUNTS_BY_DISPOSITION)) {
+      expect(content).toContain(`| ${DISPOSITION_LABEL[key]} | ${count} |`);
+    }
+    // Severity survives as a secondary count rather than being dropped.
+    expect(content).toMatch(/by severity:.*note 6.*warning 5/);
 
-    const guardedIndex = content.indexOf('guarded');
-    const notifierIndex = content.indexOf('notifier');
-    const triageIndex = content.indexOf('triage');
-    expect(guardedIndex).toBeGreaterThan(-1);
-    expect(notifierIndex).toBeGreaterThan(-1);
-    expect(triageIndex).toBeGreaterThan(-1);
-    // Grouped by package: the counts table precedes every package section.
-    expect(tableIndex).toBeLessThan(guardedIndex);
-    expect(tableIndex).toBeLessThan(notifierIndex);
-    expect(tableIndex).toBeLessThan(triageIndex);
+    // Target is the outer grouping level, above every package section.
+    const targetIndex = content.indexOf('## Target: codex');
+    expect(targetIndex).toBeGreaterThan(tableIndex);
 
-    // Within the triage section (mixed note + warning), severity grouping
-    // means every "warning" mention in that section precedes every "note"
-    // mention that belongs to a different, already-passed package, or is
-    // its own subheading — check triage's own warning and note subsections
-    // both appear after the triage heading.
-    const triageSection = content.slice(triageIndex);
-    const nextPackageOffset = Math.min(
-      ...[guardedIndex, notifierIndex]
-        .filter((index) => index > triageIndex)
-        .map((index) => index - triageIndex),
-      triageSection.length,
-    );
-    const triageBody = triageSection.slice(0, nextPackageOffset);
-    expect(triageBody).toMatch(/warning/i);
-    expect(triageBody).toMatch(/note/i);
+    const guardedIndex = content.indexOf('### codex / guarded');
+    const notifierIndex = content.indexOf('### codex / notifier');
+    const triageIndex = content.indexOf('### codex / triage');
+    expect(guardedIndex).toBeGreaterThan(targetIndex);
+    expect(notifierIndex).toBeGreaterThan(guardedIndex);
+    expect(triageIndex).toBeGreaterThan(notifierIndex);
+
+    // Source file is the innermost grouping level, so a reader can answer
+    // "what did this file lose?" without reading the whole package section.
+    const triageBody = content.slice(triageIndex);
+    expect(triageBody).toContain('#### `packages/triage/hooks/hooks.json`');
+
+    // Each diagnostic carries its disposition label, and triage's two
+    // confirmed losses sort ahead of its unestablished one.
+    const lostIndex = triageBody.indexOf(`**${DISPOSITION_LABEL['lost-undeclared']}**`);
+    const unknownIndex = triageBody.indexOf(`**${DISPOSITION_LABEL['not-established']}**`);
+    expect(lostIndex).toBeGreaterThan(-1);
+    expect(unknownIndex).toBeGreaterThan(lostIndex);
   });
 
   test('never writes the report anywhere under the -o publication tree', () => {

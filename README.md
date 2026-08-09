@@ -39,6 +39,58 @@ bun run src/cli.ts compile tests/fixtures/definitions/cc-marketplace/MARKETPLACE
 bun run src/cli.ts check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-marketplace
 ```
 
+### Compilation reports
+
+`compile` accepts `--report <path>`, writing one compile's diagnostics to a file
+instead of leaving them in terminal scrollback. The format is taken from the
+extension — `.json` for machine consumers, `.md` for reading — and an
+unrecognized extension is an error rather than a guess.
+
+```sh
+bun run src/cli.ts compile <marketplace> --out /tmp/out --report /tmp/report.md
+bun run src/cli.ts compile <marketplace> --out /tmp/out --report /tmp/report.json
+```
+
+The report is written to its own path, never under `--out`, so it is not an
+output and never ships to an installer. Paths inside it are relative to the
+marketplace root, and key order is deterministic, so two compiles of unchanged
+input produce byte-identical reports.
+
+Both formats are organised around **disposition** — what actually became of the
+thing — rather than severity, which does not track it: `declared-loss` is a note
+and is a real loss, while `translated-construct` is also a note and is not one.
+
+| Disposition | Meaning |
+| --- | --- |
+| `lost-undeclared` | destroyed in translation, with nothing declaring it |
+| `lost-declared` | destroyed, but acknowledged in the package's `losses` |
+| `carried-form-changed` | survives as a native equivalent |
+| `carried-unenforced` | survives in the output, unenforced by the target |
+| `not-established` | construct-shaped, and never ruled on |
+
+Disposition is derived from the diagnostic code rather than stored on the
+diagnostic, so the compiler stays unaware a report exists. A code the mapping
+does not know resolves to `not-established`, never to a loss — asserting
+otherwise is the error the severity axis made.
+
+The JSON carries `schemaVersion`, marketplace-wide `counts`, and diagnostics
+nested by target, then package (with a sibling `publication` key for any that
+are not package-scoped). Markdown adds a third level, grouping by source file so
+a reader can ask "what did this file lose, to this target?". Each entry keeps
+its `retainedSource`, so a finding traces back to the canonical file that
+produced it.
+
+Target is a grouping level even though only Codex reports today. Claude is the
+source dialect and passes source through, so it contributes nothing — a
+single-key map says that plainly where a flat one would imply the distinction
+does not exist.
+
+**What a report does not cover.** It is built from the compiler's diagnostics,
+so it records translation — what survived and what was lost in it — and says
+nothing about *omission*: a source file or declaration absent from output with no
+diagnostic naming it. Every report states this limit in its own header. See
+`docs/limitations.md` L-007.
+
 ## Build and install
 
 AgentForge can be compiled into a standalone Bun binary. `bun run install:bin`
