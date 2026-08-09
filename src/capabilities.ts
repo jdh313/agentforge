@@ -131,11 +131,14 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
     'codex/hook',
     {
       supported: CODEX_HOOK_EVENTS,
-      // Confirmed absent rather than merely unlisted, which is why it is here
-      // and not left to resolve as `unknown`.
-      unsupported: ['Notification'],
+      // Confirmed absent rather than merely unlisted, which is why these are
+      // here and not left to resolve as `unknown`. Claude has ~31 hook events
+      // to Codex's 11; the rest stay off this list on purpose, because "we
+      // established Codex lacks it" is a stronger claim than the evidence
+      // supports for them. See docs/hook-event-parity.md for the full split.
+      unsupported: ['Notification', 'WorktreeCreate', 'WorktreeRemove'],
       source:
-        'codex-cli 0.147.0 binary, `HookEventsToml` field set. Verified 2026-08-09 with: `strings -a "$(readlink -f "$(which codex)")" | grep -o \'trusted_hash[A-Za-z]\\{0,140\\}\' | sort -u`. The maximal hook-context blob reads PreToolUse PermissionRequest PostToolUse PreCompact PostCompact SessionStart SessionEnd UserPromptSubmit SubagentStart SubagentStop Stop; shorter blobs are string-interning artifacts of the same set, and their union adds nothing. `Notification` occurs 189 times in the binary overall (JSON-RPC and MCP notifications) and in zero hook blobs, so its absence is a finding rather than an omission. Supersedes the manual 0.146.0 check that left no artifact in the repo.',
+        'codex-cli 0.147.0 binary, `HookEventsToml` field set. Verified 2026-08-09 with: `strings -a "$(readlink -f "$(which codex)")" | grep -o \'trusted_hash[A-Za-z]\\{0,140\\}\' | sort -u`. The maximal hook-context blob reads PreToolUse PermissionRequest PostToolUse PreCompact PostCompact SessionStart SessionEnd UserPromptSubmit SubagentStart SubagentStop Stop; shorter blobs are string-interning artifacts of the same set, and their union adds nothing. `Notification` occurs 189 times in the binary overall and in zero hook blobs — the hook-adjacent hits are `HookStartedNotification` / `HookCompletedNotification`, Codex\'s internal IPC types announcing that a hook ran, not a configurable trigger — so its absence is a finding rather than an omission. `WorktreeCreate` / `WorktreeRemove` are likewise absent from every hook blob while running live as Claude hooks in ~/.claude/settings.json, which is what makes them established rather than merely unlisted. Supersedes the manual 0.146.0 check that left no artifact in the repo.',
     },
   ],
   [

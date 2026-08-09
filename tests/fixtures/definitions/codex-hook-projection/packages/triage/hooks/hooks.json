@@ -21,6 +21,16 @@
         ]
       }
     ],
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/seed.sh"
+          }
+        ]
+      }
+    ],
     "PreResponse": [
       {
         "hooks": [

@@ -102,6 +102,14 @@ describe('Codex hook projection', () => {
           message: expect.stringContaining('"Notification"'),
           provenance: expect.objectContaining({ packageId: 'triage' }),
         }),
+        // A Claude event with no Codex analog, established by probe rather
+        // than assumed from its absence in the supported list.
+        expect.objectContaining({
+          code: 'unsupported-hook-event',
+          severity: 'warning',
+          message: expect.stringContaining('"WorktreeCreate"'),
+          provenance: expect.objectContaining({ packageId: 'triage' }),
+        }),
         expect.objectContaining({
           code: 'unclassified-hook-event',
           severity: 'warning',
