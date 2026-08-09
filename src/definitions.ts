@@ -249,7 +249,11 @@ export function isResourcePath(root: string, path: string): boolean {
   return TEXT_EXTENSIONS.some((extension) => relative.toLowerCase().endsWith(extension));
 }
 
-function portableRelativePath(root: string, path: string): string {
+// Exported for the compilation report, which relativizes source paths against
+// the marketplace root. Same rule deliberately: a path outside the root is left
+// absolute rather than walked back with `../`, so a report never claims a file
+// lives somewhere it does not.
+export function portableRelativePath(root: string, path: string): string {
   const normalizedRoot = root.endsWith('/') ? root : `${root}/`;
   return path.startsWith(normalizedRoot) ? path.slice(normalizedRoot.length) : path;
 }

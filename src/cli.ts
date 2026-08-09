@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { Command } from 'commander';
 import matter from 'gray-matter';
 import { checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
@@ -9,6 +9,7 @@ import { type LoadedMarketplace, loadMarketplaceDefinition } from './definitions
 import { claudeMarketplaceAdapter, codexMarketplaceAdapter } from './marketplace-adapters.ts';
 import { materializeCompilation } from './materializer.ts';
 import { render } from './render.ts';
+import { formatFromPath, type ReportFormat, renderReport } from './report.ts';
 import { ARTIFACT_DEFS } from './schema.ts';
 import { allTargets } from './targets/index.ts';
 import {
@@ -165,18 +166,44 @@ program
     collect,
     [],
   )
-  .action(async (marketplace: string, opts: { out: string; publication: string[] }) => {
-    try {
-      const loaded = await loadMarketplaceDefinition(resolve(marketplace));
-      const selected = selectPublications(loaded, opts.publication);
-      const plan = compileSelectedMarketplace(selected);
-      materializeCompilation(plan, resolve(opts.out));
-      console.log(formatCompilation(plan));
-    } catch (error) {
-      console.error(error instanceof Error ? error.message : String(error));
-      process.exitCode = 1;
-    }
-  });
+  .option(
+    '--report <path>',
+    'write a compilation report; format inferred from the .json or .md extension',
+  )
+  .action(
+    async (marketplace: string, opts: { out: string; publication: string[]; report?: string }) => {
+      try {
+        // Resolved before compiling: an unusable path should fail before any
+        // output is materialized, not after.
+        const report = opts.report === undefined ? undefined : reportTarget(opts.report);
+        const loaded = await loadMarketplaceDefinition(resolve(marketplace));
+        const selected = selectPublications(loaded, opts.publication);
+        const plan = compileSelectedMarketplace(selected);
+        materializeCompilation(plan, resolve(opts.out));
+        if (report) {
+          // Written through its own resolved path rather than under `--out`,
+          // so the report is never an output and never ships to an installer.
+          mkdirSync(dirname(report.path), { recursive: true });
+          writeFileSync(report.path, renderReport(plan, report.format));
+          console.log(`[report] wrote ${report.path}`);
+        }
+        console.log(formatCompilation(plan));
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 1;
+      }
+    },
+  );
+
+// An unrecognized extension is an error rather than a default. Guessing which
+// format was meant is how a CI job ends up parsing markdown as JSON.
+const reportTarget = (path: string): { path: string; format: ReportFormat } => {
+  const format = formatFromPath(path);
+  if (!format) {
+    throw new Error(`unsupported report format for ${path}; use a .json or .md path`);
+  }
+  return { path: resolve(path), format };
+};
 
 program
   .command('check <marketplace>')
