@@ -26,6 +26,13 @@ representative marketplace corpus. The CLI materializes those plans as atomic,
 complete-snapshot marketplace builds and checks materialized trees for native
 validity and drift without writing.
 
+## Requirements
+
+- [Bun](https://bun.sh) 1.3 or newer — the runtime, test runner, and bundler.
+  No Node.js toolchain is required.
+- No other system dependencies. Optional integrations (the `claude` CLI, a
+  sibling `cc-marketplace` checkout) are called out where they apply.
+
 ## Quick start
 
 ```sh
@@ -457,3 +464,25 @@ AGENTFORGE_CC_MARKETPLACE_PROJECT=../cc-marketplace bun test tests/cli.test.ts
 | `opencode` | `~/.config/opencode/skills` |
 | `codex` | `~/.agents/skills` |
 | `claude-chat` | `~/Downloads/claude-skills` |
+
+## Contributing
+
+Issues and pull requests are welcome. Before opening a PR:
+
+```sh
+bun install
+bun test          # 150 tests, snapshot-backed
+bun run typecheck
+bun run lint
+```
+
+Snapshots are committed; regenerate intentional output changes with
+`bun test --update-snapshots` and review the diff before committing.
+
+Architectural decisions live in `decisions/` as atomic records rather than in
+commit messages or docs — see `docs/limitations.md` for the companion register
+of known gaps. A change that reverses a recorded decision should say so.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
