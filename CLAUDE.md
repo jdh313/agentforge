@@ -27,7 +27,8 @@ preferences; only narrows or extends here.
   `agents/openai.yaml` policy.
 - Real-corpus migration, `agent` artifact, `mcp` artifact, watch mode, Nix
   integration, and GitHub publishing are M2+.
-- Full milestone plan: `~/.claude/plans/stateful-meandering-hamming.md`.
+- Milestone planning is tracked outside this repo; the bullets above are the
+  published status.
 
 ## Stack
 

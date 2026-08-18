@@ -14,7 +14,7 @@ binds:
 supersedes: []
 superseded_by: []
 derived_from:
-  - https://app.shortcut.com/junglelan/story/34
+  - shortcut:SC-34
 informed_by: []
 ---
 

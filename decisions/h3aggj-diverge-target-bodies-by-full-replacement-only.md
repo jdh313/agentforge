@@ -15,7 +15,7 @@ binds:
 supersedes: []
 superseded_by: []
 derived_from:
-  - https://linear.app/junglelan/issue/JUN-354/agentforge-per-target-body-templating
+  - linear:JUN-354
   - .docs/2026-07-31-per-target-body-templating-companion.md
 informed_by:
   - cp4rfn

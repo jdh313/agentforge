@@ -49,6 +49,13 @@ When an entry's status changes, edit it in place and add a dated line to
 **Evidence**. Do not delete fixed entries: a register whose fixed rows are
 pruned cannot tell you whether something was ever a problem.
 
+Entries, decision atoms, and test comments sometimes cite a `.docs/…` companion
+document. Those are pre-implementation contracts that stay local to the
+authoring checkout and are not published with this repo; treat such a citation
+as provenance for where a decision was settled, not as a reference you are
+expected to follow. The same holds for `linear:` and `shortcut:` refs, which
+point into a private tracker.
+
 When new evidence shows an entry was **scoped too narrowly** — wrong targets,
 wrong severity, wrong blast radius — amend it in place under the same ID rather
 than filing a second one. Two IDs for one gap is how a register starts lying
@@ -139,11 +146,11 @@ that escalated it, verified 2026-08-03:
    `plugins/compass/skills/reflect/SKILL.md` carries `disallowed-tools` with
    `WebSearch`, `WebFetch`, and `Agent`. The compiled `claude/` projection of
    that same file did not.
-2. **It reached publication.**
-   `~/.claude/plugins/marketplaces/jdh/plugins/compass/skills/reflect/SKILL.md`
-   — the `jdh313/shared-claude-plugins` mirror that any other machine installs
-   from — had no `disallowed-tools`. `reflect` and `mull`, whose entire stance
-   is never-web-search and never-delegate, shipped in a form where nothing
+2. **It reached publication.** The installed copy under
+   `~/.claude/plugins/marketplaces/<mirror>/plugins/compass/skills/reflect/SKILL.md`
+   — the published mirror that other machines install from — had no
+   `disallowed-tools`. `reflect` and `mull`, whose entire stance is
+   never-web-search and never-delegate, shipped in a form where nothing
    prevented either. That was a live correctness defect in published output, not
    a latent gap. **Republishing is the remaining work; the code fix alone does
    not repair already-published artifacts.**
@@ -365,7 +372,7 @@ path, which is why `craft`'s `grok` and `zoom-out` policies work by accident
 while `librarian`'s four generated policies do not.
 
 **Evidence.** Verified 2026-08-03. `codex plugin marketplace list` shows
-`cc-marketplace` rooted at `/Users/jacob/Projects/cc-marketplace`. Compiling
+`cc-marketplace` rooted at `<cc-marketplace-repo>`. Compiling
 `MARKETPLACE.yaml` with the pinned compiler emits
 `codex/plugins/compass/skills/reflect/agents/openai.yaml`, and the same for
 `mull` and `converge`; the installed cache at
@@ -397,7 +404,7 @@ on an already-installed plugin rebuilds it in place.
 **Evidence, 2026-08-03 (resolution).** cc-marketplace `9e83c78` commits complete
 publications under `marketplaces/` and points each runtime at its own root.
 After `codex plugin marketplace add
-/Users/jacob/Projects/cc-marketplace/marketplaces/codex`, all seven pilots
+<cc-marketplace-repo>/marketplaces/codex`, all seven pilots
 resolve under that root and the publication carries all ten generated
 `agents/openai.yaml` policies.
 

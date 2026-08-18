@@ -15,7 +15,7 @@ binds:
 supersedes: []
 superseded_by: []
 derived_from:
-  - https://linear.app/junglelan/issue/JUN-353/agentforge-finish-the-claude-only-construct-detection-surface
+  - linear:JUN-353
 informed_by:
   - rm06pf
 ---

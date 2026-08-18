@@ -5,3 +5,10 @@ dist/
 *.log
 .DS_Store
 /tmp/
+
+# Local-only, never published
+CLAUDE.local.md
+.claude/settings.local.json
+.docs/
+.env
+.env.*
