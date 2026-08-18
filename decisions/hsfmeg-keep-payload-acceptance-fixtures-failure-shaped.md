@@ -15,8 +15,7 @@ binds:
   - tests/cli.test.ts
 supersedes: []
 superseded_by: []
-derived_from:
-  - SC-33
+derived_from: []
 informed_by:
   - 2z51xz
   - 3y1yvr

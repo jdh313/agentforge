@@ -14,7 +14,6 @@ binds:
 supersedes: []
 superseded_by: []
 derived_from:
-  - linear:JUN-304
   - git:15447e5
 informed_by:
   - cp4rfn

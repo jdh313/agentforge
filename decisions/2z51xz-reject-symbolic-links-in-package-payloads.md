@@ -15,8 +15,7 @@ binds:
   - src/targets/package-payload.ts
 supersedes: []
 superseded_by: []
-derived_from:
-  - shortcut:SC-31
+derived_from: []
 informed_by: []
 ---
 

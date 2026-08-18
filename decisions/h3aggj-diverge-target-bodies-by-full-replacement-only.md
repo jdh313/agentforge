@@ -15,7 +15,6 @@ binds:
 supersedes: []
 superseded_by: []
 derived_from:
-  - linear:JUN-354
   - .docs/2026-07-31-per-target-body-templating-companion.md
 informed_by:
   - cp4rfn

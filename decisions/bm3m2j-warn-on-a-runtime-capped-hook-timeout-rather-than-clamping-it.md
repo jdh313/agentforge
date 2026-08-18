@@ -13,7 +13,6 @@ binds:
 supersedes: []
 superseded_by: []
 derived_from:
-  - linear:JUN-341
   - git:5192aad
 informed_by:
   - 2vv99y

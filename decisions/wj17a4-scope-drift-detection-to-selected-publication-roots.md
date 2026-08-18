@@ -15,8 +15,7 @@ binds:
   - src/cli.ts
 supersedes: []
 superseded_by: []
-derived_from:
-  - linear:JUN-306
+derived_from: []
 informed_by:
   - s1g5yf
 ---

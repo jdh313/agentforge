@@ -15,7 +15,6 @@ binds:
 supersedes: []
 superseded_by: []
 derived_from:
-  - JUN-357
   - .docs/model-review-2026-07-31-construct-disposition.md
 informed_by:
   - 4nshwv

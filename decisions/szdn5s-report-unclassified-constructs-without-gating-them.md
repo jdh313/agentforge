@@ -13,8 +13,7 @@ binds:
   - src/targets/package-payload.ts
 supersedes: []
 superseded_by: []
-derived_from:
-  - linear:JUN-353
+derived_from: []
 informed_by:
   - 4nshwv
 ---

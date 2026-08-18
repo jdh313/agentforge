@@ -13,8 +13,7 @@ binds:
   - src/definitions.ts
 supersedes: []
 superseded_by: []
-derived_from:
-  - linear:JUN-353
+derived_from: []
 informed_by:
   - 2vv99y
 ---

@@ -15,8 +15,7 @@ binds:
   - src/targets/**
 supersedes: []
 superseded_by: []
-derived_from:
-  - SC-32
+derived_from: []
 informed_by: []
 ---
 

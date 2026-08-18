@@ -15,7 +15,6 @@ binds:
 supersedes: []
 superseded_by: []
 derived_from:
-  - shortcut:SC-30
   - git:0695d63
 informed_by:
   - wvs5an

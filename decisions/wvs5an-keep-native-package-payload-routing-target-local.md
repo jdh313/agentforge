@@ -18,7 +18,6 @@ binds:
 supersedes: []
 superseded_by: []
 derived_from:
-  - linear:JUN-302
   - git:5c4da89
 informed_by:
   - 0sqm54

@@ -14,8 +14,7 @@ binds:
   - src/targets/codex-marketplace.ts
 supersedes: []
 superseded_by: []
-derived_from:
-  - JUN-357
+derived_from: []
 informed_by:
   - yf5cf4
   - 62pj9p

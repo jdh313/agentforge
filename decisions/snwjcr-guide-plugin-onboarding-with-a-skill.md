@@ -14,8 +14,7 @@ binds:
   - .agents/skills/agentforge-onboard-plugin/**
 supersedes: []
 superseded_by: []
-derived_from:
-  - shortcut:SC-34
+derived_from: []
 informed_by: []
 ---
 
