@@ -112,6 +112,9 @@ Run `bun run build` to compile the binary without installing it. The `dist/`
 directory is gitignored; because the installed command is a symlink, later
 builds update it in place without another install step.
 
+AgentForge is not published to npm. Install it via `bun link` (development)
+or `bun run install:bin` (compiled binary).
+
 ## Guided plugin onboarding
 
 Invoke `$agentforge-onboard-plugin` from this repository to migrate an existing
@@ -482,6 +485,12 @@ Snapshots are committed; regenerate intentional output changes with
 Architectural decisions live in `decisions/` as atomic records rather than in
 commit messages or docs — see `docs/limitations.md` for the companion register
 of known gaps. A change that reverses a recorded decision should say so.
+
+Code comments and commit messages cite these records as `ndr:<id>`, where the
+id is the filename prefix under `decisions/` (for example `ndr:4nshwv` is
+`decisions/4nshwv-*.md`). Older commits and tests also mention `JUN-<n>` and
+`SC-<n>`; those are ids from a private issue tracker, kept for history, and do
+not resolve to anything public.
 
 ## License
 
