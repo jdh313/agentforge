@@ -60,9 +60,16 @@ src/
                       plus body shapes, over every artifact type and text
                       resource file. Returns occurrences carrying `path:line`.
   deep-merge.ts     — small typed deep-merge (no lodash)
+  package-payload-plan.ts — per-target plan of which marketplace-package
+                      files ship where, from `payloads` declarations
+                      (source path, destination, executable bit, collision
+                      handling)
   agent-command.ts  — canonical agent/command behavior parsers
   render.ts         — pipeline: parse → validate → merge → filter →
                       emit → copy resources (directory layout) → warnings
+  report.ts         — builds the `compile --report` output (JSON/MD),
+                      grouping compiler diagnostics by disposition (what
+                      became of the thing) rather than severity
   cli.ts            — commander entry: render, validate, list-targets;
                       artifact inferred from canonical filename, or
                       passed via `--artifact`
