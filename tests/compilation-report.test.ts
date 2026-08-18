@@ -6,7 +6,7 @@ import { join } from 'node:path';
 // Coverage for the compilation report companion contract (Fibery #31):
 // `agentforge compile --report <path>` renders that compile's diagnostics to
 // a file outside the -o publication tree, format inferred from extension.
-// See .docs/2026-08-09-compilation-report-companion.md and CONTEXT.md's
+// See CONTEXT.md's
 // "compilation report" / "omission" glossary entries; L-007 is
 // docs/limitations.md's "files the compiler does not carry are dropped with
 // nothing reported" — the report's header must say it covers translation,

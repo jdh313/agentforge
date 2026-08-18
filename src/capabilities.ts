@@ -4,7 +4,7 @@ import type { TargetName } from './types.ts';
 // documents `$ARGUMENTS` / `$1`-`$9` on custom prompts and documents no
 // templating for skills, so "does Codex support $ARGUMENTS" has no single
 // answer. Keying the table on target alone would encode a falsehood
-// (ndr:grjvxz's sibling finding; see .docs/model-review-2026-07-31-*).
+// (ndr:grjvxz's sibling finding).
 //
 // `hook` is a surface whose token vocabulary is lifecycle event names rather
 // than body constructs. It is here for the same reason the other two are: the
