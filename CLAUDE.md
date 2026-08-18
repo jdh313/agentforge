@@ -39,7 +39,7 @@ preferences; only narrows or extends here.
   `z.looseObject({…})` for open shapes.
 - **Lint/format:** biome 2.4 (schema URL pinned in `biome.json` — bump on
   upgrade).
-- **VCS:** Standard Git repository.
+- **VCS:** jj-colocated Git repository (see § VCS notes).
 
 ## Architecture
 
@@ -267,8 +267,8 @@ unrecognized key keeps the category-2 behavior above.
 
 ## VCS notes
 
-- Default to `git` for all commits in this repo. The user's `git-workflow.md`
-  rules apply.
-- `origin` is `git@github.com:jdh313/agentforge.git`, tracked by `main`. Push
-  only when asked; there is no CI, so a push is publication rather than a
-  trigger.
+- The repo is jj-colocated: use `jj` commands for local history (a hook
+  rejects bare `git`). The user's `git-workflow.md` rules apply.
+- `origin` is `git@github.com:jdh313/agentforge.git`, tracked by `main`. The
+  repo is public; push only when asked. CI (`.github/workflows/ci.yml`) runs
+  tests, typecheck, and lint on push and pull requests.
