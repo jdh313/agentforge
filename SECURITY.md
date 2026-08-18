@@ -4,7 +4,9 @@
 
 Report suspected vulnerabilities privately through GitHub Security Advisories:
 open the repository's **Security** tab and choose **Report a vulnerability**.
-Please do not open a public issue for a security report.
+If you cannot use the advisory form, email <accts@jdh.onl> with "agentforge
+security" in the subject. Please do not open a public issue for a security
+report.
 
 Expect an acknowledgement within a week. There is no bounty programme.
 
