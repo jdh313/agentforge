@@ -3,6 +3,8 @@ name: Release
 on:
   push:
     branches: [main]
+  # Manual retry lever: a startup_failure run cannot be rerun from the UI.
+  workflow_dispatch:
 
 permissions:
   contents: write
