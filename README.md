@@ -452,12 +452,19 @@ publications:
   written at `<marketplace-dir>/<destination>` with every plugin `source`
   (Claude) or `source.path` (Codex) rewritten from `./<package-dir>` to
   `./<out-dir relative to the marketplace>/<publication-id>/<package-dir>`.
+  Only `./`-relative sources are re-anchored: an object form's discriminator,
+  a remote URL, or an absolute path already resolves without reference to the
+  manifest's location and passes through untouched. A source that walks
+  upward (`../`) is rejected.
 - **Why both.** The nested copy stays byte-identical because a local install
   (`claude plugin marketplace add ./marketplaces/claude`) resolves against the
   nested root; the root copy serves the clone-root install.
-- **Precondition.** `--out` must be inside the marketplace directory, so a
-  rewritten source never starts with `../`. Otherwise the compile fails before
-  materializing anything.
+- **Preconditions.** `--out` must be inside the marketplace directory, so a
+  rewritten source never starts with `../`; the compile fails before
+  materializing anything otherwise. No two publications may declare
+  `root-manifest` at the same `destination` — the marketplace root holds one
+  copy, and the second would silently overwrite the first — which is rejected
+  when the definition loads.
 - **Blast radius.** Only that one file is written at the marketplace root.
   AgentForge never stages, prunes, or otherwise manages its siblings, and
   `check` reports drift or absence of the root copy without treating unrelated

@@ -310,6 +310,7 @@ function fixturePlan(sourcePath: string): CompilationPlan {
   return {
     marketplaceId: 'fixture',
     diagnostics: [],
+    rootOutputs: [],
     outputs: [
       {
         kind: 'generated',
@@ -340,6 +341,7 @@ function claudePlan(): CompilationPlan {
   return {
     marketplaceId: 'fixture',
     diagnostics: [],
+    rootOutputs: [],
     outputs: [
       generated(
         'claude/.claude-plugin/marketplace.json',
@@ -367,6 +369,7 @@ function codexPlan(): CompilationPlan {
   return {
     marketplaceId: 'fixture',
     diagnostics: [],
+    rootOutputs: [],
     outputs: [
       {
         kind: 'generated',

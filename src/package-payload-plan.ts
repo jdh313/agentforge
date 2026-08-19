@@ -1,6 +1,7 @@
 import { lstatSync } from 'node:fs';
-import { dirname, join, posix, relative, sep } from 'node:path';
+import { dirname, join, posix } from 'node:path';
 import type { PackageDefinition } from './definitions.ts';
+import { portableRelative } from './paths.ts';
 import type { TargetName } from './types.ts';
 
 export interface PackagePayload {
@@ -218,10 +219,6 @@ function containsControlCharacter(value: string): boolean {
     const code = character.charCodeAt(0);
     return code <= 31 || code === 127;
   });
-}
-
-function portableRelative(from: string, to: string): string {
-  return relative(from, to).split(sep).join('/');
 }
 
 function inspectSource(

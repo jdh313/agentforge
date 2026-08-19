@@ -1,6 +1,7 @@
 import { dirname } from 'node:path';
 import type { CompilationDiagnostic, CompilationPlan } from './compiler.ts';
 import { portableRelativePath } from './definitions.ts';
+import { rootDisplayPath } from './root-manifest.ts';
 
 // Bump when the JSON shape changes in a way a parser would notice. An
 // unversioned machine format turns the first shape change into a silent
@@ -139,8 +140,8 @@ export function buildReport(plan: CompilationPlan): CompilationReport {
     targets[target] = buildTarget(diagnostics);
   }
 
-  const rootManifests = (plan.rootOutputs ?? [])
-    .map(({ destination }) => `<root>/${destination}`)
+  const rootManifests = plan.rootOutputs
+    .map(({ destination }) => rootDisplayPath(destination))
     .toSorted(compare);
 
   return {

@@ -164,6 +164,64 @@ describe('root-manifest publications', () => {
     const report = JSON.parse(readFileSync(reportPath, 'utf8')) as { rootManifests?: string[] };
     expect(report.rootManifests).toEqual(['<root>/.claude-plugin/marketplace.json']);
   });
+
+  test('passes an object-form plugin source through unrewritten', () => {
+    const root = stageMarketplace('object-form-source', { rootManifest: true });
+    // A `native:` overlay replaces the plugins array wholesale, which is the
+    // only way to get a non-`./` source into the registry from a definition.
+    patchDefinition(
+      root,
+      CLAUDE_NATIVE,
+      `${CLAUDE_NATIVE}      plugins:
+        - name: local
+          version: 1.0.0
+          source: ./packages/local
+        - name: remote
+          version: 2.0.0
+          source:
+            source: github
+            repo: owner/remote
+`,
+    );
+
+    const result = runCli('compile', join(root, 'MARKETPLACE.yaml'), '--out', join(root, 'out'));
+
+    expect(result.exitCode).toBe(0);
+    const document = JSON.parse(
+      readFileSync(join(root, '.claude-plugin', 'marketplace.json'), 'utf8'),
+    ) as { plugins: Record<string, unknown>[] };
+    expect(document.plugins).toEqual([
+      { name: 'local', version: '1.0.0', source: './out/claude/packages/local' },
+      { name: 'remote', version: '2.0.0', source: { source: 'github', repo: 'owner/remote' } },
+    ]);
+  });
+
+  test('rejects two root-manifest publications sharing a destination', () => {
+    const root = stageMarketplace('duplicate-root-destination', { rootManifest: true });
+    // A second claude publication pointed at the same marketplace-root path:
+    // whichever compiled last would silently overwrite the other.
+    patchDefinition(
+      root,
+      'publications:\n',
+      `publications:
+  - id: claude-mirror
+    target: claude
+    destination: .claude-plugin/marketplace.json
+    root-manifest: true
+    enrollment:
+      mode: include
+      packages: [commit]
+`,
+    );
+
+    const result = runCli('compile', join(root, 'MARKETPLACE.yaml'), '--out', join(root, 'out'));
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      'publications "claude-mirror" and "claude" both declare root-manifest at destination ".claude-plugin/marketplace.json"',
+    );
+    expect(existsSync(join(root, '.claude-plugin', 'marketplace.json'))).toBe(false);
+  });
 });
 
 // A copy of the committed fixture: the flag makes the compiler write into the
@@ -183,6 +241,19 @@ function stageMarketplace(
   if (!source.includes(anchor)) throw new Error(`no ${publication} publication in the fixture`);
   writeFileSync(definitionPath, source.replace(anchor, `${anchor}    root-manifest: true\n`));
   return root;
+}
+
+// The claude publication's `native:` block in the committed fixture.
+const CLAUDE_NATIVE = `    native:
+      owner:
+        email: jacob@example.com
+`;
+
+function patchDefinition(root: string, find: string, replace: string): void {
+  const definitionPath = join(root, 'MARKETPLACE.yaml');
+  const source = readFileSync(definitionPath, 'utf8');
+  if (!source.includes(find)) throw new Error(`fixture does not contain ${JSON.stringify(find)}`);
+  writeFileSync(definitionPath, source.replace(find, replace));
 }
 
 function managedFileCount(stdout: string): number {
