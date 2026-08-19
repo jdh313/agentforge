@@ -45,6 +45,7 @@ describe('marketplace materialization', () => {
     expect(result).toEqual({
       outputRoot: outDir,
       filesWritten: ['.agents/plugins/marketplace.json', 'packages/commit/assets/source.txt'],
+      rootFilesWritten: [],
     });
     expect(readFileSync(join(outDir, '.agents/plugins/marketplace.json'), 'utf8')).toBe(
       '{"name":"fixture"}\n',

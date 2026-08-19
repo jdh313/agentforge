@@ -4,12 +4,13 @@ import { dirname, join, resolve } from 'node:path';
 import { Command } from 'commander';
 import matter from 'gray-matter';
 import { checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
-import { type CompilationPlan, compileMarketplace } from './compiler.ts';
+import { type CompilationPlan, compileMarketplace, type RootAnchoredOutput } from './compiler.ts';
 import { type LoadedMarketplace, loadMarketplaceDefinition } from './definitions.ts';
 import { claudeMarketplaceAdapter, codexMarketplaceAdapter } from './marketplace-adapters.ts';
 import { materializeCompilation } from './materializer.ts';
 import { render } from './render.ts';
 import { formatFromPath, type ReportFormat, renderReport } from './report.ts';
+import { buildRootManifestOutput } from './root-manifest.ts';
 import { ARTIFACT_DEFS } from './schema.ts';
 import { allTargets } from './targets/index.ts';
 import {
@@ -108,13 +109,26 @@ const formatCompilation = (plan: CompilationPlan): string => {
     const publication = output.provenance.publicationId;
     outputCounts.set(publication, (outputCounts.get(publication) ?? 0) + 1);
   }
+  for (const output of plan.rootOutputs ?? []) {
+    const publication = output.provenance.publicationId;
+    outputCounts.set(publication, (outputCounts.get(publication) ?? 0) + 1);
+  }
 
   const lines = [...outputCounts]
     .toSorted(([left], [right]) => compareStrings(left, right))
     .map(([publication, count]) => `[${publication}] wrote ${count} files`);
+  for (const output of plan.rootOutputs ?? []) {
+    lines.push(
+      `[${output.provenance.publicationId}] root manifest ${formatRootPath(output.destination)}`,
+    );
+  }
   lines.push(...formatCompilationDiagnostics(plan));
   return lines.join('\n');
 };
+
+// Marketplace-root-relative, and said so: the same path under `--out` means a
+// different file, and an unprefixed listing would not distinguish them.
+const formatRootPath = (destination: string): string => `<root>/${destination}`;
 
 const formatCompilationDiagnostics = (plan: CompilationPlan): string[] => {
   const lines: string[] = [];
@@ -129,9 +143,14 @@ const formatCompilationDiagnostics = (plan: CompilationPlan): string[] => {
   return lines;
 };
 
-const compileSelectedMarketplace = (loaded: LoadedMarketplace): CompilationPlan => {
+const compileSelectedMarketplace = (
+  loaded: LoadedMarketplace,
+  outputRoot: string,
+): CompilationPlan => {
   const outputs: CompilationPlan['outputs'][number][] = [];
   const diagnostics: CompilationPlan['diagnostics'][number][] = [];
+  const rootOutputs: RootAnchoredOutput[] = [];
+  const marketplaceRoot = dirname(loaded.path);
 
   for (const publication of loaded.definition.publications.toSorted((left, right) =>
     compareStrings(left.id, right.id),
@@ -144,6 +163,17 @@ const compileSelectedMarketplace = (loaded: LoadedMarketplace): CompilationPlan 
       claudeMarketplaceAdapter,
       codexMarketplaceAdapter,
     ]);
+    if (publication['root-manifest']) {
+      const registry = plan.outputs.find(
+        ({ destination }) => destination === publication.destination,
+      );
+      if (!registry) {
+        throw new Error(
+          `publication ${JSON.stringify(publication.id)} declares root-manifest, but produced no registry at ${JSON.stringify(publication.destination)}`,
+        );
+      }
+      rootOutputs.push(buildRootManifestOutput(publication, registry, marketplaceRoot, outputRoot));
+    }
     outputs.push(
       ...plan.outputs.map((output) => ({
         ...output,
@@ -153,7 +183,12 @@ const compileSelectedMarketplace = (loaded: LoadedMarketplace): CompilationPlan 
     diagnostics.push(...plan.diagnostics);
   }
 
-  return { marketplaceId: loaded.definition.id, outputs, diagnostics };
+  return {
+    marketplaceId: loaded.definition.id,
+    outputs,
+    diagnostics,
+    ...(rootOutputs.length === 0 ? {} : { rootOutputs }),
+  };
 };
 
 program
@@ -178,7 +213,7 @@ program
         const report = opts.report === undefined ? undefined : reportTarget(opts.report);
         const loaded = await loadMarketplaceDefinition(resolve(marketplace));
         const selected = selectPublications(loaded, opts.publication);
-        const plan = compileSelectedMarketplace(selected);
+        const plan = compileSelectedMarketplace(selected, resolve(opts.out));
         materializeCompilation(plan, resolve(opts.out));
         if (report) {
           // Written through its own resolved path rather than under `--out`,
@@ -227,16 +262,17 @@ program
       try {
         const loaded = await loadMarketplaceDefinition(resolve(marketplace));
         const selected = selectPublications(loaded, opts.publication);
-        const plan = compileSelectedMarketplace(selected);
         const outputRoot = resolve(opts.out);
+        const plan = compileSelectedMarketplace(selected, outputRoot);
         const result = checkMarketplace(plan, outputRoot);
 
         for (const publication of selected.definition.publications.toSorted((left, right) =>
           compareStrings(left.id, right.id),
         )) {
-          const count = result.filesChecked.filter((path) =>
-            path.startsWith(`${publication.id}/`),
-          ).length;
+          const count =
+            result.filesChecked.filter((path) => path.startsWith(`${publication.id}/`)).length +
+            result.rootFilesChecked.filter(({ publicationId }) => publicationId === publication.id)
+              .length;
           const status = result.issues.some(({ publicationId }) => publicationId === publication.id)
             ? 'failed'
             : 'ok';
@@ -250,18 +286,27 @@ program
           for (const publication of selected.definition.publications.filter(
             ({ target }) => target === 'claude',
           )) {
-            const native = Bun.spawnSync({
-              cmd: ['claude', 'plugin', 'validate', '--strict', join(outputRoot, publication.id)],
-              stdout: 'pipe',
-              stderr: 'pipe',
-            });
-            if (native.stdout.length > 0) process.stdout.write(native.stdout);
-            if (native.stderr.length > 0) process.stderr.write(native.stderr);
-            if (native.exitCode !== 0) {
-              failed = true;
-              console.error(
-                `error [${publication.id}] claude-native-validation: claude plugin validate --strict exited ${native.exitCode}`,
-              );
+            // A root manifest is a second installable marketplace root, so it
+            // gets its own pass: validating the nested root says nothing about
+            // the rewritten sources in the root copy.
+            const roots = [
+              join(outputRoot, publication.id),
+              ...(publication['root-manifest'] ? [dirname(loaded.path)] : []),
+            ];
+            for (const root of roots) {
+              const native = Bun.spawnSync({
+                cmd: ['claude', 'plugin', 'validate', '--strict', root],
+                stdout: 'pipe',
+                stderr: 'pipe',
+              });
+              if (native.stdout.length > 0) process.stdout.write(native.stdout);
+              if (native.stderr.length > 0) process.stderr.write(native.stderr);
+              if (native.exitCode !== 0) {
+                failed = true;
+                console.error(
+                  `error [${publication.id}] claude-native-validation: claude plugin validate --strict exited ${native.exitCode}`,
+                );
+              }
             }
           }
         }

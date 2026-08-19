@@ -124,10 +124,20 @@ export interface TargetCompilerAdapter {
   compilePublication(input: PublicationCompilation): TargetCompilationResult;
 }
 
+// An output anchored to the marketplace root (the directory holding
+// MARKETPLACE.yaml) rather than to `--out`. Kept in its own list rather than
+// flagged inside `outputs`, so every consumer that walks `outputs` keeps its
+// "everything under the output root" assumption intact and has to opt in to the
+// second anchor deliberately. Only `root-manifest` publications produce these.
+export interface RootAnchoredOutput extends DesiredGeneratedOutput {
+  anchor: 'marketplace-root';
+}
+
 export interface CompilationPlan {
   marketplaceId: string;
   outputs: readonly DesiredOutput[];
   diagnostics: readonly CompilationDiagnostic[];
+  rootOutputs?: readonly RootAnchoredOutput[];
 }
 
 export class CompilationError extends Error {
