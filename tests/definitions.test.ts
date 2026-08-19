@@ -321,6 +321,28 @@ describe('marketplace definitions', () => {
     ]);
   });
 
+  test('defaults root-manifest to false and rejects a camelCase spelling', () => {
+    const source = readFileSync(join(MARKETPLACE_FIXTURE, 'MARKETPLACE.yaml'), 'utf8');
+    const parsed = parseMarketplaceDefinition(source);
+    expect(parsed.publications.map((publication) => publication['root-manifest'])).toEqual([
+      false,
+      false,
+    ]);
+
+    const declared = parseMarketplaceDefinition(
+      source.replace('  - id: claude\n', '  - id: claude\n    root-manifest: true\n'),
+    );
+    expect(declared.publications[0]?.['root-manifest']).toBe(true);
+
+    // Kebab, following `authoring-keys`; the strict object rejects the other
+    // spelling rather than silently ignoring it.
+    expect(() =>
+      parseMarketplaceDefinition(
+        source.replace('  - id: claude\n', '  - id: claude\n    rootManifest: true\n'),
+      ),
+    ).toThrow('Unrecognized key');
+  });
+
   test('rejects duplicate publication ids', () => {
     const source = readFileSync(join(MARKETPLACE_FIXTURE, 'MARKETPLACE.yaml'), 'utf8').replace(
       '  - id: codex',

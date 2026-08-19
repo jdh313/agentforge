@@ -426,8 +426,44 @@ agentforge list-targets
   alone. Validation errors and drift exit nonzero, while translation notes and
   warnings remain nonfatal.
 - `--claude-native` additionally runs `claude plugin validate --strict` for
-  selected Claude publications. It is opt-in so the default check does not
+  selected Claude publications, and for a `root-manifest` publication also
+  validates the marketplace root. It is opt-in so the default check does not
   require Claude Code to be installed.
+
+### `root-manifest` publications
+
+A publication may declare `root-manifest: true`:
+
+```yaml
+publications:
+  - id: claude
+    target: claude
+    destination: .claude-plugin/marketplace.json
+    root-manifest: true
+```
+
+- **Why.** `claude plugin marketplace add owner/repo` reads only
+  `<clone-root>/.claude-plugin/marketplace.json` and resolves each plugin
+  `source` against the directory holding `.claude-plugin/`. A registry that
+  exists only at `<out-dir>/<publication-id>/.claude-plugin/marketplace.json`
+  is therefore not installable from a clone.
+- **What it writes.** Everything under `<out-dir>/<publication-id>/` is
+  unchanged, nested registry included. A *second* copy of that registry is
+  written at `<marketplace-dir>/<destination>` with every plugin `source`
+  (Claude) or `source.path` (Codex) rewritten from `./<package-dir>` to
+  `./<out-dir relative to the marketplace>/<publication-id>/<package-dir>`.
+- **Why both.** The nested copy stays byte-identical because a local install
+  (`claude plugin marketplace add ./marketplaces/claude`) resolves against the
+  nested root; the root copy serves the clone-root install.
+- **Precondition.** `--out` must be inside the marketplace directory, so a
+  rewritten source never starts with `../`. Otherwise the compile fails before
+  materializing anything.
+- **Blast radius.** Only that one file is written at the marketplace root.
+  AgentForge never stages, prunes, or otherwise manages its siblings, and
+  `check` reports drift or absence of the root copy without treating unrelated
+  root files as unexpected output.
+- `compile` lists it as `[<publication>] root manifest <root>/<destination>`,
+  and `compile --report` records it under `rootManifests`.
 
 ## Beta acceptance corpus
 

@@ -11,11 +11,13 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, parse, relative, resolve, sep } from 'node:path';
-import type { CompilationPlan, DesiredOutput } from './compiler.ts';
+import type { CompilationPlan, DesiredOutput, RootAnchoredOutput } from './compiler.ts';
 
 export interface MaterializationResult {
   outputRoot: string;
   filesWritten: string[];
+  // Absolute paths of marketplace-root-anchored outputs (root manifests).
+  rootFilesWritten: string[];
 }
 
 export class MaterializationError extends Error {
@@ -56,10 +58,39 @@ export function materializeCompilation(
     }
   }
 
+  // Written after the staged tree publishes, and one file at a time: the
+  // marketplace root is the user's repository, so a root manifest overwrites
+  // exactly its own path and never stages, swaps, or prunes siblings.
+  const rootFilesWritten = (plan.rootOutputs ?? []).map((output) => materializeRootOutput(output));
+
   return {
     outputRoot: destinationRoot,
     filesWritten: plan.outputs.map(({ destination }) => destination),
+    rootFilesWritten,
   };
+}
+
+function materializeRootOutput(output: RootAnchoredOutput): string {
+  const marketplaceRoot = dirname(resolve(output.provenance.marketplacePath));
+  const destination = resolve(marketplaceRoot, output.destination);
+  requireContainedPath(
+    marketplaceRoot,
+    destination,
+    output.destination,
+    'root output destination escapes the marketplace root',
+  );
+  try {
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(destination, output.content, 'utf8');
+    chmodSync(destination, 0o644);
+  } catch (cause) {
+    const detail = cause instanceof Error ? `: ${cause.message}` : '';
+    throw new MaterializationError(
+      `failed to write root manifest for publication "${output.provenance.publicationId}" at ${destination}${detail}`,
+      { cause },
+    );
+  }
+  return destination;
 }
 
 function materializeOutput(output: DesiredOutput, stagingRoot: string): void {

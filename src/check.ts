@@ -1,8 +1,8 @@
 import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import matter from 'gray-matter';
 import type { z } from 'zod';
-import type { CompilationPlan, DesiredOutput } from './compiler.ts';
+import type { CompilationPlan, DesiredOutput, RootAnchoredOutput } from './compiler.ts';
 import { ClaudeMarketplace, ClaudePluginManifest } from './targets/claude-marketplace.ts';
 import { CodexMarketplace, CodexPluginManifest } from './targets/codex-marketplace.ts';
 import { getArtifactConfig } from './targets/index.ts';
@@ -28,9 +28,18 @@ export interface MarketplaceCheckIssue {
   message: string;
 }
 
+// A marketplace-root-anchored file that was checked. Kept apart from
+// `filesChecked` because those paths are relative to the output root, and the
+// same string under a different anchor names a different file.
+export interface RootFileChecked {
+  publicationId: string;
+  path: string;
+}
+
 export interface MarketplaceCheckResult {
   outputRoot: string;
   filesChecked: string[];
+  rootFilesChecked: RootFileChecked[];
   issues: MarketplaceCheckIssue[];
 }
 
@@ -103,14 +112,106 @@ export function checkMarketplace(
   issues.push(...validateManifestParity(plan, outputRoot));
   issues.push(...validateArtifactFrontmatter(plan, outputRoot));
 
+  const rootFilesChecked: RootFileChecked[] = [];
+  for (const output of plan.rootOutputs ?? []) {
+    rootFilesChecked.push({
+      publicationId: output.provenance.publicationId,
+      path: rootDisplayPath(output.destination),
+    });
+    issues.push(...checkRootOutput(output));
+  }
+
   issues.sort(
     (left, right) => compareStrings(left.path, right.path) || compareStrings(left.code, right.code),
   );
   return {
     outputRoot,
     filesChecked: [...expected.keys()].toSorted(compareStrings),
+    rootFilesChecked: rootFilesChecked.toSorted((left, right) =>
+      compareStrings(left.path, right.path),
+    ),
     issues,
   };
+}
+
+// Marketplace-root-anchored, and labelled as such: the same destination under
+// `--out` is a different file, and an unlabelled path would conflate them.
+function rootDisplayPath(destination: string): string {
+  return `<root>/${destination}`;
+}
+
+// Drift and absence, checked exactly as for a managed output. What is
+// deliberately not checked is the root's *siblings*: the marketplace root is
+// the user's repository, not a directory the compiler owns, so an unmanaged
+// file beside the manifest is not an `unexpected-output`.
+function checkRootOutput(output: RootAnchoredOutput): MarketplaceCheckIssue[] {
+  const marketplaceRoot = dirname(output.provenance.marketplacePath);
+  const actualPath = join(marketplaceRoot, ...output.destination.split('/'));
+  const path = rootDisplayPath(output.destination);
+  const base = {
+    publicationId: output.provenance.publicationId,
+    ...(output.provenance.packageId === undefined
+      ? {}
+      : { packageId: output.provenance.packageId }),
+    path,
+  };
+
+  if (!existsSync(actualPath)) {
+    return [{ ...base, code: 'missing-output', message: 'managed root manifest is missing' }];
+  }
+  if (!lstatSync(actualPath).isFile()) {
+    return [
+      {
+        ...base,
+        code: 'unsafe-output-entry',
+        message: 'managed root manifest must be a regular file',
+      },
+    ];
+  }
+
+  const issues: MarketplaceCheckIssue[] = [];
+  if (process.platform !== 'win32') {
+    const actualMode = lstatSync(actualPath).mode & 0o777;
+    if (actualMode !== 0o644) {
+      issues.push({
+        ...base,
+        code: 'changed-output-mode',
+        message: `managed root manifest mode is ${formatMode(actualMode)}; expected ${formatMode(0o644)}`,
+      });
+    }
+  }
+  if (!readFileSync(actualPath).equals(Buffer.from(output.content, 'utf8'))) {
+    issues.push({
+      ...base,
+      code: 'changed-output',
+      message: 'managed root manifest differs from the compilation plan',
+    });
+  }
+
+  const native = nativeDocumentFor(output);
+  if (native) {
+    let document: unknown;
+    try {
+      document = JSON.parse(readFileSync(actualPath, 'utf8'));
+    } catch {
+      issues.push({
+        ...base,
+        code: 'invalid-native-document',
+        message: `invalid ${native.label}: <root>: invalid JSON`,
+      });
+      return issues;
+    }
+    const result = native.schema.safeParse(document);
+    if (!result.success) {
+      const issue = result.error.issues[0];
+      issues.push({
+        ...base,
+        code: 'invalid-native-document',
+        message: `invalid ${native.label}: ${issue?.path.join('.') || '<root>'}: ${issue?.message ?? 'validation failed'}`,
+      });
+    }
+  }
+  return issues;
 }
 
 function validateArtifactFrontmatter(
@@ -379,22 +480,28 @@ function nativeDocumentFor(
   output: DesiredOutput,
 ): { schema: z.ZodType; label: string } | undefined {
   if (output.target === 'claude') {
-    if (output.destination.endsWith('/.claude-plugin/marketplace.json')) {
+    if (hasTail(output.destination, '.claude-plugin/marketplace.json')) {
       return { schema: ClaudeMarketplace, label: 'Claude marketplace registry' };
     }
-    if (output.destination.endsWith('/.claude-plugin/plugin.json')) {
+    if (hasTail(output.destination, '.claude-plugin/plugin.json')) {
       return { schema: ClaudePluginManifest, label: 'Claude plugin manifest' };
     }
   }
   if (output.target === 'codex') {
-    if (output.destination.endsWith('/.agents/plugins/marketplace.json')) {
+    if (hasTail(output.destination, '.agents/plugins/marketplace.json')) {
       return { schema: CodexMarketplace, label: 'Codex marketplace registry' };
     }
-    if (output.destination.endsWith('/.codex-plugin/plugin.json')) {
+    if (hasTail(output.destination, '.codex-plugin/plugin.json')) {
       return { schema: CodexPluginManifest, label: 'Codex plugin manifest' };
     }
   }
   return undefined;
+}
+
+// A root manifest's destination is anchored at the marketplace root, so it is
+// the bare tail with no publication prefix in front of it.
+function hasTail(destination: string, tail: string): boolean {
+  return destination === tail || destination.endsWith(`/${tail}`);
 }
 
 function issueFor(

@@ -174,13 +174,27 @@ const Enrollment = z.discriminatedUnion('mode', [
     }),
 ]);
 
+// A second copy of the publication's marketplace registry, written at the
+// marketplace root with every plugin source rewritten to point into the
+// compiled output. Claude Code's `plugin marketplace add owner/repo` reads only
+// `<clone-root>/.claude-plugin/marketplace.json` and resolves each plugin
+// source against the directory holding `.claude-plugin/`, so a registry that
+// lives only under `<out>/<publication>/` cannot be installed from a clone.
+// Opt-in: the nested copy stays byte-identical, because a local-directory
+// install (`claude plugin marketplace add ./marketplaces/claude`) resolves
+// against the nested root and must keep working.
+const RootManifest = z.boolean();
+
 const Publication = z.strictObject({
   id: Slug,
   target: TargetName,
   destination: z.string().min(1),
   enrollment: Enrollment,
   native: JsonObject.optional(),
+  'root-manifest': RootManifest.default(false),
 });
+
+export type PublicationDefinition = z.infer<typeof Publication>;
 
 export const CanonicalMarketplace = z
   .strictObject({

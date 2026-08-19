@@ -97,6 +97,12 @@ export interface CompilationReport {
   schemaVersion: number;
   marketplaceId: string;
   scope: string;
+  // Marketplace-root-anchored manifests written by `root-manifest`
+  // publications. Listed separately from everything else because they are the
+  // only outputs that do not live under `--out`, and a reader scanning the
+  // report for what was written would otherwise never see them. Omitted
+  // entirely when no publication declares one.
+  rootManifests?: string[];
   counts: ReportCounts;
   // Keyed by target even while only one reports today: which target lost what
   // is the question, and a single-key map says that plainly where a flat one
@@ -133,10 +139,15 @@ export function buildReport(plan: CompilationPlan): CompilationReport {
     targets[target] = buildTarget(diagnostics);
   }
 
+  const rootManifests = (plan.rootOutputs ?? [])
+    .map(({ destination }) => `<root>/${destination}`)
+    .toSorted(compare);
+
   return {
     schemaVersion: SCHEMA_VERSION,
     marketplaceId: plan.marketplaceId,
     scope: SCOPE_NOTICE,
+    ...(rootManifests.length === 0 ? {} : { rootManifests }),
     counts: countOf(reported),
     targets: sortKeys(targets),
   };
@@ -267,6 +278,14 @@ function renderMarkdown(report: CompilationReport): string {
     '',
     `> ${report.scope}`,
     '',
+    ...(report.rootManifests
+      ? [
+          `Root manifests (relative to the marketplace root): ${report.rootManifests
+            .map((path) => `\`${path}\``)
+            .join(', ')}`,
+          '',
+        ]
+      : []),
     ...dispositionTable(report.counts),
     '',
   ];

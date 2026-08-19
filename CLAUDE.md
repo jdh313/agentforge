@@ -60,6 +60,9 @@ src/
                       plus body shapes, over every artifact type and text
                       resource file. Returns occurrences carrying `path:line`.
   deep-merge.ts     — small typed deep-merge (no lodash)
+  root-manifest.ts  — the marketplace-root copy of a publication's registry,
+                      with plugin sources rewritten to point into the compiled
+                      output (see § Root manifest)
   package-payload-plan.ts — per-target plan of which marketplace-package
                       files ship where, from `payloads` declarations
                       (source path, destination, executable bit, collision
@@ -230,6 +233,35 @@ reference, or a skill that probes a specific endpoint — so the file is exempt
 from body scanning. This is deliberately **not** an `artifacts:` entry: document
 class is orthogonal to artifact type, and overloading `artifacts` would emit a
 spurious `unsupported-artifact-projection` for a file never meant to translate.
+
+## Root manifest
+
+`MARKETPLACE.yaml` publications may declare `root-manifest: true` (kebab, on the
+`authoring-keys` precedent). It adds one output anchored to the **marketplace
+root** — the directory holding `MARKETPLACE.yaml` — beside the usual
+`<out>/<publication.id>/…` tree.
+
+- **Why.** Claude Code's `plugin marketplace add owner/repo` reads only
+  `<clone-root>/.claude-plugin/marketplace.json` and resolves each plugin
+  `source` relative to the directory containing `.claude-plugin/` (`../` is
+  forbidden). A registry that lives only under `<out>/<id>/` cannot be
+  installed from a clone, and a hand-placed root copy would resolve
+  `./plugins/ndr` to the *uncompiled canonical source*.
+- **What changes.** Nothing under `<out>/` — the nested registry keeps its
+  `./<package-dir>` sources, because a local-directory install resolves
+  against the nested root. The root copy is identical except that every plugin
+  `source` (Claude) / `source.path` (Codex) is rewritten to
+  `./<out relative to the marketplace root>/<publication.id>/<package-dir>`.
+- **Precondition.** `--out` must be inside the marketplace root, checked before
+  anything is materialized; otherwise a rewritten source would start with `../`.
+- **Plumbing.** `src/root-manifest.ts` builds the copy;
+  `CompilationPlan.rootOutputs` carries it as a separate list rather than a flag
+  inside `outputs`, so every consumer that assumes "everything is under the
+  output root" stays correct and opts into the second anchor deliberately. The
+  materializer writes that one file directly (no staging swap, no sibling
+  management — the marketplace root is the user's repo), `check` reports its
+  drift/absence under the publication id with a `<root>/…` path, and
+  `--claude-native` validates the marketplace root as a second plugin root.
 
 ## Authoring keys
 
