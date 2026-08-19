@@ -112,8 +112,30 @@ Run `bun run build` to compile the binary without installing it. The `dist/`
 directory is gitignored; because the installed command is a symlink, later
 builds update it in place without another install step.
 
-AgentForge is not published to npm. Install it via `bun link` (development)
-or `bun run install:bin` (compiled binary).
+AgentForge is not published to npm. Install it via `bun link` (development),
+`bun run install:bin` (compiled binary), or a release binary (below).
+
+### Release binaries
+
+Every GitHub release carries one compiled binary per platform —
+`agentforge-{linux-x64,linux-arm64,darwin-x64,darwin-arm64}` — plus a
+`SHA256SUMS` file. Pin a version and a checksum rather than a commit; consumer
+CI then needs neither a checkout of this repository nor a Bun toolchain:
+
+```sh
+VERSION=0.2.0
+ASSET=agentforge-linux-x64
+BASE=https://github.com/jdh313/agentforge/releases/download/v${VERSION}
+curl -fsSLO "${BASE}/${ASSET}"
+curl -fsSLO "${BASE}/SHA256SUMS"
+sha256sum --check --ignore-missing SHA256SUMS   # shasum -a 256 -c on macOS
+chmod +x "${ASSET}" && ./"${ASSET}" --version
+```
+
+Releases are cut by [release-please](https://github.com/googleapis/release-please):
+conventional commits on `main` accumulate into a release PR that, when merged,
+tags `vX.Y.Z`, publishes the GitHub release, and builds the binaries on native
+runners per platform (`.github/workflows/release.yml`).
 
 ## Guided plugin onboarding
 

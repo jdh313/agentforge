@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # Opens/updates the release PR from conventional commits; when that PR merges,
+  # tags vX.Y.Z, publishes the GitHub release, and the jobs below attach binaries.
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # Config-file mode (release-please-config.json + .release-please-manifest.json)
+      # rather than a bare release-type input, so initial-version is respected —
+      # the release-type input path always hardcodes 1.0.0 for a first release.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+        id: release
+
+  # Native-runner matrix, not cross-compiled from one host: bun build --compile
+  # has open bugs cross-compiling to macOS (codesign truncation) and cross-libc
+  # targets, so each OS/arch builds on its own runner instead (same shape as
+  # ndr's release workflow, ndr:0128).
+  build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset_name: agentforge-linux-x64
+          - os: ubuntu-24.04-arm
+            asset_name: agentforge-linux-arm64
+          - os: macos-15-intel # last x64 macOS label (retired Fall 2027)
+            asset_name: agentforge-darwin-x64
+          - os: macos-latest
+            asset_name: agentforge-darwin-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.x
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build binary
+        env:
+          # macOS codesign truncation workaround (oven-sh/bun#29120): skip Bun's
+          # own embedded signature, then ad-hoc sign explicitly below.
+          BUN_NO_CODESIGN_MACHO_BINARY: 1
+        run: bun run build
+
+      - name: Ad-hoc codesign
+        if: runner.os == 'macOS'
+        run: codesign --force --deep --sign - dist/agentforge
+
+      - name: Smoke-test binary
+        run: |
+          mv dist/agentforge dist/${{ matrix.asset_name }}
+          dist/${{ matrix.asset_name }} --version
+          dist/${{ matrix.asset_name }} list-targets
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.asset_name }}
+          path: dist/${{ matrix.asset_name }}
+          if-no-files-found: error
+
+  # One job attaches every binary plus a single SHA256SUMS, so consumers can pin
+  # a version and verify with `sha256sum -c --ignore-missing SHA256SUMS`.
+  publish:
+    needs: [release-please, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Write SHA256SUMS
+        working-directory: dist
+        run: |
+          chmod +x agentforge-*
+          sha256sum agentforge-* > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          files: |
+            dist/agentforge-*
+            dist/SHA256SUMS

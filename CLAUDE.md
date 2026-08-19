@@ -25,8 +25,10 @@ preferences; only narrows or extends here.
   `command` sources into direct Claude files and inferred Codex procedures or
   skills; commands and explicit-only skill projections receive skill-local
   `agents/openai.yaml` policy.
-- Real-corpus migration, `agent` artifact, `mcp` artifact, watch mode, Nix
-  integration, and GitHub publishing are M2+.
+- Releases are automated (release-please + per-platform binaries; see
+  § Releases).
+- Real-corpus migration, `agent` artifact, `mcp` artifact, watch mode, and
+  Nix integration are M2+.
 - Milestone planning is tracked outside this repo; the bullets above are the
   published status.
 
@@ -192,6 +194,29 @@ needed, but doesn't track edits — re-run after changes):
 bun build --compile src/cli.ts --outfile ~/.local/bin/agentforge
 ```
 
+**Release binary** (consumers; no checkout, no Bun): see README § Release
+binaries. Pin `vX.Y.Z` + the `SHA256SUMS` entry, never a commit SHA.
+
+## Releases
+
+- **Tooling:** release-please in config-file mode (`release-please-config.json`,
+  `.release-please-manifest.json`, `release-type: node`, tags `vX.Y.Z` without
+  a component prefix). Conventional commits on `main` accumulate into a release
+  PR; merging it tags, publishes the GitHub release, and updates `CHANGELOG.md`
+  and `package.json#version`. Never bump the version or tag by hand.
+- **Version string:** `src/cli.ts` imports `package.json` for `--version`, so
+  the compiled binary reports the released number with no second edit.
+- **Binaries:** `.github/workflows/release.yml` builds on a native-runner
+  matrix (linux-x64, linux-arm64, darwin-x64, darwin-arm64 — bun cannot reliably
+  cross-compile to macOS, oven-sh/bun#29120) and attaches the four binaries plus
+  one `SHA256SUMS`. darwin-x64 builds on `macos-15-intel`, GitHub's last x64
+  macOS label (retired Fall 2027; `macos-13` is already gone) — drop that row
+  when it goes. `ci.yml` runs a single-platform compile smoke so a compile
+  break surfaces before tag time.
+- **Known limitation:** the release PR is opened with `GITHUB_TOKEN`, so CI does
+  not run on it; `main` was already green, and the build job smoke-tests each
+  binary (`--version`, `list-targets`) before publishing.
+
 ## Adding a new target
 
 1. Create `src/targets/<name>.ts` exporting a `TargetAdapter`. Each supported
@@ -304,7 +329,6 @@ unrecognized key keeps the category-2 behavior above.
 
 - Leaf-renderer `agent` artifacts and MCP artifacts (M5/M6).
 - Watch mode.
-- Compiled binary via `bun build --compile`.
 - Multi-artifact source directory rendering (each source dir contains
   exactly one canonical file).
 - Translating Claude-only body features (`$ARGUMENTS`, dynamic shell

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { Command } from 'commander';
 import matter from 'gray-matter';
+import pkg from '../package.json' with { type: 'json' };
 import { checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
 import { type CompilationPlan, compileMarketplace, type RootAnchoredOutput } from './compiler.ts';
 import { type LoadedMarketplace, loadMarketplaceDefinition } from './definitions.ts';
@@ -26,7 +27,8 @@ const program = new Command();
 program
   .name('agentforge')
   .description('Render canonical AI agent artifacts for multiple harnesses')
-  .version('0.0.1');
+  // release-please bumps package.json; the binary reports the same number.
+  .version(pkg.version);
 
 const formatResult = (target: TargetName, result: RenderResult): string => {
   const lines = [`[${target}] wrote ${result.outputPath}`];

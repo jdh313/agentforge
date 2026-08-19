@@ -34,3 +34,10 @@ jobs:
 
       - name: Test
         run: bun test
+
+      # Catches a compile break before release.yml meets it at tag time; the
+      # per-platform builds happen there.
+      - name: Compile smoke
+        run: |
+          bun run build
+          dist/agentforge --version
