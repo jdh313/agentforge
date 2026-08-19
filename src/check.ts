@@ -3,6 +3,7 @@ import { dirname, join, relative, sep } from 'node:path';
 import matter from 'gray-matter';
 import type { z } from 'zod';
 import type { CompilationPlan, DesiredOutput, RootAnchoredOutput } from './compiler.ts';
+import { rootDisplayPath } from './root-manifest.ts';
 import { ClaudeMarketplace, ClaudePluginManifest } from './targets/claude-marketplace.ts';
 import { CodexMarketplace, CodexPluginManifest } from './targets/codex-marketplace.ts';
 import { getArtifactConfig } from './targets/index.ts';
@@ -60,41 +61,7 @@ export function checkMarketplace(
 
   const issues: MarketplaceCheckIssue[] = [];
   for (const output of plan.outputs) {
-    const actualPath = join(outputRoot, ...output.destination.split('/'));
-    if (!existsSync(actualPath)) {
-      issues.push(issueFor(output, 'missing-output', 'managed output is missing'));
-      continue;
-    }
-    if (!lstatSync(actualPath).isFile()) {
-      issues.push(
-        issueFor(
-          output,
-          'unsafe-output-entry',
-          'managed output must be a regular file contained by its publication root',
-        ),
-      );
-      continue;
-    }
-    if (process.platform !== 'win32') {
-      const actualMode = lstatSync(actualPath).mode & 0o777;
-      const expectedMode = expectedOutputMode(output);
-      if (actualMode !== expectedMode) {
-        issues.push(
-          issueFor(
-            output,
-            'changed-output-mode',
-            `managed output mode is ${formatMode(actualMode)}; expected ${formatMode(expectedMode)}`,
-          ),
-        );
-      }
-    }
-    if (!readFileSync(actualPath).equals(expectedBytes(output))) {
-      issues.push(
-        issueFor(output, 'changed-output', 'managed output differs from the compilation plan'),
-      );
-    }
-    const nativeIssue = validateNativeDocument(output, actualPath);
-    if (nativeIssue) issues.push(nativeIssue);
+    issues.push(...checkManagedOutput(output, publicationAnchor(outputRoot)));
   }
 
   for (const path of actualPaths) {
@@ -113,12 +80,12 @@ export function checkMarketplace(
   issues.push(...validateArtifactFrontmatter(plan, outputRoot));
 
   const rootFilesChecked: RootFileChecked[] = [];
-  for (const output of plan.rootOutputs ?? []) {
+  for (const output of plan.rootOutputs) {
     rootFilesChecked.push({
       publicationId: output.provenance.publicationId,
       path: rootDisplayPath(output.destination),
     });
-    issues.push(...checkRootOutput(output));
+    issues.push(...checkManagedOutput(output, marketplaceRootAnchor(output)));
   }
 
   issues.sort(
@@ -134,83 +101,79 @@ export function checkMarketplace(
   };
 }
 
-// Marketplace-root-anchored, and labelled as such: the same destination under
-// `--out` is a different file, and an unlabelled path would conflate them.
-function rootDisplayPath(destination: string): string {
-  return `<root>/${destination}`;
+// Which anchor a managed output is checked against: `--out` for the compiled
+// tree, the marketplace root for a `root-manifest` copy. Parameterized rather
+// than duplicated, because two copies of "exists, is a regular file, has the
+// expected mode and bytes, parses as its native schema" drift apart silently.
+interface OutputAnchor {
+  baseDirectory: string;
+  displayPath: (destination: string) => string;
+  // Names the thing in every message, so the reader can tell which copy failed.
+  label: string;
+  irregularEntryMessage: string;
+}
+
+function publicationAnchor(outputRoot: string): OutputAnchor {
+  return {
+    baseDirectory: outputRoot,
+    displayPath: (destination) => destination,
+    label: 'managed output',
+    irregularEntryMessage:
+      'managed output must be a regular file contained by its publication root',
+  };
 }
 
 // Drift and absence, checked exactly as for a managed output. What is
 // deliberately not checked is the root's *siblings*: the marketplace root is
 // the user's repository, not a directory the compiler owns, so an unmanaged
 // file beside the manifest is not an `unexpected-output`.
-function checkRootOutput(output: RootAnchoredOutput): MarketplaceCheckIssue[] {
-  const marketplaceRoot = dirname(output.provenance.marketplacePath);
-  const actualPath = join(marketplaceRoot, ...output.destination.split('/'));
-  const path = rootDisplayPath(output.destination);
-  const base = {
-    publicationId: output.provenance.publicationId,
-    ...(output.provenance.packageId === undefined
-      ? {}
-      : { packageId: output.provenance.packageId }),
-    path,
+function marketplaceRootAnchor(output: RootAnchoredOutput): OutputAnchor {
+  return {
+    baseDirectory: dirname(output.provenance.marketplacePath),
+    displayPath: rootDisplayPath,
+    label: 'managed root manifest',
+    irregularEntryMessage: 'managed root manifest must be a regular file',
   };
+}
 
-  if (!existsSync(actualPath)) {
-    return [{ ...base, code: 'missing-output', message: 'managed root manifest is missing' }];
+function checkManagedOutput(output: DesiredOutput, anchor: OutputAnchor): MarketplaceCheckIssue[] {
+  const path = anchor.displayPath(output.destination);
+  const actualPath = join(anchor.baseDirectory, ...output.destination.split('/'));
+
+  // One lstat and one read for the whole file: the earlier shape stat'd three
+  // times and read twice, and the answers could disagree between calls.
+  const stats = lstatSync(actualPath, { throwIfNoEntry: false });
+  if (!stats) {
+    return [issueFor(output, 'missing-output', `${anchor.label} is missing`, path)];
   }
-  if (!lstatSync(actualPath).isFile()) {
-    return [
-      {
-        ...base,
-        code: 'unsafe-output-entry',
-        message: 'managed root manifest must be a regular file',
-      },
-    ];
+  if (!stats.isFile()) {
+    return [issueFor(output, 'unsafe-output-entry', anchor.irregularEntryMessage, path)];
   }
 
   const issues: MarketplaceCheckIssue[] = [];
   if (process.platform !== 'win32') {
-    const actualMode = lstatSync(actualPath).mode & 0o777;
-    if (actualMode !== 0o644) {
-      issues.push({
-        ...base,
-        code: 'changed-output-mode',
-        message: `managed root manifest mode is ${formatMode(actualMode)}; expected ${formatMode(0o644)}`,
-      });
+    const actualMode = stats.mode & 0o777;
+    const expectedMode = expectedOutputMode(output);
+    if (actualMode !== expectedMode) {
+      issues.push(
+        issueFor(
+          output,
+          'changed-output-mode',
+          `${anchor.label} mode is ${formatMode(actualMode)}; expected ${formatMode(expectedMode)}`,
+          path,
+        ),
+      );
     }
-  }
-  if (!readFileSync(actualPath).equals(Buffer.from(output.content, 'utf8'))) {
-    issues.push({
-      ...base,
-      code: 'changed-output',
-      message: 'managed root manifest differs from the compilation plan',
-    });
   }
 
-  const native = nativeDocumentFor(output);
-  if (native) {
-    let document: unknown;
-    try {
-      document = JSON.parse(readFileSync(actualPath, 'utf8'));
-    } catch {
-      issues.push({
-        ...base,
-        code: 'invalid-native-document',
-        message: `invalid ${native.label}: <root>: invalid JSON`,
-      });
-      return issues;
-    }
-    const result = native.schema.safeParse(document);
-    if (!result.success) {
-      const issue = result.error.issues[0];
-      issues.push({
-        ...base,
-        code: 'invalid-native-document',
-        message: `invalid ${native.label}: ${issue?.path.join('.') || '<root>'}: ${issue?.message ?? 'validation failed'}`,
-      });
-    }
+  const actualBytes = readFileSync(actualPath);
+  if (!actualBytes.equals(expectedBytes(output))) {
+    issues.push(
+      issueFor(output, 'changed-output', `${anchor.label} differs from the compilation plan`, path),
+    );
   }
+  const nativeIssue = validateNativeDocument(output, path, actualBytes);
+  if (nativeIssue) issues.push(nativeIssue);
   return issues;
 }
 
@@ -450,7 +413,8 @@ function safePluginDirectory(source: string): string | undefined {
 
 function validateNativeDocument(
   output: DesiredOutput,
-  actualPath: string,
+  path: string,
+  actualBytes: Buffer,
 ): MarketplaceCheckIssue | undefined {
   if (output.kind !== 'generated') return undefined;
   const native = nativeDocumentFor(output);
@@ -458,12 +422,13 @@ function validateNativeDocument(
 
   let document: unknown;
   try {
-    document = JSON.parse(readFileSync(actualPath, 'utf8'));
+    document = JSON.parse(actualBytes.toString('utf8'));
   } catch {
     return issueFor(
       output,
       'invalid-native-document',
       `invalid ${native.label}: <root>: invalid JSON`,
+      path,
     );
   }
   const result = native.schema.safeParse(document);
@@ -473,6 +438,7 @@ function validateNativeDocument(
     output,
     'invalid-native-document',
     `invalid ${native.label}: ${issue?.path.join('.') || '<root>'}: ${issue?.message ?? 'validation failed'}`,
+    path,
   );
 }
 
@@ -504,10 +470,14 @@ function hasTail(destination: string, tail: string): boolean {
   return destination === tail || destination.endsWith(`/${tail}`);
 }
 
+// `path` defaults to the destination because most callers check the compiled
+// tree, where the destination *is* the display path; a root-anchored caller
+// passes the prefixed form instead.
 function issueFor(
   output: DesiredOutput,
   code: Exclude<MarketplaceCheckIssueCode, 'unexpected-output'>,
   message: string,
+  path: string = output.destination,
 ): MarketplaceCheckIssue {
   return {
     code,
@@ -515,7 +485,7 @@ function issueFor(
     ...(output.provenance.packageId === undefined
       ? {}
       : { packageId: output.provenance.packageId }),
-    path: output.destination,
+    path,
     message,
   };
 }

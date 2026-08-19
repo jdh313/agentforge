@@ -10,8 +10,9 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, dirname, isAbsolute, parse, relative, resolve, sep } from 'node:path';
+import { basename, dirname, parse, resolve } from 'node:path';
 import type { CompilationPlan, DesiredOutput, RootAnchoredOutput } from './compiler.ts';
+import { isContainedPath } from './paths.ts';
 
 export interface MaterializationResult {
   outputRoot: string;
@@ -61,7 +62,7 @@ export function materializeCompilation(
   // Written after the staged tree publishes, and one file at a time: the
   // marketplace root is the user's repository, so a root manifest overwrites
   // exactly its own path and never stages, swaps, or prunes siblings.
-  const rootFilesWritten = (plan.rootOutputs ?? []).map((output) => materializeRootOutput(output));
+  const rootFilesWritten = plan.rootOutputs.map((output) => materializeRootOutput(output));
 
   return {
     outputRoot: destinationRoot,
@@ -145,13 +146,7 @@ function requireContainedRegularSource(sourceRoot: string, sourcePath: string): 
 }
 
 function requireContainedPath(root: string, path: string, proposed: string, message: string): void {
-  const fromRoot = relative(root, path);
-  if (
-    fromRoot.length === 0 ||
-    fromRoot === '..' ||
-    fromRoot.startsWith(`..${sep}`) ||
-    isAbsolute(fromRoot)
-  ) {
+  if (!isContainedPath(root, path)) {
     throw new MaterializationError(`${message}: ${JSON.stringify(proposed)}`);
   }
 }

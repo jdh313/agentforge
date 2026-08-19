@@ -1,4 +1,4 @@
-import { dirname, relative, sep } from 'node:path';
+import { dirname } from 'node:path';
 import matter from 'gray-matter';
 import {
   type DetectedConstruct,
@@ -18,6 +18,7 @@ import type {
   DeclaredLossDefinition,
   LoadedArtifact,
 } from '../definitions.ts';
+import { portableRelative } from '../paths.ts';
 import { projectArtifact } from '../render.ts';
 import type { TargetName } from '../types.ts';
 
@@ -386,10 +387,6 @@ export function relativePackageDirectory(marketplacePath: string, packagePath: s
 
 export function relativePackageArtifactPath(packagePath: string, artifactPath: string): string {
   return portableRelative(dirname(packagePath), artifactPath);
-}
-
-function portableRelative(from: string, to: string): string {
-  return relative(from, to).split(sep).join('/');
 }
 
 function compareStrings(left: string, right: string): number {

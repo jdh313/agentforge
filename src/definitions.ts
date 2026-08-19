@@ -211,7 +211,33 @@ export const CanonicalMarketplace = z
     reportDuplicates(definition.publications, ({ id }) => id, context, 'publication id', [
       'publications',
     ]);
+    reportDuplicateRootManifests(definition.publications, context);
   });
+
+// Two root-manifest publications sharing a destination write the same file at
+// the marketplace root, so whichever compiles last wins and the other's plugin
+// sources vanish. Rejected here rather than at compile time: it is a property of
+// the definition, and a definition that cannot produce a correct output should
+// never reach a materializer.
+function reportDuplicateRootManifests(
+  publications: readonly PublicationDefinition[],
+  context: z.core.$RefinementCtx,
+): void {
+  const claimed = new Map<string, string>();
+  for (const publication of publications) {
+    if (!publication['root-manifest']) continue;
+    const prior = claimed.get(publication.destination);
+    if (prior !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        message: `publications "${prior}" and "${publication.id}" both declare root-manifest at destination "${publication.destination}"; the marketplace root can hold only one copy of it`,
+        path: ['publications'],
+      });
+      continue;
+    }
+    claimed.set(publication.destination, publication.id);
+  }
+}
 
 export type MarketplaceDefinition = z.infer<typeof CanonicalMarketplace>;
 

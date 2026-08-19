@@ -10,7 +10,7 @@ import { claudeMarketplaceAdapter, codexMarketplaceAdapter } from './marketplace
 import { materializeCompilation } from './materializer.ts';
 import { render } from './render.ts';
 import { formatFromPath, type ReportFormat, renderReport } from './report.ts';
-import { buildRootManifestOutput } from './root-manifest.ts';
+import { rootDisplayPath } from './root-manifest.ts';
 import { ARTIFACT_DEFS } from './schema.ts';
 import { allTargets } from './targets/index.ts';
 import {
@@ -109,7 +109,7 @@ const formatCompilation = (plan: CompilationPlan): string => {
     const publication = output.provenance.publicationId;
     outputCounts.set(publication, (outputCounts.get(publication) ?? 0) + 1);
   }
-  for (const output of plan.rootOutputs ?? []) {
+  for (const output of plan.rootOutputs) {
     const publication = output.provenance.publicationId;
     outputCounts.set(publication, (outputCounts.get(publication) ?? 0) + 1);
   }
@@ -117,18 +117,14 @@ const formatCompilation = (plan: CompilationPlan): string => {
   const lines = [...outputCounts]
     .toSorted(([left], [right]) => compareStrings(left, right))
     .map(([publication, count]) => `[${publication}] wrote ${count} files`);
-  for (const output of plan.rootOutputs ?? []) {
+  for (const output of plan.rootOutputs) {
     lines.push(
-      `[${output.provenance.publicationId}] root manifest ${formatRootPath(output.destination)}`,
+      `[${output.provenance.publicationId}] root manifest ${rootDisplayPath(output.destination)}`,
     );
   }
   lines.push(...formatCompilationDiagnostics(plan));
   return lines.join('\n');
 };
-
-// Marketplace-root-relative, and said so: the same path under `--out` means a
-// different file, and an unprefixed listing would not distinguish them.
-const formatRootPath = (destination: string): string => `<root>/${destination}`;
 
 const formatCompilationDiagnostics = (plan: CompilationPlan): string[] => {
   const lines: string[] = [];
@@ -150,7 +146,6 @@ const compileSelectedMarketplace = (
   const outputs: CompilationPlan['outputs'][number][] = [];
   const diagnostics: CompilationPlan['diagnostics'][number][] = [];
   const rootOutputs: RootAnchoredOutput[] = [];
-  const marketplaceRoot = dirname(loaded.path);
 
   for (const publication of loaded.definition.publications.toSorted((left, right) =>
     compareStrings(left.id, right.id),
@@ -159,21 +154,14 @@ const compileSelectedMarketplace = (
       ...loaded,
       definition: { ...loaded.definition, publications: [publication] },
     };
-    const plan = compileMarketplace(publicationMarketplace, [
-      claudeMarketplaceAdapter,
-      codexMarketplaceAdapter,
-    ]);
-    if (publication['root-manifest']) {
-      const registry = plan.outputs.find(
-        ({ destination }) => destination === publication.destination,
-      );
-      if (!registry) {
-        throw new Error(
-          `publication ${JSON.stringify(publication.id)} declares root-manifest, but produced no registry at ${JSON.stringify(publication.destination)}`,
-        );
-      }
-      rootOutputs.push(buildRootManifestOutput(publication, registry, marketplaceRoot, outputRoot));
-    }
+    const plan = compileMarketplace(
+      publicationMarketplace,
+      [claudeMarketplaceAdapter, codexMarketplaceAdapter],
+      { outputRoot },
+    );
+    // Root outputs are already anchored at the marketplace root, so they are
+    // carried across untouched while nested destinations gain their prefix.
+    rootOutputs.push(...plan.rootOutputs);
     outputs.push(
       ...plan.outputs.map((output) => ({
         ...output,
@@ -183,12 +171,7 @@ const compileSelectedMarketplace = (
     diagnostics.push(...plan.diagnostics);
   }
 
-  return {
-    marketplaceId: loaded.definition.id,
-    outputs,
-    diagnostics,
-    ...(rootOutputs.length === 0 ? {} : { rootOutputs }),
-  };
+  return { marketplaceId: loaded.definition.id, outputs, diagnostics, rootOutputs };
 };
 
 program
@@ -303,8 +286,11 @@ program
               if (native.stderr.length > 0) process.stderr.write(native.stderr);
               if (native.exitCode !== 0) {
                 failed = true;
+                // Which root failed is the whole point of running two passes:
+                // an unqualified line leaves the reader unable to tell the
+                // nested copy's failure from the root copy's.
                 console.error(
-                  `error [${publication.id}] claude-native-validation: claude plugin validate --strict exited ${native.exitCode}`,
+                  `error [${publication.id}] claude-native-validation: claude plugin validate --strict ${root} exited ${native.exitCode}`,
                 );
               }
             }

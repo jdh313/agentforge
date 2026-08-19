@@ -1,3 +1,4 @@
+import { dirname } from 'node:path';
 import { deepMerge } from './deep-merge.ts';
 import type {
   DeclaredLossDefinition,
@@ -8,6 +9,7 @@ import type {
   PackageDefinition,
 } from './definitions.ts';
 import type { PackagePayload } from './package-payload-plan.ts';
+import { buildRootManifestOutput } from './root-manifest.ts';
 import type { TargetName } from './types.ts';
 
 type PublicationDefinition = MarketplaceDefinition['publications'][number];
@@ -129,15 +131,23 @@ export interface TargetCompilerAdapter {
 // flagged inside `outputs`, so every consumer that walks `outputs` keeps its
 // "everything under the output root" assumption intact and has to opt in to the
 // second anchor deliberately. Only `root-manifest` publications produce these.
-export interface RootAnchoredOutput extends DesiredGeneratedOutput {
-  anchor: 'marketplace-root';
-}
+export type RootAnchoredOutput = DesiredGeneratedOutput;
 
 export interface CompilationPlan {
   marketplaceId: string;
   outputs: readonly DesiredOutput[];
   diagnostics: readonly CompilationDiagnostic[];
-  rootOutputs?: readonly RootAnchoredOutput[];
+  // Empty rather than absent when no publication declares `root-manifest`: an
+  // optional list makes every consumer restate the default, and one that
+  // forgets silently drops the second anchor.
+  rootOutputs: readonly RootAnchoredOutput[];
+}
+
+export interface CompileMarketplaceOptions {
+  // Where `--out` points. Only `root-manifest` publications need it — the root
+  // copy's plugin sources are rewritten relative to it — so it is optional, and
+  // its absence is an error only when a publication actually asks for one.
+  outputRoot?: string;
 }
 
 export class CompilationError extends Error {
@@ -150,6 +160,7 @@ export class CompilationError extends Error {
 export function compileMarketplace(
   loaded: LoadedMarketplace,
   adapters: readonly TargetCompilerAdapter[],
+  options: CompileMarketplaceOptions = {},
 ): CompilationPlan {
   const adaptersByTarget = indexAdapters(adapters);
   const outputs: DesiredOutput[] = [];
@@ -204,7 +215,49 @@ export function compileMarketplace(
   const resolvedOutputs = resolveDestinations(outputs, diagnostics);
   resolvedOutputs.sort(compareOutputs);
   diagnostics.sort(compareDiagnostics);
-  return { marketplaceId: loaded.definition.id, outputs: resolvedOutputs, diagnostics };
+  return {
+    marketplaceId: loaded.definition.id,
+    outputs: resolvedOutputs,
+    diagnostics,
+    rootOutputs: buildRootOutputs(loaded, resolvedOutputs, options.outputRoot),
+  };
+}
+
+// Part of the compilation contract rather than the CLI's: a root manifest is an
+// output of the plan, and a caller that assembles it separately is a caller that
+// can forget to.
+function buildRootOutputs(
+  loaded: LoadedMarketplace,
+  outputs: readonly DesiredOutput[],
+  outputRoot: string | undefined,
+): readonly RootAnchoredOutput[] {
+  const declaring = loaded.definition.publications
+    .filter((publication) => publication['root-manifest'])
+    .toSorted(compareIds);
+  if (declaring.length === 0) return [];
+
+  // Refused rather than silently skipped: omitting the root copy would leave a
+  // marketplace that declares itself installable from a clone uninstallable.
+  if (outputRoot === undefined) {
+    throw new CompilationError(
+      `publication "${declaring[0]?.id}" declares root-manifest, which needs the output root to rewrite plugin sources; compileMarketplace was called without one`,
+    );
+  }
+
+  const marketplaceRoot = dirname(loaded.path);
+  return declaring.map((publication) => {
+    const registry = outputs.find(
+      (output) =>
+        output.provenance.publicationId === publication.id &&
+        output.destination === publication.destination,
+    );
+    if (!registry) {
+      throw new CompilationError(
+        `publication ${JSON.stringify(publication.id)} declares root-manifest, but produced no registry at ${JSON.stringify(publication.destination)}`,
+      );
+    }
+    return buildRootManifestOutput(publication, registry, marketplaceRoot, outputRoot);
+  });
 }
 
 function indexAdapters(

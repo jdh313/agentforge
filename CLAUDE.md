@@ -60,6 +60,10 @@ src/
                       plus body shapes, over every artifact type and text
                       resource file. Returns occurrences carrying `path:line`.
   deep-merge.ts     — small typed deep-merge (no lodash)
+  paths.ts          — `portableRelative` (POSIX-separated relative paths, for
+                      values that ship inside documents) and `isContainedPath`
+                      (strict containment test); shared by the materializer,
+                      payload planning, and the root manifest
   root-manifest.ts  — the marketplace-root copy of a publication's registry,
                       with plugin sources rewritten to point into the compiled
                       output (see § Root manifest)
@@ -252,9 +256,19 @@ root** — the directory holding `MARKETPLACE.yaml` — beside the usual
   against the nested root. The root copy is identical except that every plugin
   `source` (Claude) / `source.path` (Codex) is rewritten to
   `./<out relative to the marketplace root>/<publication.id>/<package-dir>`.
-- **Precondition.** `--out` must be inside the marketplace root, checked before
+  Only `./`-relative sources are re-anchored — an object form's discriminator
+  (`github`, `git-subdir`), a remote URL, or an absolute path already resolves
+  independently of the manifest's location and passes through unchanged.
+  A source walking upward (`../`) is refused.
+- **Preconditions.** `--out` must be inside the marketplace root, checked before
   anything is materialized; otherwise a rewritten source would start with `../`.
-- **Plumbing.** `src/root-manifest.ts` builds the copy;
+  Two publications may not declare `root-manifest` at the same `destination`
+  (rejected in `src/definitions.ts` when the definition loads, beside the
+  duplicate-publication-id check): the root holds one copy, so the later one
+  would silently overwrite the earlier.
+- **Plumbing.** `compileMarketplace` produces `rootOutputs` itself, given the
+  output root via its options argument, so every caller gets the second anchor
+  rather than only the CLI. `src/root-manifest.ts` builds the copy;
   `CompilationPlan.rootOutputs` carries it as a separate list rather than a flag
   inside `outputs`, so every consumer that assumes "everything is under the
   output root" stays correct and opts into the second anchor deliberately. The

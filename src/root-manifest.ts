@@ -1,6 +1,7 @@
-import { relative, resolve, sep } from 'node:path';
+import { resolve } from 'node:path';
 import type { DesiredOutput, RootAnchoredOutput } from './compiler.ts';
 import type { PublicationDefinition } from './definitions.ts';
+import { isContainedPath, portableRelative } from './paths.ts';
 import type { TargetName } from './types.ts';
 
 export class RootManifestError extends Error {
@@ -8,6 +9,18 @@ export class RootManifestError extends Error {
     super(message);
     this.name = 'RootManifestError';
   }
+}
+
+/**
+ * How a marketplace-root-anchored destination is displayed.
+ *
+ * The same destination string under `--out` names a different file, so every
+ * surface that lists one — compile output, `check`, the report — prefixes it
+ * rather than letting the two anchors read alike. One definition, because
+ * three that agree today are three that can disagree tomorrow.
+ */
+export function rootDisplayPath(destination: string): string {
+  return `<root>/${destination}`;
 }
 
 /**
@@ -43,7 +56,6 @@ export function buildRootManifestOutput(
 
   return {
     ...registry,
-    anchor: 'marketplace-root',
     destination: publication.destination,
     content: `${JSON.stringify(rewritePluginSources(publication, registry.target, document, prefix), null, 2)}\n`,
   };
@@ -60,13 +72,14 @@ function rootRelativePrefix(
   marketplaceRoot: string,
   outputRoot: string,
 ): string {
-  const fromRoot = relative(resolve(marketplaceRoot), resolve(outputRoot));
-  if (fromRoot.length === 0 || fromRoot === '..' || fromRoot.startsWith(`..${sep}`)) {
+  const root = resolve(marketplaceRoot);
+  const out = resolve(outputRoot);
+  if (!isContainedPath(root, out)) {
     throw new RootManifestError(
-      `publication ${JSON.stringify(publication.id)} declares root-manifest, which requires --out to be inside the marketplace directory ${marketplaceRoot}; got ${resolve(outputRoot)}`,
+      `publication ${JSON.stringify(publication.id)} declares root-manifest, which requires --out to be inside the marketplace directory ${marketplaceRoot}; got ${out}`,
     );
   }
-  return `./${fromRoot.split(sep).join('/')}/${publication.id}`;
+  return `./${portableRelative(root, out)}/${publication.id}`;
 }
 
 function rewritePluginSources(
@@ -112,11 +125,36 @@ function rewritePlugin(
   };
 }
 
+/**
+ * Only a `./`-relative source names a directory inside the compiled output, so
+ * only a `./`-relative source is re-anchored.
+ *
+ * Everything else a registry may carry — an object form's discriminator
+ * (`"github"`, `"git-subdir"`), a remote URL, an SSH remote, an absolute path —
+ * resolves without reference to the manifest's location and is already correct
+ * at the root. Rewriting those would corrupt them; refusing them would make
+ * `root-manifest` unavailable to any marketplace that hosts one, which is not a
+ * loss the flag is entitled to impose.
+ *
+ * An upward walk still throws, whichever form it arrives in: `../` escapes the
+ * clone root, and installers reject that outright.
+ */
 function rewriteSource(publication: PublicationDefinition, source: string, prefix: string): string {
   if (!source.startsWith('./')) {
-    throw new RootManifestError(
-      `publication ${JSON.stringify(publication.id)} declares root-manifest, but plugin source ${JSON.stringify(source)} is not a ./-relative package path`,
-    );
+    if (escapesUpward(source)) throw upwardEscape(publication, source);
+    return source;
   }
-  return `${prefix}/${source.slice(2)}`;
+  const path = source.slice(2);
+  if (escapesUpward(path)) throw upwardEscape(publication, source);
+  return `${prefix}/${path}`;
+}
+
+function escapesUpward(source: string): boolean {
+  return source.split('/').some((segment) => segment === '..');
+}
+
+function upwardEscape(publication: PublicationDefinition, source: string): RootManifestError {
+  return new RootManifestError(
+    `publication ${JSON.stringify(publication.id)} declares root-manifest, but plugin source ${JSON.stringify(source)} walks above the package root and cannot be re-anchored`,
+  );
 }
