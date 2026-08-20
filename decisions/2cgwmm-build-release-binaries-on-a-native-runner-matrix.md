@@ -1,7 +1,7 @@
 ---
 id: "2cgwmm"
 title: Build release binaries on a native-runner matrix
-status: current
+status: superseded
 decision_date: 2026-08-19
 author: Jacob Hoehler
 conviction: tentative
@@ -12,7 +12,8 @@ labels:
 binds:
   - .github/workflows/release.yml
 supersedes: []
-superseded_by: []
+superseded_by:
+  - m5qyvk
 derived_from: []
 informed_by: []
 ---
