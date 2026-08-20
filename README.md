@@ -132,10 +132,12 @@ sha256sum --check --ignore-missing SHA256SUMS   # shasum -a 256 -c on macOS
 chmod +x "${ASSET}" && ./"${ASSET}" --version
 ```
 
-Releases are cut by [release-please](https://github.com/googleapis/release-please):
-conventional commits on `main` accumulate into a release PR that, when merged,
-tags `vX.Y.Z`, publishes the GitHub release, and builds the binaries on native
-runners per platform (`.github/workflows/release.yml`).
+Releases are cut by [semantic-release](https://github.com/semantic-release/semantic-release):
+every releasable push to `main` (`feat:`, `fix:`, `perf:`, or a breaking
+change) computes the next version from the commits since the last tag, commits
+`CHANGELOG.md` + `package.json`, tags `vX.Y.Z`, publishes the GitHub release,
+and builds the binaries on native runners per platform
+(`.github/workflows/release.yml`). Other commit types release nothing.
 
 ## Guided plugin onboarding
 

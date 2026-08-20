@@ -25,7 +25,7 @@ preferences; only narrows or extends here.
   `command` sources into direct Claude files and inferred Codex procedures or
   skills; commands and explicit-only skill projections receive skill-local
   `agents/openai.yaml` policy.
-- Releases are automated (release-please + per-platform binaries; see
+- Releases are automated (semantic-release + per-platform binaries; see
   § Releases).
 - Real-corpus migration, `agent` artifact, `mcp` artifact, watch mode, and
   Nix integration are M2+.
@@ -199,13 +199,16 @@ binaries. Pin `vX.Y.Z` + the `SHA256SUMS` entry, never a commit SHA.
 
 ## Releases
 
-- **Tooling:** release-please in config-file mode (`release-please-config.json`,
-  `.release-please-manifest.json`, `release-type: node`, tags `vX.Y.Z` without
-  a component prefix). Conventional commits on `main` accumulate into a release
-  PR; merging it tags, publishes the GitHub release, and updates `CHANGELOG.md`
-  and `package.json#version`. Never bump the version or tag by hand.
-- **Version string:** `src/cli.ts` imports `package.json` for `--version`, so
-  the compiled binary reports the released number with no second edit.
+- **Tooling:** semantic-release (`.releaserc.json`; deps pinned in
+  `devDependencies`). Every releasable push to `main` — `feat:`, `fix:`,
+  `perf:`, or a breaking change — releases immediately: version computed from
+  commits since the last tag, `CHANGELOG.md` + `package.json` committed back
+  `[skip ci]`, tag `vX.Y.Z`, GitHub release. No release PR, no batching valve:
+  chosen over release-please to avoid granting Actions PR-creation rights.
+  Other commit types release nothing. Never bump the version or tag by hand.
+- **Version string:** `src/cli.ts` imports `package.json` for `--version`;
+  the npm plugin (npmPublish: false) writes the released number there before
+  the tag is cut, so the compiled binary reports it with no second edit.
 - **Binaries:** `.github/workflows/release.yml` builds on a native-runner
   matrix (linux-x64, linux-arm64, darwin-x64, darwin-arm64 — bun cannot reliably
   cross-compile to macOS, oven-sh/bun#29120) and attaches the four binaries plus
@@ -213,8 +216,8 @@ binaries. Pin `vX.Y.Z` + the `SHA256SUMS` entry, never a commit SHA.
   macOS label (retired Fall 2027; `macos-13` is already gone) — drop that row
   when it goes. `ci.yml` runs a single-platform compile smoke so a compile
   break surfaces before tag time.
-- **Known limitation:** the release PR is opened with `GITHUB_TOKEN`, so CI does
-  not run on it; `main` was already green, and the build job smoke-tests each
+- **Known limitation:** the release commit is pushed with `[skip ci]`, so no CI
+  runs on it; `main` was already green, and the build job smoke-tests each
   binary (`--version`, `list-targets`) before publishing.
 
 ## Adding a new target
