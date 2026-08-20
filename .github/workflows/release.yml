@@ -69,8 +69,6 @@ jobs:
             asset_name: agentforge-linux-x64
           - os: ubuntu-24.04-arm
             asset_name: agentforge-linux-arm64
-          - os: macos-15-intel # last x64 macOS label (retired Fall 2027)
-            asset_name: agentforge-darwin-x64
           - os: macos-latest
             asset_name: agentforge-darwin-arm64
     runs-on: ${{ matrix.os }}

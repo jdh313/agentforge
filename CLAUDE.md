@@ -210,11 +210,11 @@ binaries. Pin `vX.Y.Z` + the `SHA256SUMS` entry, never a commit SHA.
   the npm plugin (npmPublish: false) writes the released number there before
   the tag is cut, so the compiled binary reports it with no second edit.
 - **Binaries:** `.github/workflows/release.yml` builds on a native-runner
-  matrix (linux-x64, linux-arm64, darwin-x64, darwin-arm64 — bun cannot reliably
-  cross-compile to macOS, oven-sh/bun#29120) and attaches the four binaries plus
-  one `SHA256SUMS`. darwin-x64 builds on `macos-15-intel`, GitHub's last x64
-  macOS label (retired Fall 2027; `macos-13` is already gone) — drop that row
-  when it goes. `ci.yml` runs a single-platform compile smoke so a compile
+  matrix (linux-x64, linux-arm64, darwin-arm64 — bun cannot reliably
+  cross-compile to macOS, oven-sh/bun#29120) and attaches the three binaries
+  plus one `SHA256SUMS`. darwin-x64 is deliberately not shipped: no consumer
+  runs Intel macOS, and GitHub's x64 macOS runners are on the way out anyway
+  (`macos-15-intel` retires Fall 2027). `ci.yml` runs a single-platform compile smoke so a compile
   break surfaces before tag time.
 - **Known limitation:** the release commit is pushed with `[skip ci]`, so no CI
   runs on it; `main` was already green, and the build job smoke-tests each
