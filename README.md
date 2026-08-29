@@ -123,7 +123,7 @@ Every GitHub release carries one compiled binary per platform —
 CI then needs neither a checkout of this repository nor a Bun toolchain:
 
 ```sh
-VERSION=0.2.0
+VERSION=0.4.0
 ASSET=agentforge-linux-x64
 BASE=https://github.com/jdh313/agentforge/releases/download/v${VERSION}
 curl -fsSLO "${BASE}/${ASSET}"
@@ -131,6 +131,55 @@ curl -fsSLO "${BASE}/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS   # shasum -a 256 -c on macOS
 chmod +x "${ASSET}" && ./"${ASSET}" --version
 ```
+
+### npm packages
+
+Each release also publishes to the GitHub Packages npm registry as
+`@jdh313/agentforge`, with the binary itself in a per-platform package
+(`@jdh313/agentforge-<platform>-<arch>`) declared as an optional dependency and
+guarded by `os`/`cpu`. A package manager installs only the binary matching the
+host — two packages, not four.
+
+This registry requires a token even for a public package, so it serves
+consumers that already authenticate to GitHub; the release binaries above stay
+the anonymous path. The token needs the `read:packages` scope
+(`gh auth refresh -h github.com -s read:packages` adds it to an existing
+`gh` login).
+
+With npm, in a project-local `.npmrc`:
+
+```ini
+@jdh313:registry=https://npm.pkg.github.com/
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+```
+
+With Bun, in `bunfig.toml`:
+
+```toml
+[install.scopes]
+"@jdh313" = { url = "https://npm.pkg.github.com/", token = "$NODE_AUTH_TOKEN" }
+```
+
+Then install it as a dependency and run the installed binary:
+
+```sh
+export NODE_AUTH_TOKEN="$(gh auth token)"
+bun install @jdh313/agentforge@0.4.0    # or: npm install @jdh313/agentforge@0.4.0
+bunx agentforge --version               # or: ./node_modules/.bin/agentforge --version
+```
+
+Install first, then run — do not reach for a one-shot
+`bunx @jdh313/agentforge@0.4.0`. `bunx` resolves a not-yet-installed remote
+package against the default registry and honours neither `bunfig.toml`'s
+`[install.scopes]` nor a scoped `.npmrc` entry, so it fails with a 404 against
+`registry.npmjs.org`. Once the package is installed, `bunx agentforge` resolves
+it from `node_modules` and works.
+
+In GitHub Actions, a workflow in another repository authenticates with its own
+`GITHUB_TOKEN` under `permissions: packages: read` — but only after that
+repository has been granted access under the package's **Manage Actions
+access**. Automatic access covers only the repository the package is published
+from.
 
 Releases are cut by [semantic-release](https://github.com/semantic-release/semantic-release):
 every releasable push to `main` (`feat:`, `fix:`, `perf:`, or a breaking
