@@ -305,6 +305,31 @@ root** — the directory holding `MARKETPLACE.yaml` — beside the usual
   drift/absence under the publication id with a `<root>/…` path, and
   `--claude-native` validates the marketplace root as a second plugin root.
 
+## Output content checks
+
+`check` reads every managed output's bytes for the drift comparison already, so
+a content gate rides on that same read — covering **copied passthrough
+resources**, not only generated documents:
+
+- `unsafe-output-content` — the output contains an absolute home directory
+  (`/Users/<name>/`, `/home/<name>/`), or a string listed in the marketplace's
+  optional `redactions:` block. Redactions are **literal strings, not patterns**:
+  a declaration names a vocabulary, and a regex invites an author to encode
+  matching logic the compiler then has to defend against. The patterned class
+  that generalizes across every repository (the home directory) is built in.
+  Binary outputs are skipped — a file with no text has nothing to leak in it.
+
+This is a gate on `check`, never on `compile`: compilation stays total, and
+whether a tree is publishable is a judgement about a finished tree (ndr:tfee0d).
+A leak that reaches disk under `--out` has not been published; one that survives
+`check` is about to be.
+
+Deliberately **not** ported from the repo-local scanner this replaces: the
+repo-wide sweep over every git-tracked file. Neither is a runtime
+failure on either harness, and turning one repository's house style into every
+consumer's problem is not the compiler's job. A publishing repo keeps that as
+its own pre-push hook — agentforge only ever sees files a publication declares.
+
 ## Authoring keys
 
 `PACKAGE.yaml` may declare `authoring-keys: [<frontmatter key>, …]` — a flat

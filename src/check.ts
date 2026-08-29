@@ -19,6 +19,7 @@ export type MarketplaceCheckIssueCode =
   | 'package-identity-mismatch'
   | 'package-version-mismatch'
   | 'invalid-artifact-frontmatter'
+  | 'unsafe-output-content'
   | 'unsafe-output-entry';
 
 export interface MarketplaceCheckIssue {
@@ -61,7 +62,7 @@ export function checkMarketplace(
 
   const issues: MarketplaceCheckIssue[] = [];
   for (const output of plan.outputs) {
-    issues.push(...checkManagedOutput(output, publicationAnchor(outputRoot)));
+    issues.push(...checkManagedOutput(output, publicationAnchor(outputRoot), plan.redactions));
   }
 
   for (const path of actualPaths) {
@@ -85,7 +86,7 @@ export function checkMarketplace(
       publicationId: output.provenance.publicationId,
       path: rootDisplayPath(output.destination),
     });
-    issues.push(...checkManagedOutput(output, marketplaceRootAnchor(output)));
+    issues.push(...checkManagedOutput(output, marketplaceRootAnchor(output), plan.redactions));
   }
 
   issues.sort(
@@ -136,7 +137,11 @@ function marketplaceRootAnchor(output: RootAnchoredOutput): OutputAnchor {
   };
 }
 
-function checkManagedOutput(output: DesiredOutput, anchor: OutputAnchor): MarketplaceCheckIssue[] {
+function checkManagedOutput(
+  output: DesiredOutput,
+  anchor: OutputAnchor,
+  redactions: readonly string[],
+): MarketplaceCheckIssue[] {
   const path = anchor.displayPath(output.destination);
   const actualPath = join(anchor.baseDirectory, ...output.destination.split('/'));
 
@@ -174,6 +179,59 @@ function checkManagedOutput(output: DesiredOutput, anchor: OutputAnchor): Market
   }
   const nativeIssue = validateNativeDocument(output, path, actualBytes);
   if (nativeIssue) issues.push(nativeIssue);
+  issues.push(...scanOutputContent(output, path, actualBytes, redactions));
+  return issues;
+}
+
+// Absolute home directories, the one leak class that generalizes across every
+// repository: a compiler that interpolated a source path into a manifest ships
+// the author's username to whoever installs the plugin. Both spellings, because
+// the same publication is compiled on macOS and on Linux CI.
+const ABSOLUTE_HOME_PATH = /\/(?:Users|home)\/[A-Za-z0-9._-]+\//;
+
+// Scans what a managed output actually contains. Runs against the bytes already
+// read for the drift comparison, so a copied resource costs no extra read than
+// the one `checkManagedOutput` performs regardless — which is why this covers
+// passthrough resources and not only generated documents.
+//
+// A gate on `check` rather than on `compile`: compilation stays total, and what
+// is publishable is a judgement about a finished tree (ndr:tfee0d). A leak that
+// reaches disk under `--out` has not been published; one that survives `check`
+// is about to be.
+function scanOutputContent(
+  output: DesiredOutput,
+  path: string,
+  bytes: Buffer,
+  redactions: readonly string[],
+): MarketplaceCheckIssue[] {
+  // Binary payloads — an icon, a compiled helper — have no text to scan, and
+  // decoding them produces replacement characters that match nothing useful.
+  if (bytes.includes(0)) return [];
+  const content = bytes.toString('utf8');
+
+  const issues: MarketplaceCheckIssue[] = [];
+  const home = ABSOLUTE_HOME_PATH.exec(content);
+  if (home) {
+    issues.push(
+      issueFor(
+        output,
+        'unsafe-output-content',
+        `managed output contains an absolute home directory ${JSON.stringify(home[0])}`,
+        path,
+      ),
+    );
+  }
+  for (const redaction of redactions) {
+    if (!content.includes(redaction)) continue;
+    issues.push(
+      issueFor(
+        output,
+        'unsafe-output-content',
+        `managed output contains the declared redaction ${JSON.stringify(redaction)}`,
+        path,
+      ),
+    );
+  }
   return issues;
 }
 

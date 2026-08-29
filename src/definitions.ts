@@ -185,6 +185,20 @@ const Enrollment = z.discriminatedUnion('mode', [
 // against the nested root and must keep working.
 const RootManifest = z.boolean();
 
+// A literal string that must never appear in compiled output — a machine path
+// fragment, an internal hostname, the name of a private vault. Declared rather
+// than inferred, on the `authoring-keys` / `documents` precedent (ndr:4nshwv):
+// which strings are sensitive is a property of the repository publishing them,
+// and a compiler that guessed would either miss the ones that matter or fail a
+// build over a word that merely looks private.
+//
+// Literal, not a pattern, on purpose. A declaration names a vocabulary; a regex
+// invites an author to encode matching logic the compiler then has to defend
+// against (catastrophic backtracking, silent over-match). The patterned classes
+// that generalize across every repository — an absolute home directory — are
+// built into the check layer instead, where they can be tested once.
+const Redaction = z.string().min(1);
+
 const Publication = z.strictObject({
   id: Slug,
   target: TargetName,
@@ -203,6 +217,7 @@ export const CanonicalMarketplace = z
     defaults: MarketplaceDefaults,
     packages: z.array(z.string().min(1)).min(1),
     publications: z.array(Publication).min(1),
+    redactions: z.array(Redaction).min(1).optional(),
   })
   .superRefine((definition, context) => {
     reportDuplicates(definition.packages, (pattern) => pattern, context, 'package pattern', [
