@@ -1,4 +1,5 @@
 import { dirname } from 'node:path';
+import type { MarketplaceCheckIssue, MarketplaceCheckResult } from './check.ts';
 import type { CompilationDiagnostic, CompilationPlan } from './compiler.ts';
 import { portableRelativePath } from './definitions.ts';
 import { rootDisplayPath } from './root-manifest.ts';
@@ -349,4 +350,91 @@ function groupSection(heading: string, group: ReportGroup): string[] {
   }
   lines.push('');
   return lines;
+}
+
+// The check report: what `check --json` emits.
+//
+// Kept apart from `CompilationReport` rather than folded into it. That report
+// answers "what became of each construct" and groups by disposition
+// (ndr:71jgk2); this one answers "is this compiled tree fit to publish", and its
+// codes are already dispositional — `missing-output`, `changed-output`,
+// `unsafe-output-content` each name what happened. There is no severity axis to
+// reorganise, so imposing the disposition grouping would add a layer that
+// classifies nothing.
+//
+// It carries `schemaVersion` because it is a machine-targeted format, which is
+// exactly what ndr:r51yhr binds.
+const CHECK_SCHEMA_VERSION = 1;
+
+export interface CheckReportPublication {
+  id: string;
+  status: 'ok' | 'failed';
+  // Managed files compared against the plan, including any root-anchored
+  // manifest this publication owns.
+  filesChecked: number;
+}
+
+export interface CheckReport {
+  schemaVersion: number;
+  marketplaceId: string;
+  // `ok` only when no publication failed. Hoisted so a consumer can branch
+  // without walking the issue list, and so an empty `issues` array is never the
+  // only signal — a reader who mistakes "no issues parsed" for "passed" is the
+  // failure mode the text format already had.
+  status: 'ok' | 'failed';
+  publications: CheckReportPublication[];
+  issues: MarketplaceCheckIssue[];
+  diagnostics: ReportedCheckDiagnostic[];
+}
+
+export interface ReportedCheckDiagnostic {
+  code: string;
+  severity: CompilationDiagnostic['severity'];
+  target: string;
+  publicationId: string;
+  packageId?: string;
+  message: string;
+}
+
+export function buildCheckReport(
+  plan: CompilationPlan,
+  result: MarketplaceCheckResult,
+): CheckReport {
+  const failed = new Set(result.issues.map(({ publicationId }) => publicationId));
+  const publicationIds = new Set<string>([
+    ...plan.outputs.map(({ provenance }) => provenance.publicationId),
+    ...plan.rootOutputs.map(({ provenance }) => provenance.publicationId),
+  ]);
+
+  const publications = [...publicationIds].toSorted(compareReportStrings).map((id) => ({
+    id,
+    status: (failed.has(id) ? 'failed' : 'ok') as 'ok' | 'failed',
+    filesChecked:
+      result.filesChecked.filter((path) => path.startsWith(`${id}/`)).length +
+      result.rootFilesChecked.filter(({ publicationId }) => publicationId === id).length,
+  }));
+
+  return {
+    schemaVersion: CHECK_SCHEMA_VERSION,
+    marketplaceId: plan.marketplaceId,
+    status: result.issues.length > 0 ? 'failed' : 'ok',
+    publications,
+    // Already ordered by path then code in `checkMarketplace`, and left that
+    // way: a stable order is what makes two runs diffable.
+    issues: result.issues,
+    diagnostics: plan.diagnostics.map((diagnostic) => ({
+      code: diagnostic.code,
+      severity: diagnostic.severity,
+      target: diagnostic.target,
+      publicationId: diagnostic.provenance.publicationId,
+      ...(diagnostic.provenance.packageId === undefined
+        ? {}
+        : { packageId: diagnostic.provenance.packageId }),
+      message: diagnostic.message,
+    })),
+  };
+}
+
+function compareReportStrings(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }

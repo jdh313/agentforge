@@ -10,7 +10,7 @@ import { type LoadedMarketplace, loadMarketplaceDefinition } from './definitions
 import { claudeMarketplaceAdapter, codexMarketplaceAdapter } from './marketplace-adapters.ts';
 import { materializeCompilation } from './materializer.ts';
 import { render } from './render.ts';
-import { formatFromPath, type ReportFormat, renderReport } from './report.ts';
+import { buildCheckReport, formatFromPath, type ReportFormat, renderReport } from './report.ts';
 import { rootDisplayPath } from './root-manifest.ts';
 import { ARTIFACT_DEFS } from './schema.ts';
 import { allTargets } from './targets/index.ts';
@@ -245,10 +245,11 @@ program
     '--claude-native',
     'cross-check selected Claude publications with claude plugin validate --strict',
   )
+  .option('--json', 'emit the result as a JSON document on stdout instead of human lines')
   .action(
     async (
       marketplace: string,
-      opts: { out: string; publication: string[]; claudeNative?: boolean },
+      opts: { out: string; publication: string[]; claudeNative?: boolean; json?: boolean },
     ) => {
       try {
         const loaded = await loadMarketplaceDefinition(resolve(marketplace));
@@ -257,20 +258,31 @@ program
         const plan = compileSelectedMarketplace(selected, outputRoot);
         const result = checkMarketplace(plan, outputRoot);
 
-        for (const publication of selected.definition.publications.toSorted((left, right) =>
-          compareStrings(left.id, right.id),
-        )) {
-          const count =
-            result.filesChecked.filter((path) => path.startsWith(`${publication.id}/`)).length +
-            result.rootFilesChecked.filter(({ publicationId }) => publicationId === publication.id)
-              .length;
-          const status = result.issues.some(({ publicationId }) => publicationId === publication.id)
-            ? 'failed'
-            : 'ok';
-          console.log(`[${publication.id}] ${status}: ${count} managed files`);
+        // `--json` owns stdout entirely: a consumer parses the whole stream, so
+        // one stray human line makes the document unparseable. The native
+        // cross-check below still writes through, because it is a separate
+        // tool's output and suppressing it would hide why the run failed.
+        if (opts.json) {
+          console.log(JSON.stringify(buildCheckReport(plan, result), null, 2));
+        } else {
+          for (const publication of selected.definition.publications.toSorted((left, right) =>
+            compareStrings(left.id, right.id),
+          )) {
+            const count =
+              result.filesChecked.filter((path) => path.startsWith(`${publication.id}/`)).length +
+              result.rootFilesChecked.filter(
+                ({ publicationId }) => publicationId === publication.id,
+              ).length;
+            const status = result.issues.some(
+              ({ publicationId }) => publicationId === publication.id,
+            )
+              ? 'failed'
+              : 'ok';
+            console.log(`[${publication.id}] ${status}: ${count} managed files`);
+          }
+          for (const line of formatCompilationDiagnostics(plan)) console.log(line);
+          for (const issue of result.issues) console.error(formatCheckIssue(issue));
         }
-        for (const line of formatCompilationDiagnostics(plan)) console.log(line);
-        for (const issue of result.issues) console.error(formatCheckIssue(issue));
 
         let failed = result.issues.length > 0;
         if (opts.claudeNative) {

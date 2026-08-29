@@ -453,6 +453,13 @@ agentforge list-targets
   selected Claude publications, and for a `root-manifest` publication also
   validates the marketplace root. It is opt-in so the default check does not
   require Claude Code to be installed.
+- `--json` emits the result as a single JSON document on stdout instead of the
+  human lines, for a CI job or a consuming tool that would otherwise parse the
+  diagnostic stream back apart. The document carries a `schemaVersion`, a
+  hoisted `status` (`ok` / `failed`), a per-publication status and file count,
+  the issues in their stable path-then-code order, and the compilation
+  diagnostics. Read `status` rather than inferring success from an empty
+  `issues` array. Exit codes are unchanged.
 
 ### `root-manifest` publications
 
