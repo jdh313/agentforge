@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { checkMarketplace } from 'agentforge/check';
 import type { CompilationPlan } from 'agentforge/compiler';
 import { materializeCompilation } from 'agentforge/materializer';
+import { buildCheckReport } from 'agentforge/report';
 
 let temporaryRoot: string;
 
@@ -434,6 +435,75 @@ describe('marketplace check', () => {
     const result = checkMarketplace(plan, outputRoot);
 
     expect(result.issues).toEqual([]);
+  });
+
+  test('builds a machine-readable report for a clean publication', () => {
+    const source = join(temporaryRoot, 'source.txt');
+    const outputRoot = join(temporaryRoot, 'output');
+    writeFileSync(source, 'copied\n');
+    const plan = fixturePlan(source);
+    materializeCompilation(plan, outputRoot);
+
+    const report = buildCheckReport(plan, checkMarketplace(plan, outputRoot));
+
+    expect(report.schemaVersion).toBe(1);
+    expect(report.status).toBe('ok');
+    expect(report.issues).toEqual([]);
+    expect(report.publications).toEqual([{ id: 'claude', status: 'ok', filesChecked: 2 }]);
+  });
+
+  // The hoisted status is what keeps a consumer from reading "no issues parsed"
+  // as "passed" — the exact failure the text format invited.
+  test('reports failed status and the issues alongside it', () => {
+    const source = join(temporaryRoot, 'source.txt');
+    const outputRoot = join(temporaryRoot, 'output');
+    writeFileSync(source, 'copied\n');
+    const plan = fixturePlan(source);
+    materializeCompilation(plan, outputRoot);
+    writeFileSync(join(outputRoot, 'claude', 'generated.json'), '{"ok":false}\n');
+
+    const report = buildCheckReport(plan, checkMarketplace(plan, outputRoot));
+
+    expect(report.status).toBe('failed');
+    expect(report.publications).toEqual([{ id: 'claude', status: 'failed', filesChecked: 2 }]);
+    expect(report.issues.map(({ code }) => code)).toContain('changed-output');
+  });
+
+  test('carries compilation diagnostics with their provenance flattened', () => {
+    const source = join(temporaryRoot, 'source.txt');
+    const outputRoot = join(temporaryRoot, 'output');
+    writeFileSync(source, 'copied\n');
+    const base = fixturePlan(source);
+    const plan: CompilationPlan = {
+      ...base,
+      diagnostics: [
+        {
+          code: 'claude-only-frontmatter-stripped',
+          severity: 'warning',
+          message: 'Skill "demo": stripped allowed-tools.',
+          target: 'codex',
+          provenance: {
+            marketplacePath: '/fixture/MARKETPLACE.yaml',
+            publicationId: 'claude',
+            packageId: 'example',
+          },
+        },
+      ],
+    };
+    materializeCompilation(plan, outputRoot);
+
+    const report = buildCheckReport(plan, checkMarketplace(plan, outputRoot));
+
+    expect(report.diagnostics).toEqual([
+      {
+        code: 'claude-only-frontmatter-stripped',
+        severity: 'warning',
+        target: 'codex',
+        publicationId: 'claude',
+        packageId: 'example',
+        message: 'Skill "demo": stripped allowed-tools.',
+      },
+    ]);
   });
 });
 

@@ -24,6 +24,7 @@
     "./definitions": "./src/definitions.ts",
     "./materializer": "./src/materializer.ts",
     "./marketplace-adapters": "./src/marketplace-adapters.ts",
+    "./report": "./src/report.ts",
     "./render": "./src/render.ts"
   },
   "scripts": {
