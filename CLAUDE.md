@@ -308,7 +308,7 @@ root** — the directory holding `MARKETPLACE.yaml` — beside the usual
 ## Output content checks
 
 `check` reads every managed output's bytes for the drift comparison already, so
-a content gate rides on that same read — covering **copied passthrough
+two content gates ride on that same read — covering **copied passthrough
 resources**, not only generated documents:
 
 - `unsafe-output-content` — the output contains an absolute home directory
@@ -318,17 +318,23 @@ resources**, not only generated documents:
   matching logic the compiler then has to defend against. The patterned class
   that generalizes across every repository (the home directory) is built in.
   Binary outputs are skipped — a file with no text has nothing to leak in it.
+- `invalid-output-document` — a `.json` output that is not one of the native
+  documents (which have their own `invalid-native-document` code) fails to parse.
+  Both harnesses parse these at load time, so a file that does not parse is one
+  the runtime rejects.
 
-This is a gate on `check`, never on `compile`: compilation stays total, and
+Both are gates on `check`, never on `compile`: compilation stays total, and
 whether a tree is publishable is a judgement about a finished tree (ndr:tfee0d).
 A leak that reaches disk under `--out` has not been published; one that survives
 `check` is about to be.
 
-Deliberately **not** ported from the repo-local scanner this replaces: the
-repo-wide sweep over every git-tracked file. Neither is a runtime
+Deliberately **not** ported from the repo-local linter these replace: an empty
+or short markdown file, and an allowed-extension list. Neither is a runtime
 failure on either harness, and turning one repository's house style into every
-consumer's problem is not the compiler's job. A publishing repo keeps that as
-its own pre-push hook — agentforge only ever sees files a publication declares.
+consumer's build error is the overreach ndr:17dhph rejected for strict target
+schemas. A publishing repo that wants those keeps them as its own pre-push hook,
+alongside the repo-wide secret scan that cannot move here — agentforge only ever
+sees files a publication declares.
 
 ## Authoring keys
 

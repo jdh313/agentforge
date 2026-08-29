@@ -391,7 +391,61 @@ describe('marketplace check', () => {
 
     expect(result.issues).toEqual([]);
   });
+
+  test('reports a copied .json resource that does not parse', () => {
+    const source = join(temporaryRoot, 'settings.json');
+    const outputRoot = join(temporaryRoot, 'output');
+    writeFileSync(source, '{"unterminated": true\n');
+    const plan = jsonResourcePlan(source);
+    materializeCompilation(plan, outputRoot);
+
+    const result = checkMarketplace(plan, outputRoot);
+
+    expect(result.issues).toContainEqual({
+      code: 'invalid-output-document',
+      publicationId: 'claude',
+      packageId: 'example',
+      path: 'claude/packages/example/settings.json',
+      message: 'managed output is not valid JSON',
+    });
+  });
+
+  test('accepts a copied .json resource that parses', () => {
+    const source = join(temporaryRoot, 'settings.json');
+    const outputRoot = join(temporaryRoot, 'output');
+    writeFileSync(source, '{"ok": true}\n');
+    const plan = jsonResourcePlan(source);
+    materializeCompilation(plan, outputRoot);
+
+    const result = checkMarketplace(plan, outputRoot);
+
+    expect(result.issues).toEqual([]);
+  });
+
+  // The linter this replaces failed an empty markdown file. Neither harness
+  // does, so neither does check.
+  test('accepts an empty copied markdown resource', () => {
+    const source = join(temporaryRoot, 'source.txt');
+    const outputRoot = join(temporaryRoot, 'output');
+    writeFileSync(source, '');
+    const plan = fixturePlan(source);
+    materializeCompilation(plan, outputRoot);
+
+    const result = checkMarketplace(plan, outputRoot);
+
+    expect(result.issues).toEqual([]);
+  });
 });
+
+function jsonResourcePlan(sourcePath: string): CompilationPlan {
+  const base = fixturePlan(sourcePath);
+  const [generatedOutput, copied] = base.outputs;
+  if (!generatedOutput || !copied || copied.kind !== 'copy') throw new Error('fixture drift');
+  return {
+    ...base,
+    outputs: [generatedOutput, { ...copied, destination: 'claude/packages/example/settings.json' }],
+  };
+}
 
 function fixturePlan(sourcePath: string): CompilationPlan {
   return {
