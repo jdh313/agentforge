@@ -19,6 +19,7 @@ export type MarketplaceCheckIssueCode =
   | 'package-identity-mismatch'
   | 'package-version-mismatch'
   | 'invalid-artifact-frontmatter'
+  | 'invalid-output-document'
   | 'unsafe-output-content'
   | 'unsafe-output-entry';
 
@@ -179,8 +180,37 @@ function checkManagedOutput(
   }
   const nativeIssue = validateNativeDocument(output, path, actualBytes);
   if (nativeIssue) issues.push(nativeIssue);
+  else {
+    const jsonIssue = validateOutputJson(output, path, actualBytes);
+    if (jsonIssue) issues.push(jsonIssue);
+  }
   issues.push(...scanOutputContent(output, path, actualBytes, redactions));
   return issues;
+}
+
+// A `.json` output that is not one of the native documents above: a hook
+// configuration, a package's own settings file, anything a publication ships
+// verbatim. Malformed JSON here is a real defect rather than a style opinion —
+// the harness parses these at load time, so a file that does not parse is one
+// the runtime will reject.
+//
+// Deliberately narrower than the linter this replaces, which also failed an
+// empty markdown file and warned on a short one. Neither is a runtime failure
+// on either harness, and turning one repository's house style into every
+// consumer's build error is the same overreach `ndr:17dhph` rejected for strict
+// target schemas.
+function validateOutputJson(
+  output: DesiredOutput,
+  path: string,
+  actualBytes: Buffer,
+): MarketplaceCheckIssue | undefined {
+  if (!output.destination.endsWith('.json')) return undefined;
+  try {
+    JSON.parse(actualBytes.toString('utf8'));
+    return undefined;
+  } catch {
+    return issueFor(output, 'invalid-output-document', 'managed output is not valid JSON', path);
+  }
 }
 
 // Absolute home directories, the one leak class that generalizes across every
