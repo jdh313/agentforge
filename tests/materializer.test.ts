@@ -140,7 +140,7 @@ describe('marketplace materialization', () => {
 });
 
 function plan(outputs: readonly DesiredOutput[]): CompilationPlan {
-  return { marketplaceId: 'fixture', outputs, diagnostics: [], rootOutputs: [] };
+  return { marketplaceId: 'fixture', outputs, diagnostics: [], rootOutputs: [], redactions: [] };
 }
 
 function generated(destination: string, content: string): DesiredOutput {

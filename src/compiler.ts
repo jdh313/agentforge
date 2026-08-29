@@ -141,6 +141,11 @@ export interface CompilationPlan {
   // optional list makes every consumer restate the default, and one that
   // forgets silently drops the second anchor.
   rootOutputs: readonly RootAnchoredOutput[];
+  // The marketplace's declared redactions, carried on the plan rather than
+  // passed alongside it. `check` derives every judgement it makes from the plan
+  // (ndr:tfee0d), and a gate handed in as a separate optional argument is a gate
+  // a caller can forget — the same reasoning that keeps `rootOutputs` here.
+  redactions: readonly string[];
 }
 
 export interface CompileMarketplaceOptions {
@@ -220,6 +225,7 @@ export function compileMarketplace(
     outputs: resolvedOutputs,
     diagnostics,
     rootOutputs: buildRootOutputs(loaded, resolvedOutputs, options.outputRoot),
+    redactions: loaded.definition.redactions ?? [],
   };
 }
 

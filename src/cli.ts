@@ -173,7 +173,13 @@ const compileSelectedMarketplace = (
     diagnostics.push(...plan.diagnostics);
   }
 
-  return { marketplaceId: loaded.definition.id, outputs, diagnostics, rootOutputs };
+  return {
+    marketplaceId: loaded.definition.id,
+    outputs,
+    diagnostics,
+    rootOutputs,
+    redactions: loaded.definition.redactions ?? [],
+  };
 };
 
 program

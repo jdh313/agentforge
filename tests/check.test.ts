@@ -304,6 +304,93 @@ describe('marketplace check', () => {
       message: 'managed output must be a regular file contained by its publication root',
     });
   });
+
+  // The copied half is the point: a passthrough resource is never parsed by the
+  // compiler, so a leak inside one is invisible to every other check.
+  test('reports an absolute home directory in a copied resource', () => {
+    const source = join(temporaryRoot, 'source.txt');
+    const outputRoot = join(temporaryRoot, 'output');
+    writeFileSync(source, 'see /Users/someone/Projects/notes.md for details\n');
+    const plan = fixturePlan(source);
+    materializeCompilation(plan, outputRoot);
+
+    const result = checkMarketplace(plan, outputRoot);
+
+    expect(result.issues).toContainEqual({
+      code: 'unsafe-output-content',
+      publicationId: 'claude',
+      packageId: 'example',
+      path: 'claude/packages/example/source.txt',
+      message: 'managed output contains an absolute home directory "/Users/someone/"',
+    });
+  });
+
+  test('reports an absolute home directory in a generated document', () => {
+    const source = join(temporaryRoot, 'source.txt');
+    const outputRoot = join(temporaryRoot, 'output');
+    writeFileSync(source, 'copied\n');
+    const plan = fixturePlan(source);
+    const [generatedOutput, ...rest] = plan.outputs;
+    if (!generatedOutput || generatedOutput.kind !== 'generated') throw new Error('fixture drift');
+    const leaking: CompilationPlan = {
+      ...plan,
+      outputs: [{ ...generatedOutput, content: '{"root":"/home/someone/src"}\n' }, ...rest],
+    };
+    materializeCompilation(leaking, outputRoot);
+
+    const result = checkMarketplace(leaking, outputRoot);
+
+    expect(result.issues).toContainEqual({
+      code: 'unsafe-output-content',
+      publicationId: 'claude',
+      path: 'claude/generated.json',
+      message: 'managed output contains an absolute home directory "/home/someone/"',
+    });
+  });
+
+  test('reports a declared redaction', () => {
+    const source = join(temporaryRoot, 'source.txt');
+    const outputRoot = join(temporaryRoot, 'output');
+    writeFileSync(source, 'filed under Loose Ends for later\n');
+    const plan = { ...fixturePlan(source), redactions: ['Loose Ends'] };
+    materializeCompilation(plan, outputRoot);
+
+    const result = checkMarketplace(plan, outputRoot);
+
+    expect(result.issues).toContainEqual({
+      code: 'unsafe-output-content',
+      publicationId: 'claude',
+      packageId: 'example',
+      path: 'claude/packages/example/source.txt',
+      message: 'managed output contains the declared redaction "Loose Ends"',
+    });
+  });
+
+  test('leaves an undeclared sensitive-looking string alone', () => {
+    const source = join(temporaryRoot, 'source.txt');
+    const outputRoot = join(temporaryRoot, 'output');
+    writeFileSync(source, 'filed under Loose Ends for later\n');
+    const plan = fixturePlan(source);
+    materializeCompilation(plan, outputRoot);
+
+    const result = checkMarketplace(plan, outputRoot);
+
+    expect(result.issues).toEqual([]);
+  });
+
+  // A binary payload decodes to replacement characters, which match nothing
+  // useful; scanning it would only produce noise on a file with no text in it.
+  test('skips a binary payload', () => {
+    const source = join(temporaryRoot, 'source.txt');
+    const outputRoot = join(temporaryRoot, 'output');
+    writeFileSync(source, Buffer.from([0x00, 0x01, 0x02, 0xff]));
+    const plan = { ...fixturePlan(source), redactions: ['Loose Ends'] };
+    materializeCompilation(plan, outputRoot);
+
+    const result = checkMarketplace(plan, outputRoot);
+
+    expect(result.issues).toEqual([]);
+  });
 });
 
 function fixturePlan(sourcePath: string): CompilationPlan {
@@ -311,6 +398,7 @@ function fixturePlan(sourcePath: string): CompilationPlan {
     marketplaceId: 'fixture',
     diagnostics: [],
     rootOutputs: [],
+    redactions: [],
     outputs: [
       {
         kind: 'generated',
@@ -342,6 +430,7 @@ function claudePlan(): CompilationPlan {
     marketplaceId: 'fixture',
     diagnostics: [],
     rootOutputs: [],
+    redactions: [],
     outputs: [
       generated(
         'claude/.claude-plugin/marketplace.json',
@@ -370,6 +459,7 @@ function codexPlan(): CompilationPlan {
     marketplaceId: 'fixture',
     diagnostics: [],
     rootOutputs: [],
+    redactions: [],
     outputs: [
       {
         kind: 'generated',
