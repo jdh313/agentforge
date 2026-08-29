@@ -1,3 +1,10 @@
+# [0.4.0](https://github.com/jdh313/agentforge/compare/v0.3.0...v0.4.0) (2026-08-29)
+
+
+### Features
+
+* **check:** emit the check result as a machine-readable document ([ea562dc](https://github.com/jdh313/agentforge/commit/ea562dc1d799186f6ff51c86936c3363145513d9))
+
 # [0.3.0](https://github.com/jdh313/agentforge/compare/v0.2.0...v0.3.0) (2026-08-29)
 
 
