@@ -1,7 +1,7 @@
 ---
 id: "4nshwv"
 title: Require a declared loss only where a construct is lost silently
-status: current
+status: superseded
 decision_date: 2026-07-30
 author: Jacob Hoehler
 conviction: tentative
@@ -13,7 +13,8 @@ binds:
   - src/compatibility.ts
   - src/definitions.ts
 supersedes: []
-superseded_by: []
+superseded_by:
+  - 5ymhmg
 derived_from:
   - git:e2442a8
 informed_by:

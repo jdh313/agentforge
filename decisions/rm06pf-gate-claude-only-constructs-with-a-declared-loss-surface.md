@@ -1,7 +1,7 @@
 ---
 id: "rm06pf"
 title: Gate Claude-only constructs with a declared-loss surface
-status: current
+status: superseded
 decision_date: 2026-07-30
 author: Jacob Hoehler
 conviction: strong
@@ -14,7 +14,8 @@ binds:
   - src/definitions.ts
   - src/targets/package-payload.ts
 supersedes: []
-superseded_by: []
+superseded_by:
+  - 728mf7
 derived_from:
   - git:e2442a8
 informed_by:
