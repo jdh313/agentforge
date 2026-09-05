@@ -1,7 +1,7 @@
 ---
 id: "cp4rfn"
 title: Keep package compilation free of filesystem I/O
-status: current
+status: superseded
 decision_date: 2026-07-19
 author: Jacob Hoehler
 conviction: tentative
@@ -16,7 +16,8 @@ binds:
   - src/render.ts
   - src/targets/package-payload.ts
 supersedes: []
-superseded_by: []
+superseded_by:
+  - t6sykj
 derived_from:
   - git:fe35e68
   - git:5c4da89

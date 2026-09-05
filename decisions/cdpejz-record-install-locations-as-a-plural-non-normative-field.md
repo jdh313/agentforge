@@ -1,7 +1,7 @@
 ---
 id: "cdpejz"
 title: Record install locations as a plural non-normative field
-status: current
+status: superseded
 decision_date: 2026-09-03
 author: Jacob Hoehler
 conviction: tentative
@@ -13,7 +13,8 @@ binds:
   - src/targets/**
   - src/cli.ts
 supersedes: []
-superseded_by: []
+superseded_by:
+  - d17fnt
 derived_from:
   - https://junglelan.fibery.io/Charting/Ticket/9
 informed_by: []
