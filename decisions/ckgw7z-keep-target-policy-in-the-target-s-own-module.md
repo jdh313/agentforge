@@ -1,7 +1,7 @@
 ---
 id: "ckgw7z"
 title: Keep target policy in the target's own module
-status: current
+status: superseded
 decision_date: 2026-09-04
 author: Jacob Hoehler
 conviction: tentative
@@ -16,7 +16,8 @@ binds:
   - src/cli.ts
   - src/targets/**
 supersedes: []
-superseded_by: []
+superseded_by:
+  - zjnfjm
 derived_from:
   - https://junglelan.fibery.io/Charting/Ticket/3
 informed_by:
