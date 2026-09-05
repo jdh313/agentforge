@@ -81,7 +81,7 @@ export interface DetectionInput {
   resources?: readonly LoadedArtifact[];
   // Files declared reference-or-diagnostic. Their constructs are documentation
   // *about* Claude rather than instructions to a model, so an identifier there
-  // is the content, not a loss (ndr:grjvxz).
+  // is the content, not a loss (ndr:8b6rtp).
   exemptDocuments?: ReadonlySet<string>;
   target: TargetName;
   surface?: ConstructSurface;

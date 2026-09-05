@@ -104,7 +104,7 @@ const ArtifactPattern = z.strictObject({
 // meant to be translated.
 //
 // Both classes are exempt from body scanning; the name records why, so a reader
-// can tell a gotcha reference from a connectivity probe (ndr:grjvxz).
+// can tell a gotcha reference from a connectivity probe (ndr:8b6rtp).
 const DocumentClass = z.strictObject({
   class: z.enum(['reference', 'diagnostic']),
   pattern: z.string().min(1),
