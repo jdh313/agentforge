@@ -5,6 +5,12 @@ const TargetOverride = z.looseObject({
   body: z.string().optional(),
 });
 
+export const CanonicalAgentName = z
+  .string()
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'name must be a lowercase hyphenated identifier');
+
+const ToolList = z.union([z.string(), z.array(z.string())]);
+
 const TargetsBlock = z
   .object({
     claude: TargetOverride.optional(),
@@ -51,6 +57,22 @@ export const CanonicalSkillFrontmatter = z.looseObject({
 
 export type CanonicalSkillFrontmatterT = z.infer<typeof CanonicalSkillFrontmatter>;
 
+// This is also the package-agent parser's schema. Leaf rendering and
+// marketplace compilation must normalize one canonical behavior model rather
+// than maintain parallel interpretations of the same source (0.8 boundary).
+export const CanonicalAgentFrontmatter = z.looseObject({
+  name: CanonicalAgentName,
+  description: z.string().min(1),
+  model: z.string().min(1).optional(),
+  maxTurns: z.number().int().positive().optional(),
+  effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
+  tools: ToolList.optional(),
+
+  targets: TargetsBlock,
+});
+
+export type CanonicalAgentFrontmatterT = z.infer<typeof CanonicalAgentFrontmatter>;
+
 export const CanonicalOutputStyleFrontmatter = z.looseObject({
   name: z
     .string()
@@ -86,6 +108,12 @@ export const ARTIFACT_DEFS: Record<ArtifactType, ArtifactDefinition> = {
     canonicalSchema: CanonicalSkillFrontmatter,
     canonicalKeys: keysOf(CanonicalSkillFrontmatter),
     layout: 'directory',
+  },
+  agent: {
+    canonicalFilename: 'AGENT.md',
+    canonicalSchema: CanonicalAgentFrontmatter,
+    canonicalKeys: keysOf(CanonicalAgentFrontmatter),
+    layout: 'file',
   },
   'output-style': {
     canonicalFilename: 'OUTPUT_STYLE.md',

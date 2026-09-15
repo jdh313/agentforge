@@ -18,6 +18,7 @@ import { materializeCompilation } from 'agentforge/materializer';
 import { getArtifactConfig } from '../src/targets/index.ts';
 
 let temporaryRoot: string;
+const FIXTURE_AGENT = join(import.meta.dir, 'fixtures', 'agent-basic');
 
 beforeEach(() => {
   temporaryRoot = mkdtempSync(join(tmpdir(), 'agentforge-install-'));
@@ -164,6 +165,16 @@ describe('scoped artifact installation', () => {
         projectRoot: temporaryRoot,
       }),
     ).toThrow('install supports directory artifacts only');
+
+    expect(() =>
+      buildInstallPlan({
+        sourceDir: FIXTURE_AGENT,
+        target: 'claude',
+        artifact: 'agent',
+        scope: 'user',
+        projectRoot: temporaryRoot,
+      }),
+    ).toThrow('install supports directory artifacts only; agent uses file layout');
   });
 });
 

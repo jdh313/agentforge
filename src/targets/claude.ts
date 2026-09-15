@@ -32,6 +32,17 @@ const ClaudeOutputStyleFrontmatter = z.looseObject({
   'force-for-plugin': z.boolean().optional(),
 });
 
+const ClaudeAgentFrontmatter = z.looseObject({
+  name: z
+    .string()
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'name must be a lowercase hyphenated identifier'),
+  description: z.string().min(1),
+  tools: z.union([z.string(), z.array(z.string())]).optional(),
+  model: z.string().min(1).optional(),
+  maxTurns: z.number().int().positive().optional(),
+  effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
+});
+
 export const claudeTarget: TargetAdapter = {
   name: 'claude',
   label: 'Claude',
@@ -45,6 +56,14 @@ export const claudeTarget: TargetAdapter = {
       surface: 'skill',
       resourceSubdirs: new Set(['scripts', 'references', 'assets']),
       outputFrontmatterSchema: ClaudeSkillFrontmatter,
+    },
+    agent: {
+      // File-layout installation needs sibling-preserving ownership semantics;
+      // leaving this empty keeps `list-targets` honest until that lands.
+      installLocations: {},
+      surface: 'agent',
+      resourceSubdirs: new Set(),
+      outputFrontmatterSchema: ClaudeAgentFrontmatter,
     },
     'output-style': {
       installLocations: {},

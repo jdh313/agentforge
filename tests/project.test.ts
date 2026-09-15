@@ -97,7 +97,11 @@ targets:
         marketplace: marketplace !== undefined,
       })),
     ).toEqual([
-      { name: 'claude', surfaces: { skill: 'skill', 'output-style': 'skill' }, marketplace: true },
+      {
+        name: 'claude',
+        surfaces: { skill: 'skill', 'output-style': 'skill', agent: 'agent' },
+        marketplace: true,
+      },
       { name: 'opencode', surfaces: { skill: 'skill' }, marketplace: false },
       { name: 'codex', surfaces: { skill: 'skill' }, marketplace: true },
       { name: 'pi', surfaces: { skill: 'skill' }, marketplace: false },

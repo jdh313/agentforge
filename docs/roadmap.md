@@ -18,6 +18,12 @@ versions. Semantic-release assigns package versions from commits on `main`.
 Make `agent` a first-class leaf artifact and use that same canonical model from
 marketplace compilation.
 
+Current progress: `AGENT.md` is registered as a file-layout leaf artifact and
+renders to Claude's native named Markdown format using the package parser's
+canonical agent schema. Other target projections, safe file installation, and
+marketplace reuse remain. The filename, required identity, and default layout
+are recorded in `ndr:2t36rb`.
+
 ### Boundary
 
 1. Extend `ArtifactType`, `ARTIFACT_DEFS`, projection, installation, and checks

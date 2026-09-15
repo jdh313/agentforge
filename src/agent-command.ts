@@ -1,21 +1,11 @@
 import { basename, extname } from 'node:path';
 import matter from 'gray-matter';
 import { z } from 'zod';
+import { CanonicalAgentFrontmatter, CanonicalAgentName } from './schema.ts';
 
-const Slug = z
-  .string()
-  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'name must be a lowercase hyphenated identifier');
+const Slug = CanonicalAgentName;
 
 const ToolList = z.union([z.string(), z.array(z.string())]);
-
-const AgentFrontmatter = z.looseObject({
-  name: Slug.optional(),
-  description: z.string().min(1),
-  model: z.string().min(1).optional(),
-  maxTurns: z.number().int().positive().optional(),
-  effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
-  tools: ToolList.optional(),
-});
 
 const CommandFrontmatter = z.looseObject({
   name: Slug.optional(),
@@ -51,7 +41,13 @@ export interface CanonicalCommandBehavior extends CanonicalBehavior {
 }
 
 export function parseAgentBehavior(sourcePath: string, source: string): CanonicalAgentBehavior {
-  const parsed = parseBehaviorSource(sourcePath, source, AgentFrontmatter, 'agent');
+  const parsed = parseBehaviorSource(
+    sourcePath,
+    source,
+    CanonicalAgentFrontmatter,
+    'agent',
+    basename(sourcePath, extname(sourcePath)),
+  );
   return {
     kind: 'agent',
     ...parsed.common,
@@ -85,9 +81,12 @@ function parseBehaviorSource<T extends { name?: string; description: string }>(
   source: string,
   schema: z.ZodType<T>,
   kind: string,
+  fallbackName = basename(sourcePath, extname(sourcePath)),
 ): { data: T; common: CanonicalBehavior } {
   const parsed = matter(source);
-  const data = schema.parse(parsed.data);
+  const data = schema.parse(
+    parsed.data.name === undefined ? { ...parsed.data, name: fallbackName } : parsed.data,
+  );
   if (parsed.content.trim().length === 0) {
     throw new Error(`${sourcePath}: ${kind} instructions must not be empty`);
   }

@@ -391,6 +391,55 @@ describe('check command', () => {
   }
 });
 
+describe('leaf agent commands', () => {
+  const agentSource = join(import.meta.dir, 'fixtures', 'agent-basic');
+
+  test('infers AGENT.md during validation', () => {
+    const result = runCli('validate', agentSource);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('agent-basic/AGENT.md');
+  });
+
+  test('requires canonical agent identity in frontmatter', () => {
+    const source = join(temporaryRoot, 'agent-without-name');
+    mkdirSync(source);
+    writeFileSync(
+      join(source, 'AGENT.md'),
+      '---\ndescription: Missing an explicit identity.\n---\n\n# Agent\n',
+    );
+
+    const result = runCli('validate', source);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('name:');
+  });
+
+  test('renders Claude and explicitly skips unsupported targets', () => {
+    const outBase = join(temporaryRoot, 'agent-all-targets');
+    const result = runCli('render', agentSource, '--all-targets', '--out-base', outBase);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('[claude] wrote');
+    expect(result.stdout).toContain('claude/vault-reader.md');
+    for (const target of ['opencode', 'codex', 'pi', 'claude-chat']) {
+      expect(result.stdout).toContain(`[${target}] skip: artifact agent not supported`);
+    }
+    expect(readFileSync(join(outBase, 'claude', 'vault-reader.md'), 'utf-8')).toContain(
+      'name: vault-reader',
+    );
+  });
+
+  test('lists agent rendering without advertising unsafe install scopes', () => {
+    const result = runCli('list-targets');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('claude       agent          install: none');
+  });
+});
+
 function runCli(...args: string[]): { exitCode: number; stdout: string; stderr: string } {
   return runCliWithEnv({}, ...args);
 }

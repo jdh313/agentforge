@@ -28,11 +28,12 @@ validity and drift without writing. Directory artifacts can also be installed
 at target-owned user, project, or plugin locations and checked from the same
 synthetic plan.
 
-The next roadmap slice is first-class canonical agents. The repository already
-parses package-level Claude agent files, but the leaf renderer does not yet
-accept an `agent` artifact and Codex still receives inferred Markdown role
-procedures rather than native registered agents. See [the roadmap](docs/roadmap.md)
-for the implementation boundary and acceptance sequence through 1.0.
+The canonical-agent roadmap slice is underway. The leaf renderer accepts an
+`AGENT.md` artifact and projects it to Claude's native named Markdown format;
+installation, additional native targets, and marketplace convergence remain.
+Codex still receives inferred Markdown role procedures rather than native
+registered agents. See [the roadmap](docs/roadmap.md) for the implementation
+boundary and acceptance sequence through 1.0.
 
 ## Requirements
 

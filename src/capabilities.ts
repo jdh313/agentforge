@@ -107,6 +107,15 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
     },
   ],
   [
+    'claude/agent',
+    {
+      supported: [],
+      unsupported: [],
+      source:
+        'https://code.claude.com/docs/en/subagents — the Markdown body is the subagent system prompt; no command-style interpolation contract is claimed here. Verified 2026-09-15.',
+    },
+  ],
+  [
     'codex/skill',
     {
       supported: [],

@@ -589,3 +589,43 @@ exports[`render skill unrecognized-key → pi: warnings 1`] = `
 `;
 
 exports[`render skill unrecognized-key → pi: resources 1`] = `[]`;
+
+exports[`render agent agent-basic → claude: canonical 1`] = `
+"---
+name: vault-reader
+description: Read and summarize the knowledge vault.
+model: sonnet
+maxTurns: 10
+effort: high
+tools:
+  - Read
+  - Grep
+---
+
+# Vault reader
+
+Inspect the requested notes and return a concise, cited summary.
+"
+`;
+
+exports[`render agent agent-basic → claude: warnings 1`] = `[]`;
+
+exports[`render agent agent-basic → claude: resources 1`] = `[]`;
+
+exports[`render agent agent-overrides → claude: canonical 1`] = `
+"---
+name: claude-reader
+description: Read canonical material.
+model: haiku
+maxTurns: 8
+tools: Read
+---
+# Claude reader
+
+Use Claude's native agent context.
+"
+`;
+
+exports[`render agent agent-overrides → claude: warnings 1`] = `[]`;
+
+exports[`render agent agent-overrides → claude: resources 1`] = `[]`;

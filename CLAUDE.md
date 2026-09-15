@@ -1,6 +1,6 @@
 # agentforge — Repo Instructions
 
-TypeScript/Bun CLI that currently renders canonical `SKILL.md` and
+TypeScript/Bun CLI that currently renders canonical `SKILL.md`, `AGENT.md`, and
 `OUTPUT_STYLE.md` artifacts into per-harness outputs for Claude Code, OpenCode,
 Codex, Pi, and Claude chat. Marketplace compilation additionally reads
 package-level agent and command sources. Defers to user-level CLAUDE.md for
@@ -9,11 +9,11 @@ shell, OS, and global preferences; only narrows or extends here.
 ## Terminology
 
 - **Artifact** — the type/category of canonical thing being rendered.
-  `skill` and `output-style` are implemented by the leaf renderer today;
-  `agent` is the next planned artifact and `mcp` remains later work. Each
-  implemented artifact has a canonical filename (`SKILL.md`,
-  `OUTPUT_STYLE.md`), a canonical schema, and a layout (`directory` for
-  skills, `file` for output-styles).
+  `skill`, `agent`, and `output-style` are implemented by the leaf renderer;
+  `agent` currently projects only to Claude, and `mcp` remains later work. Each
+  implemented artifact has a canonical filename (`SKILL.md`, `AGENT.md`,
+  `OUTPUT_STYLE.md`), a canonical schema, and a layout (`directory` for skills,
+  `file` for agents and output-styles).
 - **Target** — the harness consuming the output: `claude`, `opencode`,
   `codex`, `pi`, `claude-chat`. A target may support a subset of artifacts; e.g.,
   `output-style` only renders to `claude` because no other harness has the
@@ -27,14 +27,10 @@ shell, OS, and global preferences; only narrows or extends here.
   plans and the staged materializer (`rsuzoxko`, commit `2cbcb8ff`). These
   roadmap labels describe implementation slices; released package versions are
   assigned separately by semantic-release.
-- `skill` and `output-style` are the only first-class leaf artifacts today.
-  Marketplace compilation separately parses package-level Claude `agent` and
-  `command` sources, emitting direct Claude files and inferred Codex procedures
-  or skills.
-- The next slice is 0.8: make `agent` a first-class artifact, reuse one
-  canonical agent model across leaf and marketplace paths, and project native
-  registration without claiming unenforced execution semantics. See
-  [docs/roadmap.md](docs/roadmap.md).
+- The 0.8 slice is underway: `agent` is a first-class leaf artifact with a
+  shared canonical schema and Claude render/validate projection. Installation,
+  additional target projections, and marketplace convergence remain gated on
+  safe ownership and verified native semantics. See [docs/roadmap.md](docs/roadmap.md).
 - Releases are automated (semantic-release + per-platform binaries; see
   § Releases).
 
@@ -55,7 +51,7 @@ shell, OS, and global preferences; only narrows or extends here.
 src/
   types.ts          — TargetName, TARGET_NAMES, ArtifactType,
                       ARTIFACT_TYPES, RenderResult, Warning
-  schema.ts         — CanonicalSkillFrontmatter,
+  schema.ts         — CanonicalSkillFrontmatter, CanonicalAgentFrontmatter,
                       CanonicalOutputStyleFrontmatter, ARTIFACT_DEFS
                       (filename + schema + layout per artifact)
   frontmatter.ts    — checked-in key membership by artifact and target;
@@ -81,9 +77,8 @@ src/
                       files ship where, from `payloads` declarations
                       (source path, destination, executable bit, collision
                       handling)
-  agent-command.ts  — current package-level agent/command behavior parsers;
-                      0.8 must reuse or lift this agent model rather than add
-                      a second canonical schema
+  agent-command.ts  — package-level agent/command behavior parsers; agents
+                      consume the same canonical schema as leaf projection
   render.ts         — pure projection plus standalone render orchestration;
                       every destination write goes through the materializer
   artifact-plan.ts  — shared projection-to-plan builder used by render and
@@ -98,20 +93,21 @@ src/
   targets/
     registry.ts     — the only target enumeration and projection lookup
     index.ts        — assembles target-owned optional marketplace capabilities
-    claude.ts       — artifacts.skill (~/.claude/skills),
+    claude.ts       — artifacts.skill (~/.claude/skills), artifacts.agent
+                      (render-only while safe file installation is pending),
                       artifacts['output-style'] (~/.claude/output-styles)
     opencode.ts     — artifacts.skill (~/.config/opencode/skills)
     codex.ts        — artifacts.skill (~/.agents/skills)
     pi.ts           — artifacts.skill (~/.pi/agent/skills, .pi/skills)
     claude-chat.ts  — artifacts.skill (~/Downloads/claude-skills, zipped)
 tests/
-  fixtures/         — 5 matrix skills + focused skill fixtures + 2 output-styles
-                      (output-style-basic, output-style-rich)
+  fixtures/         — 5 matrix skills + focused skill fixtures + 2 agents +
+                      2 output-styles
   __snapshots__/    — bun test snapshots (committed; regen with
                       `bun test --update-snapshots`)
-  render.test.ts    — skill × target (5×5) + output-style × target
-                      (2×5, 1 supported + 4 rejected per fixture) = 35 matrix cases,
-                      plus focused projection and materialization cases
+  render.test.ts    — skill × target (5×5), agent × target (2×5), and
+                      output-style × target (2×5), plus focused projection and
+                      materialization cases
 ```
 
 ## Render contract (don't break without good reason)
@@ -183,8 +179,8 @@ bun run src/cli.ts render <source-dir> --all-targets --out-base <dir>
 bun run src/cli.ts install <source-dir> --target <name> --scope <user|project|plugin>
 bun run src/cli.ts check-install <source-dir> --target <name> --scope <user|project|plugin>
 bun run src/cli.ts validate <source-dir>
-# artifact inferred from SKILL.md / OUTPUT_STYLE.md presence;
-# override with -a, --artifact <skill|output-style>
+# artifact inferred from SKILL.md / AGENT.md / OUTPUT_STYLE.md presence;
+# override with -a, --artifact <skill|agent|output-style>
 ```
 
 ## Installing the CLI
@@ -250,7 +246,7 @@ binaries. Pin `vX.Y.Z` + the `SHA256SUMS` entry, never a commit SHA.
    diff before committing. Unsupported (target, artifact) pairs assert a
    thrown error instead of producing a snapshot.
 
-## Adding a new artifact (0.8 applies this to `agent`)
+## Adding a new artifact
 
 1. Add the literal to `ArtifactType` and `ARTIFACT_TYPES` in `src/types.ts`.
 2. Add a canonical schema in `src/schema.ts` and register the
@@ -378,8 +374,9 @@ unrecognized key keeps the category-2 behavior above.
 
 ## Out of scope today
 
-- First-class leaf `agent` artifacts remain unimplemented until the 0.8 work in
-  [docs/roadmap.md](docs/roadmap.md) lands. MCP artifacts remain later work.
+- Leaf `agent` installation, non-Claude projections, and marketplace reuse
+  remain in the 0.8 work in [docs/roadmap.md](docs/roadmap.md). MCP artifacts
+  remain later work.
 - Watch mode.
 - Multi-artifact source directory rendering (each source dir contains
   exactly one canonical file).

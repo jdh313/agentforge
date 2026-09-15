@@ -4,7 +4,7 @@ export type InstallScope = 'user' | 'project' | 'plugin';
 
 export const INSTALL_SCOPES: readonly InstallScope[] = ['user', 'project', 'plugin'] as const;
 
-export type ConstructSurface = 'skill' | 'prompt' | 'hook';
+export type ConstructSurface = 'skill' | 'agent' | 'prompt' | 'hook';
 
 export const TARGET_NAMES: readonly TargetName[] = [
   'claude',
@@ -14,9 +14,9 @@ export const TARGET_NAMES: readonly TargetName[] = [
   'claude-chat',
 ] as const;
 
-export type ArtifactType = 'skill' | 'output-style';
+export type ArtifactType = 'skill' | 'agent' | 'output-style';
 
-export const ARTIFACT_TYPES: readonly ArtifactType[] = ['skill', 'output-style'] as const;
+export const ARTIFACT_TYPES: readonly ArtifactType[] = ['skill', 'agent', 'output-style'] as const;
 
 export type WarningKind =
   | 'claude-only-frontmatter-stripped'

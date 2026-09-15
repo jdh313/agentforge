@@ -29,6 +29,7 @@ const SKILL_FIXTURES = [
   'unrecognized-key',
 ] as const;
 const OUTPUT_STYLE_FIXTURES = ['output-style-basic', 'output-style-rich'] as const;
+const AGENT_FIXTURES = ['agent-basic', 'agent-overrides'] as const;
 
 const FIXTURE_DIR = (name: string) => join(import.meta.dir, 'fixtures', name);
 
@@ -350,4 +351,53 @@ describe('render output-style', () => {
       });
     }
   }
+});
+
+describe('render agent', () => {
+  for (const fixture of AGENT_FIXTURES) {
+    for (const target of TARGET_NAMES) {
+      const supported = getArtifactConfig(target, 'agent') !== undefined;
+      if (!supported) {
+        test(`${fixture} → ${target} (rejected: unsupported)`, async () => {
+          await expect(
+            render({
+              sourceDir: FIXTURE_DIR(fixture),
+              target,
+              outDir: join(TMP_ROOT, 'agent', fixture, target),
+              artifact: 'agent',
+            }),
+          ).rejects.toThrow(/does not support artifact agent/);
+        });
+        continue;
+      }
+      test(`${fixture} → ${target}`, async () => {
+        const outDir = join(TMP_ROOT, 'agent', fixture, target);
+        await runFixture(fixture, target, 'agent', outDir);
+      });
+    }
+  }
+
+  test('deep-merges Claude fields and replaces the complete body', async () => {
+    const outDir = join(TMP_ROOT, 'agent-overrides-explicit');
+    const result = await render({
+      sourceDir: FIXTURE_DIR('agent-overrides'),
+      target: 'claude',
+      outDir,
+      artifact: 'agent',
+    });
+
+    expect(result.outputPath).toBe(join(outDir, 'claude-reader.md'));
+    expect(matter(readFileSync(result.outputPath, 'utf-8'))).toMatchObject({
+      data: {
+        name: 'claude-reader',
+        description: 'Read canonical material.',
+        model: 'haiku',
+        maxTurns: 8,
+        tools: 'Read',
+      },
+      content: "# Claude reader\n\nUse Claude's native agent context.\n",
+    });
+    expect(readFileSync(result.outputPath, 'utf-8')).not.toContain('# Canonical reader');
+    expect(result.warnings).toEqual([]);
+  });
 });

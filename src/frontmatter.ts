@@ -44,6 +44,14 @@ const ACCEPTANCE: Readonly<
     paths: claudeOnly(),
     shell: claudeOnly(),
   },
+  agent: {
+    name: claudeOnly('Claude Code native subagent frontmatter.'),
+    description: claudeOnly('Claude Code native subagent frontmatter.'),
+    model: claudeOnly('Claude Code native subagent frontmatter.'),
+    maxTurns: claudeOnly('Claude Code native subagent frontmatter.'),
+    effort: claudeOnly('Claude Code native subagent frontmatter.'),
+    tools: claudeOnly('Claude Code native subagent frontmatter.'),
+  },
   'output-style': {
     name: claudeOnly(),
     description: claudeOnly(),
@@ -70,9 +78,11 @@ export function frontmatterAcceptanceSource(
   return ACCEPTANCE[artifact][key]?.source;
 }
 
-function claudeOnly(): FrontmatterKeyAcceptance {
+function claudeOnly(
+  source = 'Claude Code native skill or output-style frontmatter.',
+): FrontmatterKeyAcceptance {
   return {
     targets: ['claude'],
-    source: 'Claude Code native skill or output-style frontmatter.',
+    source,
   };
 }
