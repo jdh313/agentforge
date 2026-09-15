@@ -5,7 +5,7 @@ Renders canonical AI agent artifacts into per-harness outputs, and reports what 
 ## Language
 
 **Artifact**
-The type of canonical thing being rendered: `skill`, `output-style`, `agent`, `mcp`. Each has a canonical filename, a canonical schema, and a layout.
+The type of canonical thing being rendered. `skill` and `output-style` are implemented today; `agent` and `mcp` name planned artifact types and do not yet belong to `ArtifactType`. Each implemented artifact has a canonical filename, a canonical schema, and a layout.
 
 **Target**
 The harness consuming the output: `claude`, `opencode`, `codex`, `pi`, `claude-chat`. A target may support a subset of artifacts.

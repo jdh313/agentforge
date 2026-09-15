@@ -1,16 +1,19 @@
 # agentforge — Repo Instructions
 
-TypeScript/Bun CLI that renders canonical AI agent artifacts (`SKILL.md`,
-`OUTPUT_STYLE.md`) into per-harness outputs for Claude Code, OpenCode, Codex,
-Pi, and Claude chat. Defers to user-level CLAUDE.md for shell, OS, and global
-preferences; only narrows or extends here.
+TypeScript/Bun CLI that currently renders canonical `SKILL.md` and
+`OUTPUT_STYLE.md` artifacts into per-harness outputs for Claude Code, OpenCode,
+Codex, Pi, and Claude chat. Marketplace compilation additionally reads
+package-level agent and command sources. Defers to user-level CLAUDE.md for
+shell, OS, and global preferences; only narrows or extends here.
 
 ## Terminology
 
-- **Artifact** — the type/category of canonical thing being rendered:
-  `skill`, `output-style` (today), `agent`, `mcp` (planned). Each artifact
-  has a canonical filename (`SKILL.md`, `OUTPUT_STYLE.md`), a canonical
-  schema, and a layout (`directory` for skills, `file` for output-styles).
+- **Artifact** — the type/category of canonical thing being rendered.
+  `skill` and `output-style` are implemented by the leaf renderer today;
+  `agent` is the next planned artifact and `mcp` remains later work. Each
+  implemented artifact has a canonical filename (`SKILL.md`,
+  `OUTPUT_STYLE.md`), a canonical schema, and a layout (`directory` for
+  skills, `file` for output-styles).
 - **Target** — the harness consuming the output: `claude`, `opencode`,
   `codex`, `pi`, `claude-chat`. A target may support a subset of artifacts; e.g.,
   `output-style` only renders to `claude` because no other harness has the
@@ -18,19 +21,22 @@ preferences; only narrows or extends here.
 
 ## Status
 
-- **M1 spike** complete — skills only, synthetic fixtures, snapshot-tested.
-- **output-style** artifact landed — only `claude` supports it (Codex has a
-  fixed `personality` enum, not custom files; OpenCode has no analog).
-- Marketplace compilation translates package-level Claude `agent` and
-  `command` sources into direct Claude files and inferred Codex procedures or
-  skills; commands and explicit-only skill projections receive skill-local
-  `agents/openai.yaml` policy.
+- The 0.5 roadmap slice unified target projection behind one target adapter.
+- The 0.6 slice added scoped skill installation and Pi skill support.
+- The 0.7 slice converged standalone rendering and installation on compilation
+  plans and the staged materializer (`rsuzoxko`, commit `2cbcb8ff`). These
+  roadmap labels describe implementation slices; released package versions are
+  assigned separately by semantic-release.
+- `skill` and `output-style` are the only first-class leaf artifacts today.
+  Marketplace compilation separately parses package-level Claude `agent` and
+  `command` sources, emitting direct Claude files and inferred Codex procedures
+  or skills.
+- The next slice is 0.8: make `agent` a first-class artifact, reuse one
+  canonical agent model across leaf and marketplace paths, and project native
+  registration without claiming unenforced execution semantics. See
+  [docs/roadmap.md](docs/roadmap.md).
 - Releases are automated (semantic-release + per-platform binaries; see
   § Releases).
-- Real-corpus migration, `agent` artifact, `mcp` artifact, watch mode, and
-  Nix integration are M2+.
-- Milestone planning is tracked outside this repo; the bullets above are the
-  published status.
 
 ## Stack
 
@@ -75,7 +81,9 @@ src/
                       files ship where, from `payloads` declarations
                       (source path, destination, executable bit, collision
                       handling)
-  agent-command.ts  — canonical agent/command behavior parsers
+  agent-command.ts  — current package-level agent/command behavior parsers;
+                      0.8 must reuse or lift this agent model rather than add
+                      a second canonical schema
   render.ts         — pure projection plus standalone render orchestration;
                       every destination write goes through the materializer
   artifact-plan.ts  — shared projection-to-plan builder used by render and
@@ -242,7 +250,7 @@ binaries. Pin `vX.Y.Z` + the `SHA256SUMS` entry, never a commit SHA.
    diff before committing. Unsupported (target, artifact) pairs assert a
    thrown error instead of producing a snapshot.
 
-## Adding a new artifact (e.g., agent, mcp)
+## Adding a new artifact (0.8 applies this to `agent`)
 
 1. Add the literal to `ArtifactType` and `ARTIFACT_TYPES` in `src/types.ts`.
 2. Add a canonical schema in `src/schema.ts` and register the
@@ -370,7 +378,8 @@ unrecognized key keeps the category-2 behavior above.
 
 ## Out of scope today
 
-- Leaf-renderer `agent` artifacts and MCP artifacts (M5/M6).
+- First-class leaf `agent` artifacts remain unimplemented until the 0.8 work in
+  [docs/roadmap.md](docs/roadmap.md) lands. MCP artifacts remain later work.
 - Watch mode.
 - Multi-artifact source directory rendering (each source dir contains
   exactly one canonical file).

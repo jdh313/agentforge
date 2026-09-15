@@ -557,7 +557,9 @@ Grepping `src/compatibility.ts` for agent-frontmatter reads returns `tools` only
 validation. A full compile of the fourteen-package Codex publication emitted no
 diagnostic naming any pinned model.
 
-**Status.** open. The workaround in the field today is prose: `shake-tune`
+**Status.** open; this is an explicit input to the canonical-agent work in
+[`docs/roadmap.md`](roadmap.md#08--canonical-agents). The workaround in the
+field today is prose: `shake-tune`
 documents its tiering inside the note attached to its `agent-tools-filter`
 declaration, which keeps the fact visible but attaches it to an unrelated
 construct and only works for a package that happens to declare some other loss.

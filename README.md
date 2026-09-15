@@ -28,6 +28,12 @@ validity and drift without writing. Directory artifacts can also be installed
 at target-owned user, project, or plugin locations and checked from the same
 synthetic plan.
 
+The next roadmap slice is first-class canonical agents. The repository already
+parses package-level Claude agent files, but the leaf renderer does not yet
+accept an `agent` artifact and Codex still receives inferred Markdown role
+procedures rather than native registered agents. See [the roadmap](docs/roadmap.md)
+for the implementation boundary and acceptance sequence through 1.0.
+
 ## Requirements
 
 - [Bun](https://bun.sh) 1.3 or newer — the runtime, test runner, and bundler.
