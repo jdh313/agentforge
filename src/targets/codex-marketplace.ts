@@ -467,6 +467,15 @@ function parseHookDocument(
   return parseDocument(ClaudeHookDocument, document, `hook configuration ${sourcePath}`);
 }
 
+// Codex plugin packages cannot register agent roles: codex-cli 0.154.0's
+// `ConfigLayerSource` enum (which gates all agent-role discovery) has no
+// `Plugin` variant, and its `RawPluginManifest` field set (mcpServers, apps,
+// hooks, commands, interface) has no agents/roles field or path. There is no
+// native registration this translator could target instead, so a package
+// agent still becomes a plain Markdown procedure file — the fallback
+// `ndr:msdg46` names, not a placeholder for one. Revisit if a future Codex
+// release adds a `ConfigLayerSource::Plugin` variant or an `agents` field to
+// the plugin manifest.
 function translateAgentProcedure({
   artifact,
   packageDirectory,
@@ -487,7 +496,7 @@ function translateAgentProcedure({
         code: 'inferred-artifact-projection',
         severity: 'note',
         packageId: packageInput.id,
-        message: `Agent "${agent.name}" inferred as a reusable Codex role procedure; Claude model, turn, and tool constraints remain in the retained source and are not enforced by Codex.`,
+        message: `Agent "${agent.name}" inferred as a reusable Codex procedure; Codex plugin packages cannot register agent roles, so this file is not registered as a Codex agent role and Claude model, turn, and tool constraints remain in the retained source, unenforced by Codex (docs/limitations.md L-010).`,
         retainedSource: { artifactType: 'agent', sourcePath: artifact.path },
       },
     ],

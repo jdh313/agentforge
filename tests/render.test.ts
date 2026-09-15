@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 import JSZip from 'jszip';
-import { render } from '../src/render.ts';
+import { projectArtifact, render } from '../src/render.ts';
 import { ARTIFACT_DEFS } from '../src/schema.ts';
 import { getArtifactConfig } from '../src/targets/index.ts';
 import { type ArtifactType, TARGET_NAMES, type TargetName } from '../src/types.ts';
@@ -29,7 +29,12 @@ const SKILL_FIXTURES = [
   'unrecognized-key',
 ] as const;
 const OUTPUT_STYLE_FIXTURES = ['output-style-basic', 'output-style-rich'] as const;
-const AGENT_FIXTURES = ['agent-basic', 'agent-overrides'] as const;
+const AGENT_FIXTURES = [
+  'agent-basic',
+  'agent-overrides',
+  'agent-codex-escaping',
+  'agent-codex-model-override',
+] as const;
 
 const FIXTURE_DIR = (name: string) => join(import.meta.dir, 'fixtures', name);
 
@@ -399,5 +404,108 @@ describe('render agent', () => {
     });
     expect(readFileSync(result.outputPath, 'utf-8')).not.toContain('# Canonical reader');
     expect(result.warnings).toEqual([]);
+  });
+
+  test('round-trips quotes, backslashes, triple-quotes, and newlines through Codex TOML', async () => {
+    const outDir = join(TMP_ROOT, 'agent-codex-escaping');
+    const result = await render({
+      sourceDir: FIXTURE_DIR('agent-codex-escaping'),
+      target: 'codex',
+      outDir,
+      artifact: 'agent',
+    });
+
+    expect(result.outputPath).toBe(join(outDir, 'escape-check.toml'));
+    const content = readFileSync(result.outputPath, 'utf-8');
+    const parsed = Bun.TOML.parse(content) as Record<string, unknown>;
+
+    expect(parsed.name).toBe('escape-check');
+    expect(parsed.description).toBe('Handles "quotes", backslashes, and triple quotes.');
+    // The fixture's top-level `model: sonnet` has no `targets.codex.model`
+    // override, so it must not leak into the Codex TOML.
+    expect(parsed.model).toBeUndefined();
+    expect(parsed.model_reasoning_effort).toBe('high');
+    expect(parsed.developer_instructions).toBe(
+      [
+        '# Escape check',
+        '',
+        "Says \"hello\" and carries a backslash \\ right here, plus a literal ''' triple",
+        'single-quote marker that must never be read as an unterminated string.',
+        '',
+        'Second paragraph after a blank line.',
+      ].join('\n'),
+    );
+  });
+
+  test('drops a top-level model with a stripped-key warning and never emits it for Codex', async () => {
+    const outDir = join(TMP_ROOT, 'agent-codex-model-leak');
+    const result = await render({
+      sourceDir: FIXTURE_DIR('agent-basic'),
+      target: 'codex',
+      outDir,
+      artifact: 'agent',
+    });
+
+    const parsed = Bun.TOML.parse(readFileSync(result.outputPath, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
+    expect(parsed.model).toBeUndefined();
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'claude-only-frontmatter-stripped',
+          detail: expect.stringContaining('model'),
+        }),
+      ]),
+    );
+  });
+
+  test('emits model only from targets.codex.model', async () => {
+    const outDir = join(TMP_ROOT, 'agent-codex-model-override');
+    const result = await render({
+      sourceDir: FIXTURE_DIR('agent-codex-model-override'),
+      target: 'codex',
+      outDir,
+      artifact: 'agent',
+    });
+
+    const parsed = Bun.TOML.parse(readFileSync(result.outputPath, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
+    expect(parsed.model).toBe('gpt-5.5');
+  });
+
+  // YAML itself refuses a non-printable character in the frontmatter block
+  // (js-yaml throws "the stream contains non-printable characters" before
+  // AgentForge ever sees the value), so DEL and a lone surrogate can only
+  // reach the serializer through the body, which gray-matter passes through
+  // as plain text with no such validation.
+  test('escapes control characters, including DEL (U+007F), into valid TOML', () => {
+    const del = String.fromCharCode(127);
+    const projection = projectArtifact({
+      artifact: 'agent',
+      target: 'codex',
+      sourcePath: '/virtual/agent-del/AGENT.md',
+      source: `---\nname: agent-del\ndescription: Has a DEL character.\n---\n\nBody${del}text.\n`,
+    });
+
+    const parsed = Bun.TOML.parse(projection.content) as Record<string, unknown>;
+    expect(parsed.developer_instructions).toBe(`Body${del}text.`);
+  });
+
+  test('throws naming the source path and field for a lone UTF-16 surrogate', () => {
+    const lone = '\uD800';
+    expect(() =>
+      projectArtifact({
+        artifact: 'agent',
+        target: 'codex',
+        sourcePath: '/virtual/agent-surrogate/AGENT.md',
+        source: `---\nname: agent-surrogate\ndescription: Has a lone surrogate.\n---\n\nBody ${lone} here.\n`,
+      }),
+    ).toThrow(
+      /\/virtual\/agent-surrogate\/AGENT\.md: developer_instructions contains a lone UTF-16 surrogate/,
+    );
   });
 });

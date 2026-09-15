@@ -416,7 +416,7 @@ describe('leaf agent commands', () => {
     expect(result.stderr).toContain('name:');
   });
 
-  test('renders Claude and explicitly skips unsupported targets', () => {
+  test('renders Claude and Codex and explicitly skips unsupported targets', () => {
     const outBase = join(temporaryRoot, 'agent-all-targets');
     const result = runCli('render', agentSource, '--all-targets', '--out-base', outBase);
 
@@ -424,11 +424,16 @@ describe('leaf agent commands', () => {
     expect(result.stderr).toBe('');
     expect(result.stdout).toContain('[claude] wrote');
     expect(result.stdout).toContain('claude/vault-reader.md');
-    for (const target of ['opencode', 'codex', 'pi', 'claude-chat']) {
+    expect(result.stdout).toContain('[codex] wrote');
+    expect(result.stdout).toContain('codex/vault-reader.toml');
+    for (const target of ['opencode', 'pi', 'claude-chat']) {
       expect(result.stdout).toContain(`[${target}] skip: artifact agent not supported`);
     }
     expect(readFileSync(join(outBase, 'claude', 'vault-reader.md'), 'utf-8')).toContain(
       'name: vault-reader',
+    );
+    expect(readFileSync(join(outBase, 'codex', 'vault-reader.toml'), 'utf-8')).toContain(
+      'developer_instructions',
     );
   });
 

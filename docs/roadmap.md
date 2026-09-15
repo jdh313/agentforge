@@ -19,10 +19,14 @@ Make `agent` a first-class leaf artifact and use that same canonical model from
 marketplace compilation.
 
 Current progress: `AGENT.md` is registered as a file-layout leaf artifact and
-renders to Claude's native named Markdown format using the package parser's
-canonical agent schema. Other target projections, safe file installation, and
-marketplace reuse remain. The filename, required identity, and default layout
-are recorded in `ndr:2t36rb`.
+renders to Claude's native named Markdown format and Codex's native agent-role
+TOML, both using the package parser's canonical agent schema. Codex plugin
+packages cannot register agent roles as of codex-cli 0.154.0
+(`docs/limitations.md` L-010), so marketplace agent translation keeps the
+Markdown-procedure fallback for Codex until that changes upstream. Other
+target projections, safe file installation, and marketplace reuse of the
+Codex leaf projection remain. The filename, required identity, and default
+layout are recorded in `ndr:2t36rb`.
 
 ### Boundary
 

@@ -681,3 +681,69 @@ demonstrates the correct pattern and the incorrect one within twenty lines of
 each other. A reviewer reading for table-sourced facts would find one and stop.
 The gap surfaced only when a package needed an answer the table could not be
 asked for, and the correct answer had to be recovered from a vendor binary.
+
+---
+
+## L-010 — Codex plugin packages cannot register agent roles
+
+**Gap.** A canonical `AGENT.md` now projects to native Codex agent-role TOML at
+the leaf (`src/targets/codex.ts`, `NativeAgentDocument`), but that native form
+has nowhere to land inside a compiled Codex marketplace package. Codex agent-
+role discovery is keyed entirely to `ConfigLayerSource` — the same layer system
+that resolves `config.toml` — and that enum has no `Plugin` variant. The plugin
+manifest schema (`RawPluginManifest`: `mcpServers`, `apps`, `hooks`, `commands`,
+`interface`) has no `agents`/`agentRoles`/`roles` field or path either. This is
+not a gap in AgentForge's mapping; it is an absence in Codex itself, as of
+codex-cli 0.154.0.
+
+**Manifests as.** `translateAgentProcedure`
+(`src/targets/codex-marketplace.ts`) still emits a package agent as a plain
+Markdown procedure file at `<package>/agents/<name>.md`. Codex never loads this
+file at all — it is not a registered role, not addressable, and not spawnable
+as a subagent; it is retained only as inert prose a human or another artifact
+could reference. The leaf projection's richer, enforced-shape TOML output has
+no marketplace equivalent: a package author gets weaker agent semantics than a
+leaf `AGENT.md` render, with no way to close that gap from this side.
+
+**Affects.** Every Codex marketplace package with an `agent` artifact — today,
+`librarian`'s `vault-reader` role in cc-marketplace (`tests/marketplace-adapters.test.ts`,
+`tests/fixtures/definitions/cc-marketplace/packages/librarian/`).
+
+**Evidence.** Verified 2026-09-15 against the installed `codex-cli 0.154.0`
+binary (`strings` plus targeted byte-offset dumps; no `codex exec` session was
+started). The agent-role loader's demangled symbol table contains exactly three
+functions in `codex_agent_roles::loader`
+(`agents_toml_from_layer`, `push_agent_role_warning`, `merge_missing_role_fields`);
+`agents_toml_from_layer` reads roles per `ConfigLayerSource`, whose reflected
+variant list is exhaustively `Project`, `PackagedDefaults`, `Mdm`,
+`LegacyManagedConfigTomlFromFile`, `User`, `EnterpriseManaged`, `System` — no
+`Plugin` member. Independently, the plugin manifest deserializer's reflected
+field set (`core-plugins/src/manifest.rs`) enumerates `mcpServers`, `apps`,
+`hooks`, `commands`, `interface` and their untagged-enum variants, with no
+agents-shaped field anywhere. Third-party documentation
+(`codex.danielvaughan.com`, "Codex CLI Plugin System", queried 2026-09-15)
+independently states a Codex plugin bundles "Skills ... MCP Servers ... App
+Connectors" — agent roles are absent from that list too. Two independent
+sources agree with no contradiction.
+
+**Status.** open, upstream. `translateAgentProcedure`'s Markdown-procedure
+mapping remains the intended fallback per `ndr:msdg46`, not a placeholder for
+something better — there is currently nothing better to fall back from.
+
+**Revisit trigger.** Re-run the same two checks (`ConfigLayerSource` variant
+list; `RawPluginManifest` field set) against each Codex CLI version this repo's
+tooling targets. Revisit this entry the moment either check finds a
+`ConfigLayerSource::Plugin` variant or an `agents`-shaped field in
+`RawPluginManifest` — at that point the leaf TOML serializer in
+`src/targets/codex.ts` should be reachable from
+`src/targets/codex-marketplace.ts`'s `translateAgentProcedure` instead of a
+parallel serializer, per the shared-mapping discipline `ndr:9n1m1a` and
+`ndr:w3z7h3` already require.
+
+**Where to look.** `src/targets/codex.ts` — the leaf `NativeAgentDocument`
+that has no marketplace path to reuse it from yet. `src/targets/codex-marketplace.ts` —
+`translateAgentProcedure`'s reworded `inferred-artifact-projection` note, which
+now states the absence explicitly instead of implying it is this repo's
+omission. `docs/roadmap.md` 0.8 boundary item 5 — already conditions
+marketplace reuse on native registration being available, which this entry is
+the concrete case of it not being.

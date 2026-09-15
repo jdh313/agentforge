@@ -22,13 +22,42 @@ interface CanonicalBehavior {
   sourceFrontmatter: Record<string, unknown>;
 }
 
+export type CanonicalAgentEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+export interface CanonicalAgentExecution {
+  model?: string;
+  maxTurns?: number;
+  effort?: CanonicalAgentEffort;
+  tools?: string | string[];
+}
+
 export interface CanonicalAgentBehavior extends CanonicalBehavior {
   kind: 'agent';
-  execution: {
-    model?: string;
-    maxTurns?: number;
-    effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-    tools?: string | string[];
+  execution: CanonicalAgentExecution;
+}
+
+const CANONICAL_EFFORTS = new Set<string>(['low', 'medium', 'high', 'xhigh', 'max']);
+
+function isCanonicalEffort(value: unknown): value is CanonicalAgentEffort {
+  return typeof value === 'string' && CANONICAL_EFFORTS.has(value);
+}
+
+// Shared by the package-agent parser and the leaf render pipeline
+// (`src/render.ts`), so the two never drift into separate interpretations of
+// which loosely-typed fields become which execution settings. Every field is
+// read defensively (not assumed pre-validated) because the leaf pipeline's
+// merged frontmatter bag is not schema-checked the way `parsed.data` here is.
+export function agentExecutionFrom(fields: {
+  model?: unknown;
+  maxTurns?: unknown;
+  effort?: unknown;
+  tools?: unknown;
+}): CanonicalAgentExecution {
+  return {
+    ...(typeof fields.model === 'string' ? { model: fields.model } : {}),
+    ...(typeof fields.maxTurns === 'number' ? { maxTurns: fields.maxTurns } : {}),
+    ...(isCanonicalEffort(fields.effort) ? { effort: fields.effort } : {}),
+    ...(fields.tools !== undefined ? { tools: fields.tools as string | string[] } : {}),
   };
 }
 
@@ -51,12 +80,7 @@ export function parseAgentBehavior(sourcePath: string, source: string): Canonica
   return {
     kind: 'agent',
     ...parsed.common,
-    execution: {
-      ...(parsed.data.model === undefined ? {} : { model: parsed.data.model }),
-      ...(parsed.data.maxTurns === undefined ? {} : { maxTurns: parsed.data.maxTurns }),
-      ...(parsed.data.effort === undefined ? {} : { effort: parsed.data.effort }),
-      ...(parsed.data.tools === undefined ? {} : { tools: parsed.data.tools }),
-    },
+    execution: agentExecutionFrom(parsed.data),
   };
 }
 

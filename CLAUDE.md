@@ -10,10 +10,10 @@ shell, OS, and global preferences; only narrows or extends here.
 
 - **Artifact** — the type/category of canonical thing being rendered.
   `skill`, `agent`, and `output-style` are implemented by the leaf renderer;
-  `agent` currently projects only to Claude, and `mcp` remains later work. Each
-  implemented artifact has a canonical filename (`SKILL.md`, `AGENT.md`,
-  `OUTPUT_STYLE.md`), a canonical schema, and a layout (`directory` for skills,
-  `file` for agents and output-styles).
+  `agent` projects to Claude (Markdown) and Codex (native TOML), and `mcp`
+  remains later work. Each implemented artifact has a canonical filename
+  (`SKILL.md`, `AGENT.md`, `OUTPUT_STYLE.md`), a canonical schema, and a layout
+  (`directory` for skills, `file` for agents and output-styles).
 - **Target** — the harness consuming the output: `claude`, `opencode`,
   `codex`, `pi`, `claude-chat`. A target may support a subset of artifacts; e.g.,
   `output-style` only renders to `claude` because no other harness has the
@@ -28,9 +28,12 @@ shell, OS, and global preferences; only narrows or extends here.
   roadmap labels describe implementation slices; released package versions are
   assigned separately by semantic-release.
 - The 0.8 slice is underway: `agent` is a first-class leaf artifact with a
-  shared canonical schema and Claude render/validate projection. Installation,
-  additional target projections, and marketplace convergence remain gated on
-  safe ownership and verified native semantics. See [docs/roadmap.md](docs/roadmap.md).
+  shared canonical schema, projecting to Claude Markdown and native Codex
+  agent-role TOML. Codex plugin packages cannot register agent roles as of
+  codex-cli 0.154.0 (`docs/limitations.md` L-010), so marketplace agent
+  translation keeps the Markdown-procedure fallback for Codex. Leaf
+  installation and remaining target projections stay gated on safe ownership
+  and verified native semantics. See [docs/roadmap.md](docs/roadmap.md).
 - Releases are automated (semantic-release + per-platform binaries; see
   § Releases).
 
@@ -97,11 +100,12 @@ src/
                       (render-only while safe file installation is pending),
                       artifacts['output-style'] (~/.claude/output-styles)
     opencode.ts     — artifacts.skill (~/.config/opencode/skills)
-    codex.ts        — artifacts.skill (~/.agents/skills)
+    codex.ts        — artifacts.skill (~/.agents/skills), artifacts.agent
+                      (native `.toml` via `nativeDocument`, render-only)
     pi.ts           — artifacts.skill (~/.pi/agent/skills, .pi/skills)
     claude-chat.ts  — artifacts.skill (~/Downloads/claude-skills, zipped)
 tests/
-  fixtures/         — 5 matrix skills + focused skill fixtures + 2 agents +
+  fixtures/         — 5 matrix skills + focused skill fixtures + 3 agents +
                       2 output-styles
   __snapshots__/    — bun test snapshots (committed; regen with
                       `bun test --update-snapshots`)
@@ -112,9 +116,9 @@ tests/
 
 ## Render contract (don't break without good reason)
 
-- Source directory contains exactly one canonical file (`SKILL.md` or
-  `OUTPUT_STYLE.md`); the artifact is inferred from which is present, or
-  forced with `--artifact`.
+- Source directory contains exactly one canonical file (`SKILL.md`,
+  `AGENT.md`, or `OUTPUT_STYLE.md`); the artifact is inferred from which is
+  present, or forced with `--artifact`.
 - Canonical frontmatter is the superset for that artifact's targets, plus
   an optional `targets:` block keyed by target name.
 - Per (target, artifact): look up `adapter.artifacts[artifact]`. If missing,
@@ -137,8 +141,11 @@ tests/
 - Body precedence: `targets.<name>.body` (full replacement) ⟶ canonical body.
   No partial templating, no prefix/suffix stitching.
 - Layout per artifact: `directory` (skill) materializes
-  `<outDir>/<canonicalFilename>` + resource subdirs; `file` (output-style)
-  writes `<outDir>/<name>.md` directly, no resources.
+  `<outDir>/<canonicalFilename>` + resource subdirs; `file` (agent,
+  output-style) writes `<outDir>/<name>.md` directly, no resources — unless
+  the target adapter's `nativeDocument` is set for that artifact, in which
+  case the target picks its own extension (e.g. Codex's `agent` artifact
+  writes `<outDir>/<name>.toml`; see `NativeAgentDocument`).
 - Resource subdirs (`scripts/`, `references/`, `assets/`) copy passthrough
   when present (directory layout only).
 - Warnings (skill artifact, non-Claude targets only, except where noted):
@@ -374,9 +381,10 @@ unrecognized key keeps the category-2 behavior above.
 
 ## Out of scope today
 
-- Leaf `agent` installation, non-Claude projections, and marketplace reuse
-  remain in the 0.8 work in [docs/roadmap.md](docs/roadmap.md). MCP artifacts
-  remain later work.
+- Leaf `agent` installation, remaining non-Claude/Codex projections, and
+  marketplace reuse of the Codex leaf projection (blocked upstream —
+  `docs/limitations.md` L-010) remain in the 0.8 work in
+  [docs/roadmap.md](docs/roadmap.md). MCP artifacts remain later work.
 - Watch mode.
 - Multi-artifact source directory rendering (each source dir contains
   exactly one canonical file).

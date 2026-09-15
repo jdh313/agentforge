@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import matter from 'gray-matter';
 import JSZip from 'jszip';
+import { agentExecutionFrom, type CanonicalAgentBehavior } from './agent-command.ts';
 import { buildArtifactPlan } from './artifact-plan.ts';
 import { findConstructShapes, supportFor, translationFor } from './capabilities.ts';
 import type { CompilationPlan, DesiredOutput } from './compiler.ts';
@@ -57,6 +58,10 @@ export interface ArtifactProjection {
   generatedFiles: readonly ProjectedGeneratedFile[];
   resources: readonly ProjectedResource[];
   warnings: readonly Warning[];
+  // The canonical filename extension, including the leading dot. Absent means
+  // the artifact's default layout extension (`.md`); a target/artifact pair
+  // with a `nativeDocument` sets its own here instead.
+  extension?: string;
 }
 
 /**
@@ -233,6 +238,19 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
       ? (filtered as { name: string }).name
       : nameFromSourceDir(dirname(sourcePath));
 
+  if (artifactConfig.nativeDocument) {
+    const behavior = toCanonicalAgentBehavior(artifactName, merged, overrideFields, body, source);
+    const native = artifactConfig.nativeDocument.serialize(behavior, { sourcePath });
+    return {
+      artifactName,
+      content: native.content,
+      generatedFiles: [],
+      resources: [],
+      warnings: [...warnings, ...native.warnings],
+      extension: artifactConfig.nativeDocument.extension,
+    };
+  }
+
   const rendered = matter.stringify(body, filtered);
   // Where the translation lands is the capability table's answer, so the note
   // that reports it and the file that satisfies it cannot drift apart. Only the
@@ -268,6 +286,40 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
 
   return { artifactName, content: rendered, generatedFiles, resources, warnings };
 };
+
+// Builds the same canonical shape the package-agent parser produces
+// (`src/agent-command.ts`), from the already-merged leaf frontmatter and body,
+// so a native-document target consumes one agent behavior model rather than a
+// second, leaf-specific representation.
+//
+// `model` is the one field deliberately NOT read from `merged`: a shared
+// top-level `model:` is a Claude-shaped alias (Claude's own model catalog),
+// and a native-document target's model namespace is its own. Only an
+// explicit `targets.<name>.model` names this target, so `overrideFields` —
+// never the merged value — is what a native document may read; a bare
+// top-level `model:` with no matching override still surfaces as a
+// `claude-only-frontmatter-stripped` warning through the existing
+// acceptance-table path, same as any other Claude-only key.
+function toCanonicalAgentBehavior(
+  name: string,
+  merged: Record<string, unknown>,
+  overrideFields: Record<string, unknown>,
+  body: string,
+  source: string,
+): CanonicalAgentBehavior {
+  return {
+    kind: 'agent',
+    name,
+    description: typeof merged.description === 'string' ? merged.description : '',
+    instructions: body,
+    source,
+    sourceFrontmatter: merged,
+    execution: agentExecutionFrom({
+      ...merged,
+      model: overrideFields.model,
+    }),
+  };
+}
 
 export function loadArtifactProjection(opts: LoadArtifactProjectionOptions): ArtifactProjection {
   const { sourceDir, target, artifact } = opts;

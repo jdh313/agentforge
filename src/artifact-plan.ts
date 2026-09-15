@@ -83,7 +83,7 @@ export function buildArtifactOutputs(
     prefix.length === 0 ? relativePath : `${prefix}/${relativePath}`;
   const canonicalDestination =
     artifactDef.layout === 'file'
-      ? at(`${projection.artifactName}.md`)
+      ? at(`${projection.artifactName}${projection.extension ?? '.md'}`)
       : at(artifactDef.canonicalFilename);
 
   return [

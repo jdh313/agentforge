@@ -92,6 +92,41 @@ exports[`render skill claude-rich → codex: warnings 1`] = `
 
 exports[`render skill claude-rich → codex: resources 1`] = `[]`;
 
+exports[`render skill claude-rich → pi: canonical 1`] = `
+"---
+name: claude-rich
+description: >-
+  Test fixture exercising Claude-only frontmatter and $ARGUMENTS body
+  substitution.
+disable-model-invocation: true
+allowed-tools: Bash(git *) Read
+---
+
+Fix GitHub issue $ARGUMENTS following the project's coding standards.
+
+1. Read the issue description.
+2. Implement the fix.
+3. Add tests.
+"
+`;
+
+exports[`render skill claude-rich → pi: warnings 1`] = `
+[
+  {
+    "detail": "stripped argument-hint, disallowed-tools",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "pi",
+  },
+  {
+    "detail": "body uses $ARGUMENTS but no targets.pi.body override",
+    "kind": "claude-only-body-feature",
+    "target": "pi",
+  },
+]
+`;
+
+exports[`render skill claude-rich → pi: resources 1`] = `[]`;
+
 exports[`render skill claude-rich → claude-chat: canonical 1`] = `
 "---
 name: claude-rich
@@ -184,6 +219,30 @@ exports[`render skill with-overrides → codex: warnings 1`] = `
 
 exports[`render skill with-overrides → codex: resources 1`] = `[]`;
 
+exports[`render skill with-overrides → pi: canonical 1`] = `
+"---
+name: with-overrides
+description: Test fixture for per-target body and field overrides.
+disable-model-invocation: true
+allowed-tools: Bash(git *)
+---
+
+Fix issue $ARGUMENTS following the project's coding standards.
+"
+`;
+
+exports[`render skill with-overrides → pi: warnings 1`] = `
+[
+  {
+    "detail": "body uses $ARGUMENTS but no targets.pi.body override",
+    "kind": "claude-only-body-feature",
+    "target": "pi",
+  },
+]
+`;
+
+exports[`render skill with-overrides → pi: resources 1`] = `[]`;
+
 exports[`render skill with-overrides → claude-chat: canonical 1`] = `
 "---
 name: with-overrides
@@ -268,6 +327,25 @@ exports[`render skill with-resources → codex: resources 1`] = `
 ]
 `;
 
+exports[`render skill with-resources → pi: canonical 1`] = `
+"---
+name: with-resources
+description: Test fixture exercising bundled resource subdirectory passthrough.
+---
+
+See \`references/api.md\` for protocol details and run \`scripts/run.sh\` to exercise it.
+"
+`;
+
+exports[`render skill with-resources → pi: warnings 1`] = `[]`;
+
+exports[`render skill with-resources → pi: resources 1`] = `
+[
+  "references",
+  "scripts",
+]
+`;
+
 exports[`render skill with-resources → claude-chat: canonical 1`] = `
 "---
 name: with-resources
@@ -328,6 +406,20 @@ A short, plain skill body with no Claude-only features.
 exports[`render skill common-subset → codex: warnings 1`] = `[]`;
 
 exports[`render skill common-subset → codex: resources 1`] = `[]`;
+
+exports[`render skill common-subset → pi: canonical 1`] = `
+"---
+name: common-subset
+description: Test fixture using only the common-subset frontmatter and a plain body.
+---
+
+A short, plain skill body with no Claude-only features.
+"
+`;
+
+exports[`render skill common-subset → pi: warnings 1`] = `[]`;
+
+exports[`render skill common-subset → pi: resources 1`] = `[]`;
 
 exports[`render skill common-subset → claude-chat: canonical 1`] = `
 "---
@@ -418,6 +510,31 @@ exports[`render skill unrecognized-key → codex: warnings 1`] = `
 
 exports[`render skill unrecognized-key → codex: resources 1`] = `[]`;
 
+exports[`render skill unrecognized-key → pi: canonical 1`] = `
+"---
+name: unrecognized-key
+description: >-
+  Test fixture carrying a frontmatter key the canonical schema does not
+  enumerate.
+---
+
+A plain body. The interesting part is the frontmatter key above: it stands in
+for whatever key Claude ships next, before agentforge has learned it.
+"
+`;
+
+exports[`render skill unrecognized-key → pi: warnings 1`] = `
+[
+  {
+    "detail": "future-claude-key not in the canonical schema; dropped for pi",
+    "kind": "unrecognized-frontmatter-key",
+    "target": "pi",
+  },
+]
+`;
+
+exports[`render skill unrecognized-key → pi: resources 1`] = `[]`;
+
 exports[`render skill unrecognized-key → claude-chat: canonical 1`] = `
 "---
 name: unrecognized-key
@@ -473,123 +590,6 @@ exports[`render output-style output-style-rich → claude: warnings 1`] = `[]`;
 
 exports[`render output-style output-style-rich → claude: resources 1`] = `[]`;
 
-exports[`render skill claude-rich → pi: canonical 1`] = `
-"---
-name: claude-rich
-description: >-
-  Test fixture exercising Claude-only frontmatter and $ARGUMENTS body
-  substitution.
-disable-model-invocation: true
-allowed-tools: Bash(git *) Read
----
-
-Fix GitHub issue $ARGUMENTS following the project's coding standards.
-
-1. Read the issue description.
-2. Implement the fix.
-3. Add tests.
-"
-`;
-
-exports[`render skill claude-rich → pi: warnings 1`] = `
-[
-  {
-    "detail": "stripped argument-hint, disallowed-tools",
-    "kind": "claude-only-frontmatter-stripped",
-    "target": "pi",
-  },
-  {
-    "detail": "body uses $ARGUMENTS but no targets.pi.body override",
-    "kind": "claude-only-body-feature",
-    "target": "pi",
-  },
-]
-`;
-
-exports[`render skill claude-rich → pi: resources 1`] = `[]`;
-
-exports[`render skill with-overrides → pi: canonical 1`] = `
-"---
-name: with-overrides
-description: Test fixture for per-target body and field overrides.
-disable-model-invocation: true
-allowed-tools: Bash(git *)
----
-
-Fix issue $ARGUMENTS following the project's coding standards.
-"
-`;
-
-exports[`render skill with-overrides → pi: warnings 1`] = `
-[
-  {
-    "detail": "body uses $ARGUMENTS but no targets.pi.body override",
-    "kind": "claude-only-body-feature",
-    "target": "pi",
-  },
-]
-`;
-
-exports[`render skill with-overrides → pi: resources 1`] = `[]`;
-
-exports[`render skill with-resources → pi: canonical 1`] = `
-"---
-name: with-resources
-description: Test fixture exercising bundled resource subdirectory passthrough.
----
-
-See \`references/api.md\` for protocol details and run \`scripts/run.sh\` to exercise it.
-"
-`;
-
-exports[`render skill with-resources → pi: warnings 1`] = `[]`;
-
-exports[`render skill with-resources → pi: resources 1`] = `
-[
-  "references",
-  "scripts",
-]
-`;
-
-exports[`render skill common-subset → pi: canonical 1`] = `
-"---
-name: common-subset
-description: Test fixture using only the common-subset frontmatter and a plain body.
----
-
-A short, plain skill body with no Claude-only features.
-"
-`;
-
-exports[`render skill common-subset → pi: warnings 1`] = `[]`;
-
-exports[`render skill common-subset → pi: resources 1`] = `[]`;
-
-exports[`render skill unrecognized-key → pi: canonical 1`] = `
-"---
-name: unrecognized-key
-description: >-
-  Test fixture carrying a frontmatter key the canonical schema does not
-  enumerate.
----
-
-A plain body. The interesting part is the frontmatter key above: it stands in
-for whatever key Claude ships next, before agentforge has learned it.
-"
-`;
-
-exports[`render skill unrecognized-key → pi: warnings 1`] = `
-[
-  {
-    "detail": "future-claude-key not in the canonical schema; dropped for pi",
-    "kind": "unrecognized-frontmatter-key",
-    "target": "pi",
-  },
-]
-`;
-
-exports[`render skill unrecognized-key → pi: resources 1`] = `[]`;
-
 exports[`render agent agent-basic → claude: canonical 1`] = `
 "---
 name: vault-reader
@@ -612,6 +612,26 @@ exports[`render agent agent-basic → claude: warnings 1`] = `[]`;
 
 exports[`render agent agent-basic → claude: resources 1`] = `[]`;
 
+exports[`render agent agent-basic → codex: canonical 1`] = `
+"name = "vault-reader"
+description = "Read and summarize the knowledge vault."
+model_reasoning_effort = "high"
+developer_instructions = "# Vault reader\\n\\nInspect the requested notes and return a concise, cited summary."
+"
+`;
+
+exports[`render agent agent-basic → codex: warnings 1`] = `
+[
+  {
+    "detail": "stripped model, maxTurns, tools",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "codex",
+  },
+]
+`;
+
+exports[`render agent agent-basic → codex: resources 1`] = `[]`;
+
 exports[`render agent agent-overrides → claude: canonical 1`] = `
 "---
 name: claude-reader
@@ -629,3 +649,100 @@ Use Claude's native agent context.
 exports[`render agent agent-overrides → claude: warnings 1`] = `[]`;
 
 exports[`render agent agent-overrides → claude: resources 1`] = `[]`;
+
+exports[`render agent agent-overrides → codex: canonical 1`] = `
+"name = "canonical-reader"
+description = "Read canonical material."
+developer_instructions = "# Canonical reader\\n\\nUse the shared agent context."
+"
+`;
+
+exports[`render agent agent-overrides → codex: warnings 1`] = `
+[
+  {
+    "detail": "stripped model, maxTurns, tools",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "codex",
+  },
+]
+`;
+
+exports[`render agent agent-overrides → codex: resources 1`] = `[]`;
+
+exports[`render agent agent-codex-escaping → claude: canonical 1`] = `
+"---
+name: escape-check
+description: 'Handles "quotes", backslashes, and triple quotes.'
+model: sonnet
+effort: high
+---
+
+# Escape check
+
+Says "hello" and carries a backslash \\ right here, plus a literal ''' triple
+single-quote marker that must never be read as an unterminated string.
+
+Second paragraph after a blank line.
+"
+`;
+
+exports[`render agent agent-codex-escaping → claude: warnings 1`] = `[]`;
+
+exports[`render agent agent-codex-escaping → claude: resources 1`] = `[]`;
+
+exports[`render agent agent-codex-escaping → codex: canonical 1`] = `
+"name = "escape-check"
+description = "Handles \\"quotes\\", backslashes, and triple quotes."
+model_reasoning_effort = "high"
+developer_instructions = "# Escape check\\n\\nSays \\"hello\\" and carries a backslash \\\\ right here, plus a literal ''' triple\\nsingle-quote marker that must never be read as an unterminated string.\\n\\nSecond paragraph after a blank line."
+"
+`;
+
+exports[`render agent agent-codex-escaping → codex: warnings 1`] = `
+[
+  {
+    "detail": "stripped model",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "codex",
+  },
+]
+`;
+
+exports[`render agent agent-codex-escaping → codex: resources 1`] = `[]`;
+
+exports[`render agent agent-codex-model-override → claude: canonical 1`] = `
+"---
+name: model-override-check
+description: Confirms Codex reads model only from its own target override.
+model: sonnet
+---
+
+# Model override check
+
+Answers questions about explicit per-target model overrides.
+"
+`;
+
+exports[`render agent agent-codex-model-override → claude: warnings 1`] = `[]`;
+
+exports[`render agent agent-codex-model-override → claude: resources 1`] = `[]`;
+
+exports[`render agent agent-codex-model-override → codex: canonical 1`] = `
+"name = "model-override-check"
+description = "Confirms Codex reads model only from its own target override."
+model = "gpt-5.5"
+developer_instructions = "# Model override check\\n\\nAnswers questions about explicit per-target model overrides."
+"
+`;
+
+exports[`render agent agent-codex-model-override → codex: warnings 1`] = `
+[
+  {
+    "detail": "stripped model",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "codex",
+  },
+]
+`;
+
+exports[`render agent agent-codex-model-override → codex: resources 1`] = `[]`;

@@ -45,11 +45,37 @@ const ACCEPTANCE: Readonly<
     shell: claudeOnly(),
   },
   agent: {
-    name: claudeOnly('Claude Code native subagent frontmatter.'),
-    description: claudeOnly('Claude Code native subagent frontmatter.'),
+    name: {
+      targets: ['claude', 'codex'],
+      source:
+        'Claude Code native subagent frontmatter; Codex agent role TOML `name` field (codex-cli 0.154.0).',
+    },
+    description: {
+      targets: ['claude', 'codex'],
+      source:
+        'Claude Code native subagent frontmatter; Codex agent role TOML `description` field (codex-cli 0.154.0).',
+    },
+    // Codex has a native `model` TOML field, but a shared top-level `model:`
+    // is a Claude-shaped alias (Claude's own model catalog) that must not
+    // leak into another target's model namespace. Only an explicit
+    // `targets.codex.model` names Codex; `src/render.ts`'s native-document
+    // path reads that override directly rather than through this table, so
+    // `model` stays claude-only here on purpose — a bare top-level `model:`
+    // with no Codex override is a confirmed loss, same as any other
+    // Claude-only key.
     model: claudeOnly('Claude Code native subagent frontmatter.'),
+    // No per-role turn-limit key exists anywhere in codex-cli 0.154.0 (verified
+    // against the `agent-roles` crate's field set); Codex stays absent from
+    // this row's targets until one does.
     maxTurns: claudeOnly('Claude Code native subagent frontmatter.'),
-    effort: claudeOnly('Claude Code native subagent frontmatter.'),
+    effort: {
+      targets: ['claude', 'codex'],
+      source:
+        'Claude Code native subagent frontmatter; Codex agent role TOML `model_reasoning_effort` field. Every canonical value (low/medium/high/xhigh/max) is a confirmed-accepted Codex reasoning-effort string per the codex-cli 0.154.0 bundled model catalog.',
+    },
+    // Codex agent roles have no tool-allowlist key (verified against the
+    // agent-roles/plugin-manifest field sets in codex-cli 0.154.0), so tool
+    // access stays unenforced on Codex; the constraint remains claude-only here.
     tools: claudeOnly('Claude Code native subagent frontmatter.'),
   },
   'output-style': {

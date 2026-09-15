@@ -1,10 +1,11 @@
 import type { z } from 'zod';
+import type { CanonicalAgentBehavior } from './agent-command.ts';
 import type {
   PublicationCompilation,
   TargetCompilationResult,
   TargetCompilerAdapter,
 } from './compiler.ts';
-import type { ArtifactType, ConstructSurface, InstallScope, TargetName } from './types.ts';
+import type { ArtifactType, ConstructSurface, InstallScope, TargetName, Warning } from './types.ts';
 
 export interface InstallLocationContext {
   homeDirectory: string;
@@ -14,12 +15,39 @@ export interface InstallLocationContext {
 
 export type InstallLocation = (context: InstallLocationContext) => string;
 
+export interface NativeAgentDocumentResult {
+  content: string;
+  warnings: Warning[];
+}
+
+// Whether an agent leaf projects as Markdown-plus-frontmatter or as a target's
+// own registration document is a fact about the target itself, true before any
+// specific artifact is projected — the case ndr:nes397 admits onto an adapter
+// member. The shape stays one function interface regardless of which target
+// implements it, so the member's type is not a union enumerating targets.
+export interface NativeAgentDocumentContext {
+  /** The canonical source file's path, for error messages that name it. */
+  sourcePath: string;
+}
+
+export interface NativeAgentDocument {
+  /** File extension, including the leading dot, e.g. `.toml`. */
+  extension: string;
+  serialize(
+    behavior: CanonicalAgentBehavior,
+    context: NativeAgentDocumentContext,
+  ): NativeAgentDocumentResult;
+}
+
 export interface ArtifactConfig {
   installLocations: Partial<Record<InstallScope, InstallLocation>>;
   surface: ConstructSurface;
   resourceSubdirs: ReadonlySet<string>;
   outputFrontmatterSchema: z.ZodType;
   bundle?: 'dir' | 'zip';
+  // Present only for a target/artifact pair that registers as a native
+  // document instead of the default one-file Markdown projection (ndr:2t36rb).
+  nativeDocument?: NativeAgentDocument;
 }
 
 export interface MarketplaceCapability {
