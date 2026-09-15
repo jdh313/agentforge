@@ -3,8 +3,10 @@ import { parseAgentBehavior, parseCommandBehavior } from '../agent-command.ts';
 import {
   CompilationError,
   type CompilationPackage,
+  type MarketplaceRegistryHandle,
+  type PackageManifestHandle,
   type PublicationCompilation,
-  type TargetCompilerAdapter,
+  type TargetCompilationResult,
 } from '../compiler.ts';
 import { deepMerge } from '../deep-merge.ts';
 import {
@@ -54,46 +56,88 @@ export const ClaudeMarketplace = z.looseObject({
   plugins: z.array(ClaudeMarketplacePlugin),
 });
 
-export const claudeMarketplaceAdapter: TargetCompilerAdapter = {
-  target: 'claude',
-  compilePublication(input) {
-    const packages = input.packages.map((packageInput) => compilePackage(input, packageInput));
-    const payloads = input.packages.map((packageInput) =>
-      compilePackagePayload(input, packageInput, PAYLOAD_POLICY),
-    );
-    const marketplace = parseDocument(
-      ClaudeMarketplace,
-      deepMerge(
-        {
-          ...input.marketplace.metadata,
-          plugins: packages.map(({ manifest, source }) => ({ ...manifest, source })),
-        },
-        input.publication.native,
-      ),
-      `marketplace document for publication "${input.publication.id}"`,
-    );
-
+export const ClaudeMarketplaceDocument: MarketplaceRegistryHandle = {
+  role: 'marketplace-registry',
+  grammar: 'json',
+  label: 'Claude marketplace registry',
+  schema: ClaudeMarketplace,
+  plugins: (document) =>
+    ClaudeMarketplace.parse(document).plugins.map((plugin) => ({
+      name: plugin.name,
+      source:
+        typeof plugin.source === 'string'
+          ? plugin.source
+          : typeof plugin.source.source === 'string'
+            ? plugin.source.source
+            : undefined,
+      version: typeof plugin.version === 'string' ? plugin.version : undefined,
+    })),
+  rewritePluginSources: (document, rewrite) => {
+    const marketplace = ClaudeMarketplace.parse(document);
     return {
-      outputs: [
-        {
-          kind: 'generated',
-          producer: 'generated',
-          destination: input.publication.destination,
-          content: serialize(marketplace),
-        },
-        ...packages.map(({ packageId, destination, manifest }) => ({
-          kind: 'generated' as const,
-          producer: 'generated' as const,
-          packageId,
-          destination,
-          content: serialize(manifest),
-        })),
-        ...payloads.flatMap(({ outputs }) => outputs),
-      ],
-      diagnostics: payloads.flatMap(({ diagnostics }) => diagnostics),
+      ...marketplace,
+      plugins: marketplace.plugins.map((plugin) => ({
+        ...plugin,
+        source:
+          typeof plugin.source === 'string'
+            ? rewrite(plugin.source)
+            : { ...plugin.source, source: rewrite(plugin.source.source) },
+      })),
     };
   },
+  manifestPath: (packageDirectory) => `${packageDirectory}/.claude-plugin/plugin.json`,
 };
+
+export const ClaudePluginDocument: PackageManifestHandle = {
+  role: 'package-manifest',
+  grammar: 'json',
+  label: 'Claude plugin manifest',
+  schema: ClaudePluginManifest,
+  identity: (document) => {
+    const manifest = ClaudePluginManifest.parse(document);
+    return { name: manifest.name, version: manifest.version };
+  },
+};
+
+export function compileClaudePublication(input: PublicationCompilation): TargetCompilationResult {
+  const packages = input.packages.map((packageInput) => compilePackage(input, packageInput));
+  const payloads = input.packages.map((packageInput) =>
+    compilePackagePayload(input, packageInput, PAYLOAD_POLICY),
+  );
+  const marketplace = parseDocument(
+    ClaudeMarketplace,
+    deepMerge(
+      {
+        ...input.marketplace.metadata,
+        plugins: packages.map(({ manifest, source }) => ({ ...manifest, source })),
+      },
+      input.publication.native,
+    ),
+    `marketplace document for publication "${input.publication.id}"`,
+  );
+
+  return {
+    outputs: [
+      {
+        kind: 'generated',
+        producer: 'generated',
+        destination: input.publication.destination,
+        content: serialize(marketplace),
+        nativeDocument: ClaudeMarketplaceDocument,
+      },
+      ...packages.map(({ packageId, destination, manifest }) => ({
+        kind: 'generated' as const,
+        producer: 'generated' as const,
+        packageId,
+        destination,
+        content: serialize(manifest),
+        nativeDocument: ClaudePluginDocument,
+      })),
+      ...payloads.flatMap(({ outputs }) => outputs),
+    ],
+    diagnostics: payloads.flatMap(({ diagnostics }) => diagnostics),
+  };
+}
 
 function directTranslator(
   parse: (sourcePath: string, source: string) => { source: string },

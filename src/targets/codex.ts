@@ -2,21 +2,17 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { COMMON_KEYS } from '../schema.ts';
-import type { TargetAdapter } from './index.ts';
+import { agentSkillsTarget } from '../target-adapter.ts';
 
 const CodexOutputFrontmatter = z.object({
   name: z.string().optional(),
   description: z.string(),
 });
 
-export const codexTarget: TargetAdapter = {
+export const codexTarget = agentSkillsTarget({
   name: 'codex',
-  artifacts: {
-    skill: {
-      outputBaseDir: () => join(homedir(), '.agents/skills'),
-      allowedFrontmatterKeys: COMMON_KEYS,
-      resourceSubdirs: new Set(['scripts', 'references', 'assets']),
-      outputFrontmatterSchema: CodexOutputFrontmatter,
-    },
-  },
-};
+  label: 'Codex',
+  outputBaseDir: () => join(homedir(), '.agents/skills'),
+  allowedFrontmatterKeys: COMMON_KEYS,
+  outputFrontmatterSchema: CodexOutputFrontmatter,
+});

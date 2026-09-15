@@ -1,14 +1,13 @@
 import matter from 'gray-matter';
 import {
   type ConstructFamily,
-  type ConstructSurface,
   findConstructShapes,
   supportFor,
   translationFor,
   translationsFor,
 } from './capabilities.ts';
 import type { ClaudeOnlyConstruct, LoadedArtifact } from './definitions.ts';
-import type { TargetName } from './types.ts';
+import type { ConstructSurface, TargetName } from './types.ts';
 
 // How to tell whether this construct survived into a target's output. A
 // frontmatter construct is a key that either appears in the emitted frontmatter

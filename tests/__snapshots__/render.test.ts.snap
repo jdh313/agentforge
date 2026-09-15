@@ -343,45 +343,12 @@ exports[`render skill common-subset → claude-chat: warnings 1`] = `[]`;
 
 exports[`render skill common-subset → claude-chat: resources 1`] = `[]`;
 
-exports[`render output-style output-style-basic → claude: canonical 1`] = `
-"---
-name: terse-mentor
-description: Terse mentor — brief explanations followed by one targeted question.
----
-
-You are a terse mentor. Keep explanations to two sentences max, then ask a focused follow-up question that probes the user's understanding.
-"
-`;
-
-exports[`render output-style output-style-basic → claude: warnings 1`] = `[]`;
-
-exports[`render output-style output-style-basic → claude: resources 1`] = `[]`;
-
-exports[`render output-style output-style-rich → claude: canonical 1`] = `
-"---
-name: code-reviewer
-description: Senior reviewer voice — surfaces the highest-priority concern first.
-keep-coding-instructions: true
-force-for-plugin: false
----
-
-You are reviewing code as a senior engineer. Surface the single highest-priority concern first; queue others. Cite line numbers in \`path:line\` form.
-"
-`;
-
-exports[`render output-style output-style-rich → claude: warnings 1`] = `[]`;
-
-exports[`render output-style output-style-rich → claude: resources 1`] = `[]`;
-
 exports[`render skill unrecognized-key → claude: canonical 1`] = `
 "---
 name: unrecognized-key
 description: >-
   Test fixture carrying a frontmatter key the canonical schema does not
   enumerate.
-future-claude-key:
-  - one
-  - two
 ---
 
 A plain body. The interesting part is the frontmatter key above: it stands in
@@ -392,7 +359,7 @@ for whatever key Claude ships next, before agentforge has learned it.
 exports[`render skill unrecognized-key → claude: warnings 1`] = `
 [
   {
-    "detail": "future-claude-key not in the canonical schema; passed through to claude unvalidated",
+    "detail": "future-claude-key not in the canonical schema; dropped for claude",
     "kind": "unrecognized-frontmatter-key",
     "target": "claude",
   },
@@ -475,3 +442,33 @@ exports[`render skill unrecognized-key → claude-chat: warnings 1`] = `
 `;
 
 exports[`render skill unrecognized-key → claude-chat: resources 1`] = `[]`;
+
+exports[`render output-style output-style-basic → claude: canonical 1`] = `
+"---
+name: terse-mentor
+description: Terse mentor — brief explanations followed by one targeted question.
+---
+
+You are a terse mentor. Keep explanations to two sentences max, then ask a focused follow-up question that probes the user's understanding.
+"
+`;
+
+exports[`render output-style output-style-basic → claude: warnings 1`] = `[]`;
+
+exports[`render output-style output-style-basic → claude: resources 1`] = `[]`;
+
+exports[`render output-style output-style-rich → claude: canonical 1`] = `
+"---
+name: code-reviewer
+description: Senior reviewer voice — surfaces the highest-priority concern first.
+keep-coding-instructions: true
+force-for-plugin: false
+---
+
+You are reviewing code as a senior engineer. Surface the single highest-priority concern first; queue others. Cite line numbers in \`path:line\` form.
+"
+`;
+
+exports[`render output-style output-style-rich → claude: warnings 1`] = `[]`;
+
+exports[`render output-style output-style-rich → claude: resources 1`] = `[]`;

@@ -1,5 +1,7 @@
 export type TargetName = 'claude' | 'opencode' | 'codex' | 'claude-chat';
 
+export type ConstructSurface = 'skill' | 'prompt' | 'hook';
+
 export const TARGET_NAMES: readonly TargetName[] = [
   'claude',
   'opencode',

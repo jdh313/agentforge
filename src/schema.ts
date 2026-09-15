@@ -20,8 +20,8 @@ const TargetsBlock = z
 // exist with nothing reported. That is the inverse of ndr:17dhph, which keeps
 // generated native documents open precisely to retain unrecognized keys; the
 // input side, where the author's intent enters, has the stronger claim on the
-// same rule. What each target then does with a retained-but-unrecognized key is
-// `ArtifactConfig.unrecognizedFrontmatter`, not this schema's business.
+// same rule. The checked-in target key table then decides what may be emitted;
+// an unrecognized key is reported and stripped on every target.
 export const CanonicalSkillFrontmatter = z.looseObject({
   name: z
     .string()

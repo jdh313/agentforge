@@ -19,7 +19,7 @@ import type {
   LoadedArtifact,
 } from '../definitions.ts';
 import { portableRelative } from '../paths.ts';
-import { projectArtifact } from '../render.ts';
+import { buildArtifactOutputs, projectArtifact } from '../render.ts';
 import type { TargetName } from '../types.ts';
 
 export interface PackagePayloadResult {
@@ -81,29 +81,10 @@ export function compilePackagePayload(
           authoringKeys: packageInput.authoringKeys,
         });
         const skillDirectory = `${packageDirectory}/skills/${projection.artifactName}`;
-        outputs.push({
-          kind: 'generated',
-          producer: 'generated',
-          packageId: packageInput.id,
-          destination: `${skillDirectory}/SKILL.md`,
-          content: projection.content,
-        });
         outputs.push(
-          ...projection.generatedFiles.map(({ relativePath, content }) => ({
-            kind: 'generated' as const,
-            producer: 'generated' as const,
+          ...buildArtifactOutputs(projection, 'skill', skillDirectory).map((output) => ({
+            ...output,
             packageId: packageInput.id,
-            destination: `${skillDirectory}/${relativePath}`,
-            content,
-          })),
-        );
-        outputs.push(
-          ...projection.resources.map(({ relativePath, sourcePath }) => ({
-            kind: 'copy' as const,
-            producer: 'generated' as const,
-            packageId: packageInput.id,
-            destination: `${skillDirectory}/${relativePath}`,
-            sourcePath,
           })),
         );
         attribute(artifact.path, [

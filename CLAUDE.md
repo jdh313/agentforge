@@ -62,6 +62,8 @@ src/
                       plus body shapes, over every artifact type and text
                       resource file. Returns occurrences carrying `path:line`.
   deep-merge.ts     — small typed deep-merge (no lodash)
+  target-adapter.ts — one target shape: artifact projections plus optional
+                      marketplace compilation; native target identity lives here
   paths.ts          — `portableRelative` (POSIX-separated relative paths, for
                       values that ship inside documents) and `isContainedPath`
                       (strict containment test); shared by the materializer,
@@ -74,8 +76,9 @@ src/
                       (source path, destination, executable bit, collision
                       handling)
   agent-command.ts  — canonical agent/command behavior parsers
-  render.ts         — pipeline: parse → validate → merge → filter →
-                      emit → copy resources (directory layout) → warnings
+  render.ts         — pure projection plus the shared relative-output builder;
+                      standalone rendering and package compilation consume the
+                      same desired output shape
   report.ts         — builds the `compile --report` output (JSON/MD),
                       grouping compiler diagnostics by disposition (what
                       became of the thing) rather than severity
@@ -83,9 +86,8 @@ src/
                       artifact inferred from canonical filename, or
                       passed via `--artifact`
   targets/
-    index.ts        — TargetAdapter (name + artifacts map),
-                      ArtifactConfig, getArtifactConfig,
-                      REGISTRY/getTarget/allTargets
+    registry.ts     — the only target enumeration and projection lookup
+    index.ts        — assembles target-owned optional marketplace capabilities
     claude.ts       — artifacts.skill (~/.claude/skills),
                       artifacts['output-style'] (~/.claude/output-styles)
     opencode.ts     — artifacts.skill (~/.config/opencode/skills)
@@ -116,10 +118,9 @@ tests/
   1. **Known Claude key** (schema-enumerated, in `CLAUDE_ONLY_KEYS`) — retained
      on Claude, stripped elsewhere under `claude-only-frontmatter-stripped`.
   2. **Unrecognized key** — canonical schemas are `z.looseObject`, so a key they
-     do not enumerate survives parse instead of being discarded.
-     `ArtifactConfig.unrecognizedFrontmatter` is `'retain'` on Claude and
-     defaults to `'strip'` everywhere else, because emitting a key is a claim
-     the target accepts it. Reported either way, as
+     do not enumerate survives parse long enough to be reported. It is stripped
+     on every target, Claude included, because emitting a key is a claim that
+     the checked-in target table accepts it. Reported as
      `unrecognized-frontmatter-key`.
   3. **Authoring-layer key** (`authoring-keys` in `PACKAGE.yaml`) — belongs to
      the source repo, addressed to no runtime. Stripped from **every** target
@@ -144,8 +145,7 @@ tests/
     wording it as one would cry wolf on every mention of an env var.
   - `unrecognized-frontmatter-key` — **every** target, Claude included:
     canonical frontmatter carries a key the artifact's schema does not
-    enumerate **and** no `authoring-keys` declaration covers. The detail says
-    whether it was retained or dropped. Kept apart from
+    enumerate **and** no `authoring-keys` declaration covers. Kept apart from
     `claude-only-frontmatter-stripped` for the same reason
     `unclassified-body-construct` is kept apart from `claude-only-body-feature`:
     that warning claims Claude owns the key and the target loses it, and an
@@ -222,12 +222,14 @@ binaries. Pin `vX.Y.Z` + the `SHA256SUMS` entry, never a commit SHA.
 
 ## Adding a new target
 
-1. Create `src/targets/<name>.ts` exporting a `TargetAdapter`. Each supported
+1. Create `src/targets/<name>.ts` exporting a `TargetAdapter`. Use the shared
+   Agent Skills constructor unless the target diverges. Each supported
    artifact goes under `artifacts.<artifact>` with its own `outputBaseDir`,
    `allowedFrontmatterKeys`, `resourceSubdirs`, `outputFrontmatterSchema`,
    and optional `bundle`.
 2. Add the literal to `TargetName` and `TARGET_NAMES` in `src/types.ts`.
-3. Register in `REGISTRY` in `src/targets/index.ts`.
+3. Register in `REGISTRY` in `src/targets/registry.ts`. If the target owns a
+   marketplace format, attach that optional capability in `src/targets/index.ts`.
 4. `render.test.ts` automatically picks up the new target via
    `TARGET_NAMES`; re-run with `bun test --update-snapshots` and review the
    diff before committing. Unsupported (target, artifact) pairs assert a

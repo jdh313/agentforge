@@ -1,12 +1,17 @@
 import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import matter from 'gray-matter';
-import type { z } from 'zod';
-import type { CompilationPlan, DesiredOutput, RootAnchoredOutput } from './compiler.ts';
+import type {
+  CompilationPlan,
+  DesiredGeneratedOutput,
+  DesiredOutput,
+  MarketplaceRegistryHandle,
+  NativeDocumentHandle,
+  PackageManifestHandle,
+  RootAnchoredOutput,
+} from './compiler.ts';
 import { rootDisplayPath } from './root-manifest.ts';
-import { ClaudeMarketplace, ClaudePluginManifest } from './targets/claude-marketplace.ts';
-import { CodexMarketplace, CodexPluginManifest } from './targets/codex-marketplace.ts';
-import { getArtifactConfig } from './targets/index.ts';
+import { getArtifactConfig, getTarget } from './targets/index.ts';
 
 export type MarketplaceCheckIssueCode =
   | 'missing-output'
@@ -303,9 +308,7 @@ function validateArtifactFrontmatter(
 }
 
 function targetLabel(target: DesiredOutput['target']): string {
-  if (target === 'claude') return 'Claude';
-  if (target === 'codex') return 'Codex';
-  return target;
+  return getTarget(target).label;
 }
 
 function validateManifestParity(
@@ -364,7 +367,7 @@ function validatePluginPaths(plan: CompilationPlan, outputRoot: string): Marketp
   for (const registry of plan.outputs.filter(isMarketplaceRegistry)) {
     const actualPath = join(outputRoot, ...registry.destination.split('/'));
     if (!isRegularFile(actualPath)) continue;
-    const schema = registry.target === 'claude' ? ClaudeMarketplace : CodexMarketplace;
+    const schema = registry.nativeDocument.schema;
     let document: unknown;
     try {
       document = JSON.parse(readFileSync(actualPath, 'utf8'));
@@ -375,8 +378,8 @@ function validatePluginPaths(plan: CompilationPlan, outputRoot: string): Marketp
     if (!parsed.success) continue;
 
     const packageIdsByName = expectedPackageIdsByName(plan, registry.provenance.publicationId);
-    for (const plugin of parsed.data.plugins) {
-      const source = pluginSource(registry.target, plugin);
+    for (const plugin of registry.nativeDocument.plugins(parsed.data)) {
+      const source = plugin.source;
       const directory = source === undefined ? undefined : safePluginDirectory(source);
       const packageId = packageIdsByName.get(plugin.name);
       if (directory === undefined) {
@@ -389,20 +392,29 @@ function validatePluginPaths(plan: CompilationPlan, outputRoot: string): Marketp
         });
         continue;
       }
-      const manifestPath = `${registry.provenance.publicationId}/${directory}/${registry.target === 'claude' ? '.claude-plugin' : '.codex-plugin'}/plugin.json`;
-      const manifestFile = join(outputRoot, ...manifestPath.split('/'));
+      const manifestOutput = packageId
+        ? plan.outputs
+            .filter(isPackageManifest)
+            .find(
+              (output) =>
+                output.provenance.publicationId === registry.provenance.publicationId &&
+                output.provenance.packageId === packageId,
+            )
+        : undefined;
+      const rootedManifestPath = `${registry.provenance.publicationId}/${registry.nativeDocument.manifestPath(directory)}`;
+      const manifestFile = join(outputRoot, ...rootedManifestPath.split('/'));
       if (!isRegularFile(manifestFile)) {
         issues.push({
           code: 'broken-plugin-reference',
           publicationId: registry.provenance.publicationId,
           ...(packageId === undefined ? {} : { packageId }),
           path: registry.destination,
-          message: `plugin ${JSON.stringify(plugin.name)} references missing manifest ${JSON.stringify(manifestPath)}`,
+          message: `plugin ${JSON.stringify(plugin.name)} references missing manifest ${JSON.stringify(rootedManifestPath)}`,
         });
         continue;
       }
-      const manifestSchema =
-        registry.target === 'claude' ? ClaudePluginManifest : CodexPluginManifest;
+      const manifestSchema = manifestOutput?.nativeDocument?.schema;
+      if (!manifestSchema) continue;
       let manifestDocument: unknown;
       try {
         manifestDocument = JSON.parse(readFileSync(manifestFile, 'utf8'));
@@ -411,23 +423,24 @@ function validatePluginPaths(plan: CompilationPlan, outputRoot: string): Marketp
       }
       const manifest = manifestSchema.safeParse(manifestDocument);
       if (!manifest.success) continue;
-      if (plugin.name !== manifest.data.name) {
+      const manifestData = manifestOutput.nativeDocument.identity(manifest.data);
+      if (plugin.name !== manifestData.name) {
         issues.push({
           code: 'package-identity-mismatch',
           publicationId: registry.provenance.publicationId,
           ...(packageId === undefined ? {} : { packageId }),
           path: registry.destination,
-          message: `registry name ${JSON.stringify(plugin.name)} does not match plugin manifest name ${JSON.stringify(manifest.data.name)}`,
+          message: `registry name ${JSON.stringify(plugin.name)} does not match plugin manifest name ${JSON.stringify(manifestData.name)}`,
         });
       }
-      const registryVersion = pluginVersion(plugin);
-      if (registryVersion !== undefined && registryVersion !== manifest.data.version) {
+      const registryVersion = plugin.version;
+      if (registryVersion !== undefined && registryVersion !== manifestData.version) {
         issues.push({
           code: 'package-version-mismatch',
           publicationId: registry.provenance.publicationId,
           ...(packageId === undefined ? {} : { packageId }),
           path: registry.destination,
-          message: `registry version ${JSON.stringify(registryVersion)} does not match plugin manifest version ${JSON.stringify(manifest.data.version)}`,
+          message: `registry version ${JSON.stringify(registryVersion)} does not match plugin manifest version ${JSON.stringify(manifestData.version)}`,
         });
       }
     }
@@ -435,19 +448,16 @@ function validatePluginPaths(plan: CompilationPlan, outputRoot: string): Marketp
   return issues;
 }
 
-function pluginVersion(plugin: unknown): string | undefined {
-  if (typeof plugin !== 'object' || plugin === null || !('version' in plugin)) return undefined;
-  return typeof plugin.version === 'string' ? plugin.version : undefined;
-}
-
 function isMarketplaceRegistry(
   output: DesiredOutput,
-): output is DesiredOutput & { kind: 'generated' } {
-  return (
-    output.kind === 'generated' &&
-    (output.destination.endsWith('/.claude-plugin/marketplace.json') ||
-      output.destination.endsWith('/.agents/plugins/marketplace.json'))
-  );
+): output is DesiredGeneratedOutput & { nativeDocument: MarketplaceRegistryHandle } {
+  return output.kind === 'generated' && output.nativeDocument?.role === 'marketplace-registry';
+}
+
+function isPackageManifest(
+  output: DesiredOutput,
+): output is DesiredGeneratedOutput & { nativeDocument: PackageManifestHandle } {
+  return output.kind === 'generated' && output.nativeDocument?.role === 'package-manifest';
 }
 
 function expectedPackageIdsByName(
@@ -460,30 +470,19 @@ function expectedPackageIdsByName(
       output.kind !== 'generated' ||
       output.provenance.publicationId !== publicationId ||
       output.provenance.packageId === undefined ||
-      !output.destination.endsWith('/plugin.json')
+      output.nativeDocument?.role !== 'package-manifest'
     ) {
       continue;
     }
     try {
-      const document = JSON.parse(output.content) as { name?: unknown };
-      if (typeof document.name === 'string') {
-        packages.set(document.name, output.provenance.packageId);
+      const document = JSON.parse(output.content);
+      const identity = output.nativeDocument.identity(document);
+      if (identity.name !== undefined) {
+        packages.set(identity.name, output.provenance.packageId);
       }
     } catch {}
   }
   return packages;
-}
-
-function pluginSource(target: DesiredOutput['target'], plugin: unknown): string | undefined {
-  if (typeof plugin !== 'object' || plugin === null || !('source' in plugin)) return undefined;
-  const source = plugin.source;
-  if (typeof source === 'string') return source;
-  if (typeof source !== 'object' || source === null) return undefined;
-  if (target === 'codex' && 'path' in source && typeof source.path === 'string') {
-    return source.path;
-  }
-  if ('source' in source && typeof source.source === 'string') return source.source;
-  return undefined;
 }
 
 function safePluginDirectory(source: string): string | undefined {
@@ -530,32 +529,8 @@ function validateNativeDocument(
   );
 }
 
-function nativeDocumentFor(
-  output: DesiredOutput,
-): { schema: z.ZodType; label: string } | undefined {
-  if (output.target === 'claude') {
-    if (hasTail(output.destination, '.claude-plugin/marketplace.json')) {
-      return { schema: ClaudeMarketplace, label: 'Claude marketplace registry' };
-    }
-    if (hasTail(output.destination, '.claude-plugin/plugin.json')) {
-      return { schema: ClaudePluginManifest, label: 'Claude plugin manifest' };
-    }
-  }
-  if (output.target === 'codex') {
-    if (hasTail(output.destination, '.agents/plugins/marketplace.json')) {
-      return { schema: CodexMarketplace, label: 'Codex marketplace registry' };
-    }
-    if (hasTail(output.destination, '.codex-plugin/plugin.json')) {
-      return { schema: CodexPluginManifest, label: 'Codex plugin manifest' };
-    }
-  }
-  return undefined;
-}
-
-// A root manifest's destination is anchored at the marketplace root, so it is
-// the bare tail with no publication prefix in front of it.
-function hasTail(destination: string, tail: string): boolean {
-  return destination === tail || destination.endsWith(`/${tail}`);
+function nativeDocumentFor(output: DesiredOutput): NativeDocumentHandle | undefined {
+  return output.kind === 'generated' ? output.nativeDocument : undefined;
 }
 
 // `path` defaults to the destination because most callers check the compiled

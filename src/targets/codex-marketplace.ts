@@ -5,9 +5,11 @@ import { supportFor, translationsFor } from '../capabilities.ts';
 import {
   CompilationError,
   type CompilationPackage,
+  type MarketplaceRegistryHandle,
+  type PackageManifestHandle,
   type ProposedCompilationDiagnostic,
   type PublicationCompilation,
-  type TargetCompilerAdapter,
+  type TargetCompilationResult,
 } from '../compiler.ts';
 import { deepMerge } from '../deep-merge.ts';
 import {
@@ -169,65 +171,99 @@ export const CodexMarketplace = z.looseObject({
   plugins: z.array(CodexMarketplacePlugin),
 });
 
-export const codexMarketplaceAdapter: TargetCompilerAdapter = {
-  target: 'codex',
-  compilePublication(input) {
-    // Payloads first: the manifest's `hooks` declaration must name what the
-    // translator actually materialized, not merely what the package declared.
-    const payloads = input.packages.map((packageInput) =>
-      compilePackagePayload(input, packageInput, PAYLOAD_POLICY),
-    );
-    const packages = input.packages.map((packageInput, index) =>
-      compilePackage(
-        input,
-        packageInput,
-        materializedHookPaths(input, packageInput, payloads[index]),
-      ),
-    );
-    const marketplace = parseDocument(
-      CodexMarketplace,
-      deepMerge(
-        {
-          name: input.marketplace.metadata.name,
-          plugins: packages.map(({ manifest, source }) => ({
-            name: manifest.name,
-            source: {
-              source: 'local',
-              path: source,
-            },
-            policy: {
-              installation: 'AVAILABLE',
-              authentication: 'ON_INSTALL',
-            },
-            category: manifest.interface.category,
-          })),
-        },
-        input.publication.native,
-      ),
-      `marketplace document for publication "${input.publication.id}"`,
-    );
-
+export const CodexMarketplaceDocument: MarketplaceRegistryHandle = {
+  role: 'marketplace-registry',
+  grammar: 'json',
+  label: 'Codex marketplace registry',
+  schema: CodexMarketplace,
+  plugins: (document) =>
+    CodexMarketplace.parse(document).plugins.map((plugin) => ({
+      name: plugin.name,
+      source: plugin.source.path,
+      version: undefined,
+    })),
+  rewritePluginSources: (document, rewrite) => {
+    const marketplace = CodexMarketplace.parse(document);
     return {
-      outputs: [
-        {
-          kind: 'generated',
-          producer: 'generated',
-          destination: input.publication.destination,
-          content: serialize(marketplace),
-        },
-        ...packages.map(({ packageId, destination, manifest }) => ({
-          kind: 'generated' as const,
-          producer: 'generated' as const,
-          packageId,
-          destination,
-          content: serialize(manifest),
-        })),
-        ...payloads.flatMap(({ outputs }) => outputs),
-      ],
-      diagnostics: payloads.flatMap(({ diagnostics }) => diagnostics),
+      ...marketplace,
+      plugins: marketplace.plugins.map((plugin) => ({
+        ...plugin,
+        source: { ...plugin.source, path: rewrite(plugin.source.path) },
+      })),
     };
   },
+  manifestPath: (packageDirectory) => `${packageDirectory}/.codex-plugin/plugin.json`,
 };
+
+export const CodexPluginDocument: PackageManifestHandle = {
+  role: 'package-manifest',
+  grammar: 'json',
+  label: 'Codex plugin manifest',
+  schema: CodexPluginManifest,
+  identity: (document) => {
+    const manifest = CodexPluginManifest.parse(document);
+    return { name: manifest.name, version: manifest.version };
+  },
+};
+
+export function compileCodexPublication(input: PublicationCompilation): TargetCompilationResult {
+  // Payloads first: the manifest's `hooks` declaration must name what the
+  // translator actually materialized, not merely what the package declared.
+  const payloads = input.packages.map((packageInput) =>
+    compilePackagePayload(input, packageInput, PAYLOAD_POLICY),
+  );
+  const packages = input.packages.map((packageInput, index) =>
+    compilePackage(
+      input,
+      packageInput,
+      materializedHookPaths(input, packageInput, payloads[index]),
+    ),
+  );
+  const marketplace = parseDocument(
+    CodexMarketplace,
+    deepMerge(
+      {
+        name: input.marketplace.metadata.name,
+        plugins: packages.map(({ manifest, source }) => ({
+          name: manifest.name,
+          source: {
+            source: 'local',
+            path: source,
+          },
+          policy: {
+            installation: 'AVAILABLE',
+            authentication: 'ON_INSTALL',
+          },
+          category: manifest.interface.category,
+        })),
+      },
+      input.publication.native,
+    ),
+    `marketplace document for publication "${input.publication.id}"`,
+  );
+
+  return {
+    outputs: [
+      {
+        kind: 'generated',
+        producer: 'generated',
+        destination: input.publication.destination,
+        content: serialize(marketplace),
+        nativeDocument: CodexMarketplaceDocument,
+      },
+      ...packages.map(({ packageId, destination, manifest }) => ({
+        kind: 'generated' as const,
+        producer: 'generated' as const,
+        packageId,
+        destination,
+        content: serialize(manifest),
+        nativeDocument: CodexPluginDocument,
+      })),
+      ...payloads.flatMap(({ outputs }) => outputs),
+    ],
+    diagnostics: payloads.flatMap(({ diagnostics }) => diagnostics),
+  };
+}
 
 function translateHookConfiguration({
   artifact,

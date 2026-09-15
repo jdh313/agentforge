@@ -7,7 +7,6 @@ import pkg from '../package.json' with { type: 'json' };
 import { checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
 import { type CompilationPlan, compileMarketplace, type RootAnchoredOutput } from './compiler.ts';
 import { type LoadedMarketplace, loadMarketplaceDefinition } from './definitions.ts';
-import { claudeMarketplaceAdapter, codexMarketplaceAdapter } from './marketplace-adapters.ts';
 import { materializeCompilation } from './materializer.ts';
 import { render } from './render.ts';
 import { buildCheckReport, formatFromPath, type ReportFormat, renderReport } from './report.ts';
@@ -156,11 +155,7 @@ const compileSelectedMarketplace = (
       ...loaded,
       definition: { ...loaded.definition, publications: [publication] },
     };
-    const plan = compileMarketplace(
-      publicationMarketplace,
-      [claudeMarketplaceAdapter, codexMarketplaceAdapter],
-      { outputRoot },
-    );
+    const plan = compileMarketplace(publicationMarketplace, allTargets(), { outputRoot });
     // Root outputs are already anchored at the marketplace root, so they are
     // carried across untouched while nested destinations gain their prefix.
     rootOutputs.push(...plan.rootOutputs);

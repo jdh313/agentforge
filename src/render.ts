@@ -14,10 +14,11 @@ import { basename, dirname, join, relative } from 'node:path';
 import matter from 'gray-matter';
 import JSZip from 'jszip';
 import { findConstructShapes, supportFor, translationFor } from './capabilities.ts';
+import type { ProposedOutput } from './compiler.ts';
 import { deepMerge } from './deep-merge.ts';
 import { ARTIFACT_DEFS, CLAUDE_ONLY_KEYS } from './schema.ts';
-import { getArtifactConfig } from './targets/index.ts';
-import type { ArtifactType, RenderResult, TargetName, Warning } from './types.ts';
+import { getArtifactConfig } from './targets/registry.ts';
+import type { ArtifactType, ConstructSurface, RenderResult, TargetName, Warning } from './types.ts';
 
 export interface RenderOptions {
   sourceDir: string;
@@ -59,12 +60,45 @@ export interface ArtifactProjection {
   warnings: readonly Warning[];
 }
 
-// Everything agentforge emits today lands on a target's skill surface: Codex
-// commands project to skills rather than to custom prompts, and `output-style`
-// renders only to Claude, where every construct is native. If a target ever
-// gains a second surface for a projected artifact, this needs to be derived
-// rather than assumed.
-const PROJECTED_SURFACE = 'skill';
+/**
+ * Give one pure projection its paths without touching the filesystem.
+ * Standalone rendering and package compilation consume this same shape; the
+ * caller decides which root owns the relative destinations.
+ */
+export function buildArtifactOutputs(
+  projection: ArtifactProjection,
+  artifact: ArtifactType,
+  prefix = '',
+): readonly ProposedOutput[] {
+  const artifactDef = ARTIFACT_DEFS[artifact];
+  const at = (relativePath: string) =>
+    prefix.length === 0 ? relativePath : `${prefix}/${relativePath}`;
+  const canonicalDestination =
+    artifactDef.layout === 'file'
+      ? at(`${projection.artifactName}.md`)
+      : at(artifactDef.canonicalFilename);
+
+  return [
+    {
+      kind: 'generated',
+      producer: 'generated',
+      destination: canonicalDestination,
+      content: projection.content,
+    },
+    ...projection.generatedFiles.map(({ relativePath, content }) => ({
+      kind: 'generated' as const,
+      producer: 'generated' as const,
+      destination: at(relativePath),
+      content,
+    })),
+    ...projection.resources.map(({ relativePath, sourcePath }) => ({
+      kind: 'copy' as const,
+      producer: 'generated' as const,
+      destination: at(relativePath),
+      sourcePath,
+    })),
+  ];
+}
 
 // The enumerated pattern table that used to live here is gone. It named eight
 // literals and was silent about everything else, so whatever Claude shipped next
@@ -79,11 +113,12 @@ const PROJECTED_SURFACE = 'skill';
 const detectClaudeOnlyBodyFeatures = (
   body: string,
   target: TargetName,
+  surface: ConstructSurface,
 ): { lost: string[]; unclassified: string[] } => {
   const lost = new Set<string>();
   const unclassified = new Set<string>();
   for (const shape of findConstructShapes(body)) {
-    const support = supportFor(target, PROJECTED_SURFACE, shape.token);
+    const support = supportFor(target, surface, shape.token);
     if (support === 'unsupported') lost.add(shape.literal);
     else if (support === 'unknown') unclassified.add(shape.literal);
   }
@@ -169,13 +204,7 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
   const unrecognized = Object.keys(merged)
     .filter((key) => !artifactDef.canonicalKeys.has(key))
     .toSorted();
-  const retainUnrecognized = artifactConfig.unrecognizedFrontmatter === 'retain';
-  const filtered = pickKeys(
-    merged,
-    retainUnrecognized
-      ? new Set([...artifactConfig.allowedFrontmatterKeys, ...unrecognized])
-      : artifactConfig.allowedFrontmatterKeys,
-  );
+  const filtered = pickKeys(merged, artifactConfig.allowedFrontmatterKeys);
   artifactConfig.outputFrontmatterSchema.parse(filtered);
 
   const warnings: Warning[] = [];
@@ -188,9 +217,7 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
     warnings.push({
       kind: 'unrecognized-frontmatter-key',
       target,
-      detail: retainUnrecognized
-        ? `${unrecognized.join(', ')} not in the canonical schema; passed through to ${target} unvalidated`
-        : `${unrecognized.join(', ')} not in the canonical schema; dropped for ${target}`,
+      detail: `${unrecognized.join(', ')} not in the canonical schema; dropped for ${target}`,
     });
   }
   if (target !== 'claude') {
@@ -198,7 +225,9 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
     // does not belong in a stripped warning. The capability table is asked
     // rather than the answer being restated as a condition here.
     const claudeOnlyPresent = Object.keys(canonicalFrontmatter).filter(
-      (key) => CLAUDE_ONLY_KEYS.has(key) && supportFor(target, 'skill', key) !== 'translated',
+      (key) =>
+        CLAUDE_ONLY_KEYS.has(key) &&
+        supportFor(target, artifactConfig.surface, key) !== 'translated',
     );
     if (claudeOnlyPresent.length > 0) {
       warnings.push({
@@ -208,7 +237,11 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
       });
     }
     if (overrideBody === undefined) {
-      const { lost, unclassified } = detectClaudeOnlyBodyFeatures(canonicalBody, target);
+      const { lost, unclassified } = detectClaudeOnlyBodyFeatures(
+        canonicalBody,
+        target,
+        artifactConfig.surface,
+      );
       if (lost.length > 0) {
         warnings.push({
           kind: 'claude-only-body-feature',
@@ -238,7 +271,7 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
   // emitted content is this translator's own business.
   const invocationPolicyPath =
     artifact === 'skill' && merged['disable-model-invocation'] === true
-      ? translationFor(target, 'skill', 'disable-model-invocation')
+      ? translationFor(target, artifactConfig.surface, 'disable-model-invocation')
       : undefined;
   const generatedFiles =
     invocationPolicyPath === undefined
@@ -297,34 +330,36 @@ export const render = async (opts: RenderOptions): Promise<RenderResult> => {
   const resourcesCopied = [
     ...new Set(projection.resources.map(({ relativePath }) => relativePath.split('/')[0])),
   ];
+  const isZip = artifactConfig.bundle === 'zip';
+  const desiredOutputs = buildArtifactOutputs(
+    projection,
+    artifact,
+    isZip ? projection.artifactName : '',
+  );
 
   if (artifactDef.layout === 'file') {
     mkdirSync(outDir, { recursive: true });
-    const outputPath = join(outDir, `${projection.artifactName}.md`);
-    writeFileSync(outputPath, projection.content, 'utf-8');
+    const canonical = desiredOutputs[0];
+    if (!canonical || canonical.kind !== 'generated') throw new Error('missing canonical output');
+    const outputPath = join(outDir, canonical.destination);
+    writeFileSync(outputPath, canonical.content, 'utf-8');
     return { outputPath, resourcesCopied, warnings: [...projection.warnings] };
   }
 
-  const isZip = artifactConfig.bundle === 'zip';
   const tempRoot = isZip ? mkdtempSync(join(tmpdir(), 'agentforge-zip-')) : null;
-  const materializeDir = tempRoot ? join(tempRoot, projection.artifactName) : outDir;
+  const materializeDir = tempRoot ?? outDir;
 
   mkdirSync(materializeDir, { recursive: true });
-  const canonicalOutPath = join(materializeDir, artifactDef.canonicalFilename);
-  writeFileSync(canonicalOutPath, projection.content, 'utf-8');
-
-  for (const generatedFile of projection.generatedFiles) {
-    const destination = join(materializeDir, generatedFile.relativePath);
+  for (const output of desiredOutputs) {
+    const destination = join(materializeDir, output.destination);
     mkdirSync(dirname(destination), { recursive: true });
-    writeFileSync(destination, generatedFile.content, 'utf-8');
+    if (output.kind === 'generated') writeFileSync(destination, output.content, 'utf-8');
+    else cpSync(output.sourcePath, destination);
   }
 
-  for (const resource of projection.resources) {
-    const destination = join(materializeDir, resource.relativePath);
-    mkdirSync(dirname(destination), { recursive: true });
-    cpSync(resource.sourcePath, destination);
-  }
-
+  const canonicalDestination = desiredOutputs[0]?.destination;
+  if (!canonicalDestination) throw new Error('missing canonical output');
+  const canonicalOutPath = join(materializeDir, canonicalDestination);
   let outputPath = canonicalOutPath;
   if (tempRoot) {
     const zip = new JSZip();

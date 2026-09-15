@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { projectArtifact } from 'agentforge/render';
+import { buildArtifactOutputs, projectArtifact } from 'agentforge/render';
 import matter from 'gray-matter';
+import { allTargets } from '../src/targets/index.ts';
 
 describe('leaf artifact projection', () => {
   test('projects target content and resource inputs without materializing files', () => {
@@ -56,6 +57,50 @@ targets:
         target: 'codex',
         detail: 'stripped allowed-tools',
       },
+    ]);
+
+    expect(buildArtifactOutputs(projection, 'skill', 'packages/draft')).toEqual([
+      {
+        kind: 'generated',
+        producer: 'generated',
+        destination: 'packages/draft/SKILL.md',
+        content: projection.content,
+      },
+      {
+        kind: 'copy',
+        producer: 'generated',
+        destination: 'packages/draft/assets/logo.png',
+        sourcePath: '/packages/spec-flow/skills/draft/assets/logo.png',
+      },
+      {
+        kind: 'copy',
+        producer: 'generated',
+        destination: 'packages/draft/references/contract.md',
+        sourcePath: '/packages/spec-flow/skills/draft/references/contract.md',
+      },
+      {
+        kind: 'copy',
+        producer: 'generated',
+        destination: 'packages/draft/scripts/check.ts',
+        sourcePath: '/packages/spec-flow/skills/draft/scripts/check.ts',
+      },
+    ]);
+  });
+
+  test('the target registry owns leaf and optional marketplace capabilities', () => {
+    expect(
+      allTargets().map(({ name, artifacts, marketplace }) => ({
+        name,
+        surfaces: Object.fromEntries(
+          Object.entries(artifacts).map(([artifact, config]) => [artifact, config?.surface]),
+        ),
+        marketplace: marketplace !== undefined,
+      })),
+    ).toEqual([
+      { name: 'claude', surfaces: { skill: 'skill', 'output-style': 'skill' }, marketplace: true },
+      { name: 'opencode', surfaces: { skill: 'skill' }, marketplace: false },
+      { name: 'codex', surfaces: { skill: 'skill' }, marketplace: true },
+      { name: 'claude-chat', surfaces: { skill: 'skill' }, marketplace: false },
     ]);
   });
 });

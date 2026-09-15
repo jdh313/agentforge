@@ -1,4 +1,5 @@
 import { dirname } from 'node:path';
+import type { z } from 'zod';
 import { deepMerge } from './deep-merge.ts';
 import type {
   DeclaredLossDefinition,
@@ -10,6 +11,7 @@ import type {
 } from './definitions.ts';
 import type { PackagePayload } from './package-payload-plan.ts';
 import { buildRootManifestOutput } from './root-manifest.ts';
+import type { TargetAdapter } from './target-adapter.ts';
 import type { TargetName } from './types.ts';
 
 type PublicationDefinition = MarketplaceDefinition['publications'][number];
@@ -31,9 +33,36 @@ interface ProposedOutputBase {
 
 export type OutputProducer = 'generated' | 'translated' | 'supplied';
 
+interface NativeDocumentHandleBase {
+  grammar: 'json';
+  label: string;
+  schema: z.ZodType;
+}
+
+export interface NativePluginReference {
+  name: string;
+  source: string | undefined;
+  version: string | undefined;
+}
+
+export interface MarketplaceRegistryHandle extends NativeDocumentHandleBase {
+  role: 'marketplace-registry';
+  plugins(document: unknown): readonly NativePluginReference[];
+  rewritePluginSources(document: unknown, rewrite: (source: string) => string): unknown;
+  manifestPath(packageDirectory: string): string;
+}
+
+export interface PackageManifestHandle extends NativeDocumentHandleBase {
+  role: 'package-manifest';
+  identity(document: unknown): { name: string | undefined; version: string | undefined };
+}
+
+export type NativeDocumentHandle = MarketplaceRegistryHandle | PackageManifestHandle;
+
 export interface ProposedGeneratedOutput extends ProposedOutputBase {
   kind: 'generated';
   content: string;
+  nativeDocument?: NativeDocumentHandle;
 }
 
 export interface ProposedCopiedOutput extends ProposedOutputBase {
@@ -56,6 +85,7 @@ interface DesiredOutputBase {
 export interface DesiredGeneratedOutput extends DesiredOutputBase {
   kind: 'generated';
   content: string;
+  nativeDocument?: NativeDocumentHandle;
 }
 
 export interface DesiredCopiedOutput extends DesiredOutputBase {
@@ -126,6 +156,8 @@ export interface TargetCompilerAdapter {
   compilePublication(input: PublicationCompilation): TargetCompilationResult;
 }
 
+export type CompilationAdapter = TargetAdapter | TargetCompilerAdapter;
+
 // An output anchored to the marketplace root (the directory holding
 // MARKETPLACE.yaml) rather than to `--out`. Kept in its own list rather than
 // flagged inside `outputs`, so every consumer that walks `outputs` keeps its
@@ -164,7 +196,7 @@ export class CompilationError extends Error {
 
 export function compileMarketplace(
   loaded: LoadedMarketplace,
-  adapters: readonly TargetCompilerAdapter[],
+  adapters: readonly CompilationAdapter[],
   options: CompileMarketplaceOptions = {},
 ): CompilationPlan {
   const adaptersByTarget = indexAdapters(adapters);
@@ -267,18 +299,30 @@ function buildRootOutputs(
 }
 
 function indexAdapters(
-  adapters: readonly TargetCompilerAdapter[],
+  adapters: readonly CompilationAdapter[],
 ): ReadonlyMap<TargetName, TargetCompilerAdapter> {
   const byTarget = new Map<TargetName, TargetCompilerAdapter>();
   for (const adapter of adapters) {
-    if (byTarget.has(adapter.target)) {
+    const compiler = compilerAdapter(adapter);
+    if (!compiler) continue;
+    if (byTarget.has(compiler.target)) {
       throw new CompilationError(
-        `multiple compiler adapters were provided for "${adapter.target}"`,
+        `multiple compiler adapters were provided for "${compiler.target}"`,
       );
     }
-    byTarget.set(adapter.target, adapter);
+    byTarget.set(compiler.target, compiler);
   }
   return byTarget;
+}
+
+function compilerAdapter(adapter: CompilationAdapter): TargetCompilerAdapter | undefined {
+  if ('target' in adapter) return adapter;
+  const capability = adapter.marketplace;
+  if (!capability) return undefined;
+  return {
+    target: adapter.name,
+    compilePublication: (input) => capability.compilePublication(input),
+  };
 }
 
 function resolvePackages(

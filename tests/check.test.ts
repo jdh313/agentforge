@@ -16,6 +16,11 @@ import { checkMarketplace } from 'agentforge/check';
 import type { CompilationPlan } from 'agentforge/compiler';
 import { materializeCompilation } from 'agentforge/materializer';
 import { buildCheckReport } from 'agentforge/report';
+import {
+  ClaudeMarketplaceDocument,
+  ClaudePluginDocument,
+} from '../src/targets/claude-marketplace.ts';
+import { CodexMarketplaceDocument } from '../src/targets/codex-marketplace.ts';
 
 let temporaryRoot: string;
 
@@ -563,11 +568,14 @@ function claudePlan(): CompilationPlan {
           owner: { name: 'Jacob' },
           plugins: [{ name: 'example', version: '1.0.0', source: './packages/example' }],
         }),
+        undefined,
+        ClaudeMarketplaceDocument,
       ),
       generated(
         'claude/packages/example/.claude-plugin/plugin.json',
         JSON.stringify({ name: 'example', version: '1.0.0' }),
         'example',
+        ClaudePluginDocument,
       ),
       generated(
         'claude/packages/example/skills/demo/SKILL.md',
@@ -604,16 +612,23 @@ function codexPlan(): CompilationPlan {
           marketplacePath: '/fixture/MARKETPLACE.yaml',
           publicationId: 'codex',
         },
+        nativeDocument: CodexMarketplaceDocument,
       },
     ],
   };
 }
 
-function generated(destination: string, content: string, packageId?: string) {
+function generated(
+  destination: string,
+  content: string,
+  packageId?: string,
+  nativeDocument?: import('../src/compiler.ts').NativeDocumentHandle,
+) {
   return {
     kind: 'generated' as const,
     destination,
     content: `${content}\n`,
+    ...(nativeDocument === undefined ? {} : { nativeDocument }),
     target: 'claude' as const,
     provenance: {
       marketplacePath: '/fixture/MARKETPLACE.yaml',

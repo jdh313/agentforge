@@ -72,6 +72,8 @@ whether their citation still holds.
 > for a runtime that supports it, and the defect was already **published**.
 > Amended again 2026-08-03 on the fix — a second live instance surfaced, and it
 > reframed the gap. Same ID throughout.
+> Amended 2026-09-14 after `ndr:4x4yyv` superseded provisional Claude
+> pass-through: unrecognized keys are now reported and stripped on every target.
 >
 > **Do not read this entry as "stripping keys is bad."** One of its two
 > instances *should* have been stripped. See "The lesson" below before citing
@@ -131,13 +133,13 @@ them is the fix:
 | Key kind | Claude | Other targets | Reported |
 | --- | --- | --- | --- |
 | Known Claude key | retained | stripped | `claude-only-frontmatter-stripped` |
-| Unrecognized key | retained **provisionally** | stripped | `unrecognized-frontmatter-key`, on every target including Claude |
+| Unrecognized key | stripped | stripped | `unrecognized-frontmatter-key`, on every target including Claude |
 | Declared authoring-layer key (`authoring-keys` in `PACKAGE.yaml`) | stripped | stripped | nothing — a declared strip is not a loss |
 
-Retention on Claude is the right default for a key nobody has ruled on, **not a
-verdict**: Claude is the source dialect, so an unrecognized canonical key is by
-construction a Claude key not yet enumerated. Passing it through is not an
-endorsement, which is why it warns on Claude too.
+The checked-in acceptance table is the authority for emission. An unrecognized
+key survives canonical parsing so the compiler can report it, then is stripped
+on every target until that table names it. This avoids treating source-dialect
+provenance as evidence that a runtime accepts a field.
 
 **Evidence.** Established 2026-08-02 during a drafting session. The findings
 that escalated it, verified 2026-08-03:
@@ -182,10 +184,9 @@ tell you whether something was ever a problem.
 `CanonicalOutputStyleFrontmatter`, now `z.looseObject`; `canonicalKeys` on each
 `ARTIFACT_DEFS` entry is what "unrecognized" is measured against;
 `disallowed-tools` is now enumerated and listed in `CLAUDE_ONLY_KEYS`.
-`src/targets/index.ts:14-22` — the `unrecognizedFrontmatter: 'retain' | 'strip'`
-contract and why `retain` is Claude-only. `src/targets/claude.ts:44,51` — the
-only `retain` opt-ins. `src/render.ts:145-195` — authoring-key removal first,
-then the unrecognized-key split and its warning. `src/definitions.ts:134` —
+`src/target-adapter.ts` — the target and artifact contracts.
+`src/render.ts` — authoring-key removal first, then checked-in key filtering and
+the unrecognized-key warning. `src/definitions.ts` —
 `authoring-keys` on `CanonicalPackage`. `src/types.ts` —
 `unrecognized-frontmatter-key`, and the comment on why it is kept distinct from
 `claude-only-frontmatter-stripped`.

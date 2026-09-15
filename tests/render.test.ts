@@ -142,12 +142,11 @@ describe('render skill', () => {
     );
   });
 
-  // The regression guard for the class `disallowed-tools` was one instance of.
-  // A closed canonical schema discarded any key it did not enumerate before a
-  // target adapter ever saw it, so key fourteen would reproduce the same defect
-  // the moment someone added it. This asserts survival on the target that
-  // accepts unrecognized keys, and a loud drop on one that does not.
-  test('an unrecognized canonical key survives into the Claude projection', async () => {
+  // Emitting a key claims the target accepts it. The canonical schema stays
+  // loose so AgentForge can report a future key instead of losing it during
+  // parsing, but every target drops it until the checked-in acceptance table
+  // names it (ndr:4x4yyv).
+  test('an unrecognized canonical key is dropped with a warning for Claude', async () => {
     const outDir = join(TMP_ROOT, 'unrecognized-key', 'claude');
     const result = await render({
       sourceDir: FIXTURE_DIR('unrecognized-key'),
@@ -157,13 +156,12 @@ describe('render skill', () => {
     });
 
     const frontmatter = matter(readFileSync(result.outputPath, 'utf-8')).data;
-    expect(frontmatter['future-claude-key']).toEqual(['one', 'two']);
+    expect(frontmatter).not.toHaveProperty('future-claude-key');
     expect(result.warnings).toEqual([
       {
         kind: 'unrecognized-frontmatter-key',
         target: 'claude',
-        detail:
-          'future-claude-key not in the canonical schema; passed through to claude unvalidated',
+        detail: 'future-claude-key not in the canonical schema; dropped for claude',
       },
     ]);
   });

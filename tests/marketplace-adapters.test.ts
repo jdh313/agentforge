@@ -119,6 +119,12 @@ describe('native marketplace adapters', () => {
     expect(
       generatedOutput(plan.outputs, '.claude-plugin/marketplace.json').content.endsWith('\n'),
     ).toBe(true);
+    expect(
+      generatedOutput(plan.outputs, '.claude-plugin/marketplace.json').nativeDocument,
+    ).toMatchObject({ role: 'marketplace-registry', grammar: 'json' });
+    expect(
+      generatedOutput(plan.outputs, 'packages/librarian/.claude-plugin/plugin.json').nativeDocument,
+    ).toMatchObject({ role: 'package-manifest', grammar: 'json' });
   });
 
   test('Codex compilation emits validated marketplace and plugin documents', async () => {
@@ -164,6 +170,9 @@ describe('native marketplace adapters', () => {
         codexMarketplaceEntry('spec-flow', 'Developer Tools'),
       ],
     });
+    expect(
+      generatedOutput(plan.outputs, '.agents/plugins/marketplace.json').nativeDocument,
+    ).toMatchObject({ role: 'marketplace-registry', grammar: 'json' });
 
     expect(generatedDocument(plan.outputs, 'packages/librarian/.codex-plugin/plugin.json')).toEqual(
       {

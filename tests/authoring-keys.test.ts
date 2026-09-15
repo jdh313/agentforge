@@ -9,8 +9,8 @@ import { TARGET_NAMES } from '../src/types.ts';
 
 // Three categories of frontmatter key, not two. A *known* Claude key
 // (`disallowed-tools`) is retained on Claude and reported as stripped
-// elsewhere. An *unrecognized* key is retained on Claude provisionally and
-// reported as dropped elsewhere. An *authoring-layer* key belongs to the source
+// elsewhere. An *unrecognized* key is reported and dropped everywhere until a
+// target's checked-in acceptance table names it. An *authoring-layer* key belongs to the source
 // repo and is addressed to no runtime at all — `upstream:` carries adaptation
 // provenance that a repo-local workflow reads and rewrites in canonical source,
 // so a copy of it in published output is inert.
@@ -63,16 +63,13 @@ describe('authoring-layer frontmatter keys', () => {
     ...TARGET_NAMES,
   ])('the same key with no declaration keeps unrecognized-key behavior on %s', (target) => {
     const projection = project(target);
-    const retained = target === 'claude';
 
-    expect(matter(projection.content).data.upstream === undefined).toBe(!retained);
+    expect(matter(projection.content).data).not.toHaveProperty('upstream');
     expect(projection.warnings).toEqual([
       {
         kind: 'unrecognized-frontmatter-key',
         target,
-        detail: retained
-          ? 'upstream not in the canonical schema; passed through to claude unvalidated'
-          : `upstream not in the canonical schema; dropped for ${target}`,
+        detail: `upstream not in the canonical schema; dropped for ${target}`,
       },
     ]);
   });
@@ -124,7 +121,7 @@ ${extra}targets:
     };
 
     expect(skillFor('declared')).not.toHaveProperty('upstream');
-    expect(skillFor('undeclared')).toHaveProperty('upstream');
+    expect(skillFor('undeclared')).not.toHaveProperty('upstream');
 
     const mentions = (packageId: string) =>
       plan.diagnostics.filter(

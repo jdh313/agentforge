@@ -2,7 +2,6 @@ import { resolve } from 'node:path';
 import type { DesiredOutput, RootAnchoredOutput } from './compiler.ts';
 import type { PublicationDefinition } from './definitions.ts';
 import { isContainedPath, portableRelative } from './paths.ts';
-import type { TargetName } from './types.ts';
 
 export class RootManifestError extends Error {
   constructor(message: string) {
@@ -43,6 +42,12 @@ export function buildRootManifestOutput(
       `publication ${JSON.stringify(publication.id)} declares root-manifest, but its registry output at ${JSON.stringify(publication.destination)} is not a generated document`,
     );
   }
+  const native = registry.nativeDocument;
+  if (native?.role !== 'marketplace-registry') {
+    throw new RootManifestError(
+      `publication ${JSON.stringify(publication.id)} declares root-manifest, but its registry output has no marketplace grammar`,
+    );
+  }
 
   const prefix = rootRelativePrefix(publication, marketplaceRoot, outputRoot);
   let document: unknown;
@@ -57,7 +62,11 @@ export function buildRootManifestOutput(
   return {
     ...registry,
     destination: publication.destination,
-    content: `${JSON.stringify(rewritePluginSources(publication, registry.target, document, prefix), null, 2)}\n`,
+    content: `${JSON.stringify(
+      native.rewritePluginSources(document, (source) => rewriteSource(publication, source, prefix)),
+      null,
+      2,
+    )}\n`,
   };
 }
 
@@ -80,49 +89,6 @@ function rootRelativePrefix(
     );
   }
   return `./${portableRelative(root, out)}/${publication.id}`;
-}
-
-function rewritePluginSources(
-  publication: PublicationDefinition,
-  target: TargetName,
-  document: unknown,
-  prefix: string,
-): unknown {
-  if (typeof document !== 'object' || document === null || !('plugins' in document)) {
-    return document;
-  }
-  const { plugins } = document as { plugins: unknown };
-  if (!Array.isArray(plugins)) return document;
-
-  return {
-    ...document,
-    plugins: plugins.map((plugin) => rewritePlugin(publication, target, plugin, prefix)),
-  };
-}
-
-function rewritePlugin(
-  publication: PublicationDefinition,
-  target: TargetName,
-  plugin: unknown,
-  prefix: string,
-): unknown {
-  if (typeof plugin !== 'object' || plugin === null || !('source' in plugin)) return plugin;
-  const { source } = plugin as { source: unknown };
-
-  if (typeof source === 'string') {
-    return { ...plugin, source: rewriteSource(publication, source, prefix) };
-  }
-  if (typeof source !== 'object' || source === null) return plugin;
-
-  // Codex nests the package directory under `source.path`; Claude's object form
-  // nests it under `source.source`.
-  const key = target === 'codex' && 'path' in source ? 'path' : 'source';
-  const nested = (source as Record<string, unknown>)[key];
-  if (typeof nested !== 'string') return plugin;
-  return {
-    ...plugin,
-    source: { ...source, [key]: rewriteSource(publication, nested, prefix) },
-  };
 }
 
 /**

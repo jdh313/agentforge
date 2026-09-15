@@ -1,4 +1,4 @@
-import type { TargetName } from './types.ts';
+import type { ConstructSurface, TargetName } from './types.ts';
 
 // A target may expose more than one surface with different capabilities. Codex
 // documents `$ARGUMENTS` / `$1`-`$9` on custom prompts and documents no
@@ -12,8 +12,6 @@ import type { TargetName } from './types.ts';
 // citation (ndr:g6xvyk). Before this row the fact lived in a hardcoded `Set` in
 // the Codex adapter whose only citation was a code comment, and which could
 // answer yes or no but never "not established" (L-009).
-export type ConstructSurface = 'skill' | 'prompt' | 'hook';
-
 // Families are shapes, not an enumerated blocklist. A body construct that
 // matches a family but carries a token nobody listed resolves to `unknown` and
 // is reported — the inverse of the old regex list, which was silent about
