@@ -8,7 +8,7 @@ Renders canonical AI agent artifacts into per-harness outputs, and reports what 
 The type of canonical thing being rendered: `skill`, `output-style`, `agent`, `mcp`. Each has a canonical filename, a canonical schema, and a layout.
 
 **Target**
-The harness consuming the output: `claude`, `opencode`, `codex`, `claude-chat`. A target may support a subset of artifacts.
+The harness consuming the output: `claude`, `opencode`, `codex`, `pi`, `claude-chat`. A target may support a subset of artifacts.
 
 **Scope**
 Where an installed artifact lands on a target: `user`, `project`, or `plugin`. A target declares an install location per scope it supports, and those declarations are normative — agentforge writes to them. A target with no location a harness reads, such as `claude-chat`, declares none.
@@ -36,7 +36,7 @@ _Avoid_: render output, result
 _See_: ndr:t6sykj
 
 **Desired output**
-One file a plan says will exist: a destination plus either generated content or a source path to copy from. Carries the target that produced it, and — when it is a native document — that document's schema, role and grammar accessors. The unit every entry point produces and the materializer consumes.
+One file a plan says will exist: a destination plus generated text, generated binary content, or a source path to copy from. Carries the target that produced it, and — when it is a native document — that document's schema, role and grammar accessors. The unit every entry point produces and the materializer consumes.
 _Avoid_: file, artifact
 _See_: ndr:t6sykj, ndr:zjnfjm
 

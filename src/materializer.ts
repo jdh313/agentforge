@@ -50,7 +50,7 @@ export function materializeCompilation(
   } catch (cause) {
     const detail = cause instanceof Error ? `: ${cause.message}` : '';
     throw new MaterializationError(
-      `failed to materialize marketplace "${plan.marketplaceId}" at ${destinationRoot}${detail}`,
+      `failed to materialize compilation "${plan.marketplaceId}" at ${destinationRoot}${detail}`,
       { cause },
     );
   } finally {
@@ -101,6 +101,11 @@ function materializeOutput(output: DesiredOutput, stagingRoot: string): void {
 
   if (output.kind === 'generated') {
     writeFileSync(destination, output.content, 'utf8');
+    chmodSync(destination, 0o644);
+    return;
+  }
+  if (output.kind === 'binary') {
+    writeFileSync(destination, output.content);
     chmodSync(destination, 0o644);
     return;
   }

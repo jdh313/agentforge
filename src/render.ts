@@ -1,22 +1,14 @@
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import matter from 'gray-matter';
 import JSZip from 'jszip';
+import { buildArtifactPlan } from './artifact-plan.ts';
 import { findConstructShapes, supportFor, translationFor } from './capabilities.ts';
-import type { ProposedOutput } from './compiler.ts';
+import type { CompilationPlan, DesiredOutput } from './compiler.ts';
 import { deepMerge } from './deep-merge.ts';
 import { acceptedFrontmatterKeys } from './frontmatter.ts';
+import { materializeCompilation } from './materializer.ts';
 import { ARTIFACT_DEFS } from './schema.ts';
 import { getArtifactConfig } from './targets/registry.ts';
 import type { ArtifactType, ConstructSurface, RenderResult, TargetName, Warning } from './types.ts';
@@ -72,40 +64,7 @@ export interface ArtifactProjection {
  * Standalone rendering and package compilation consume this same shape; the
  * caller decides which root owns the relative destinations.
  */
-export function buildArtifactOutputs(
-  projection: ArtifactProjection,
-  artifact: ArtifactType,
-  prefix = '',
-): readonly ProposedOutput[] {
-  const artifactDef = ARTIFACT_DEFS[artifact];
-  const at = (relativePath: string) =>
-    prefix.length === 0 ? relativePath : `${prefix}/${relativePath}`;
-  const canonicalDestination =
-    artifactDef.layout === 'file'
-      ? at(`${projection.artifactName}.md`)
-      : at(artifactDef.canonicalFilename);
-
-  return [
-    {
-      kind: 'generated',
-      producer: 'generated',
-      destination: canonicalDestination,
-      content: projection.content,
-    },
-    ...projection.generatedFiles.map(({ relativePath, content }) => ({
-      kind: 'generated' as const,
-      producer: 'generated' as const,
-      destination: at(relativePath),
-      content,
-    })),
-    ...projection.resources.map(({ relativePath, sourcePath }) => ({
-      kind: 'copy' as const,
-      producer: 'generated' as const,
-      destination: at(relativePath),
-      sourcePath,
-    })),
-  ];
-}
+export { buildArtifactOutputs } from './artifact-plan.ts';
 
 // The enumerated pattern table that used to live here is gone. It named eight
 // literals and was silent about everything else, so whatever Claude shipped next
@@ -336,66 +295,119 @@ export function loadArtifactProjection(opts: LoadArtifactProjectionOptions): Art
   });
 }
 
+/**
+ * Render through the same plan and materializer used by compile and install.
+ * Bundles materialize their directory tree first, derive the archive from those
+ * published bytes, and publish the archive through a second plan.
+ */
 export const render = async (opts: RenderOptions): Promise<RenderResult> => {
   const { sourceDir, target, outDir, artifact = 'skill' } = opts;
-  const artifactDef = ARTIFACT_DEFS[artifact];
   const artifactConfig = getArtifactConfig(target, artifact);
   if (!artifactConfig) {
     throw new Error(`target ${target} does not support artifact ${artifact}`);
   }
   const projection = loadArtifactProjection({ sourceDir, target, artifact });
-  const resourcesCopied = [
-    ...new Set(projection.resources.map(({ relativePath }) => relativePath.split('/')[0])),
-  ];
   const isZip = artifactConfig.bundle === 'zip';
-  const desiredOutputs = buildArtifactOutputs(
-    projection,
+  const planned = buildArtifactPlan({
+    sourceDir,
+    target,
     artifact,
-    isZip ? projection.artifactName : '',
-  );
+    publicationId: 'render',
+    projection,
+    ...(isZip ? { prefix: projection.artifactName } : {}),
+  });
 
-  if (artifactDef.layout === 'file') {
-    mkdirSync(outDir, { recursive: true });
-    const canonical = desiredOutputs[0];
-    if (!canonical || canonical.kind !== 'generated') throw new Error('missing canonical output');
-    const outputPath = join(outDir, canonical.destination);
-    writeFileSync(outputPath, canonical.content, 'utf-8');
-    return { outputPath, resourcesCopied, warnings: [...projection.warnings] };
+  if (!isZip) {
+    materializeCompilation(planned.plan, outDir);
+    return {
+      outputPath: join(outDir, planned.canonicalDestination),
+      resourcesCopied: planned.resourcesCopied,
+      warnings: planned.warnings,
+    };
   }
 
-  const tempRoot = isZip ? mkdtempSync(join(tmpdir(), 'agentforge-zip-')) : null;
-  const materializeDir = tempRoot ?? outDir;
+  const temporaryRoot = mkdtempSync(join(tmpdir(), 'agentforge-bundle-'));
+  try {
+    const publishedTree = join(temporaryRoot, 'published');
+    materializeCompilation(planned.plan, publishedTree);
 
-  mkdirSync(materializeDir, { recursive: true });
-  for (const output of desiredOutputs) {
-    const destination = join(materializeDir, output.destination);
-    mkdirSync(dirname(destination), { recursive: true });
-    if (output.kind === 'generated') writeFileSync(destination, output.content, 'utf-8');
-    else cpSync(output.sourcePath, destination);
+    const archiveName = `${projection.artifactName}.zip`;
+    materializeCompilation(
+      singleBinaryOutputPlan(
+        archiveName,
+        await zipPublishedTree(publishedTree),
+        target,
+        planned.plan,
+      ),
+      outDir,
+    );
+
+    return {
+      outputPath: join(outDir, archiveName),
+      resourcesCopied: planned.resourcesCopied,
+      warnings: planned.warnings,
+    };
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
   }
-
-  const canonicalDestination = desiredOutputs[0]?.destination;
-  if (!canonicalDestination) throw new Error('missing canonical output');
-  const canonicalOutPath = join(materializeDir, canonicalDestination);
-  let outputPath = canonicalOutPath;
-  if (tempRoot) {
-    const zip = new JSZip();
-    for (const rel of walkFiles(tempRoot)) {
-      zip.file(rel, readFileSync(join(tempRoot, rel)));
-    }
-    const buf = await zip.generateAsync({ type: 'nodebuffer' });
-    mkdirSync(outDir, { recursive: true });
-    outputPath = join(outDir, `${projection.artifactName}.zip`);
-    writeFileSync(outputPath, buf);
-    rmSync(tempRoot, { recursive: true, force: true });
-  }
-
-  return {
-    outputPath,
-    resourcesCopied,
-    warnings: [...projection.warnings],
-  };
 };
+
+async function zipPublishedTree(publishedTree: string): Promise<Buffer> {
+  const zip = new JSZip();
+  const files = walkFiles(publishedTree);
+  const directories = new Set<string>();
+  for (const relativePath of files) {
+    let directory = dirname(relativePath);
+    while (directory !== '.') {
+      directories.add(directory);
+      directory = dirname(directory);
+    }
+  }
+  const zipEpoch = new Date(Date.UTC(1980, 0, 1));
+  for (const directory of [...directories].toSorted()) {
+    zip.file(`${directory}/`, null, {
+      createFolders: false,
+      date: zipEpoch,
+      dir: true,
+      unixPermissions: 0o755,
+    });
+  }
+  for (const relativePath of files) {
+    const absolutePath = join(publishedTree, relativePath);
+    zip.file(relativePath, readFileSync(absolutePath), {
+      createFolders: false,
+      date: zipEpoch,
+      unixPermissions: statSync(absolutePath).mode & 0o777,
+    });
+  }
+  return zip.generateAsync({ type: 'nodebuffer', platform: 'UNIX' });
+}
+
+function singleBinaryOutputPlan(
+  archiveName: string,
+  content: Uint8Array,
+  target: TargetName,
+  directoryPlan: CompilationPlan,
+): CompilationPlan {
+  const output: DesiredOutput = {
+    kind: 'binary',
+    producer: 'generated',
+    destination: archiveName,
+    content,
+    target,
+    provenance: {
+      marketplacePath: directoryPlan.outputs[0]?.provenance.marketplacePath ?? archiveName,
+      publicationId: 'render',
+    },
+  };
+  return {
+    marketplaceId: 'render',
+    outputs: [output],
+    diagnostics: directoryPlan.diagnostics,
+    rootOutputs: [],
+    redactions: [],
+  };
+}
 
 const walkFiles = (root: string): string[] => {
   const out: string[] = [];

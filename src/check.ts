@@ -592,13 +592,13 @@ function issueFor(
 }
 
 function expectedBytes(output: DesiredOutput): Buffer {
-  return output.kind === 'generated'
-    ? Buffer.from(output.content, 'utf8')
-    : readFileSync(output.sourcePath);
+  if (output.kind === 'generated') return Buffer.from(output.content, 'utf8');
+  if (output.kind === 'binary') return Buffer.from(output.content);
+  return readFileSync(output.sourcePath);
 }
 
 function expectedOutputMode(output: DesiredOutput): number {
-  if (output.kind === 'generated') return 0o644;
+  if (output.kind === 'generated' || output.kind === 'binary') return 0o644;
   if (output.executable !== undefined) return output.executable ? 0o755 : 0o644;
   return lstatSync(output.sourcePath).mode & 0o777;
 }

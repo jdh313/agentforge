@@ -1,5 +1,17 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import matter from 'gray-matter';
@@ -243,6 +255,75 @@ describe('render skill', () => {
         expect.objectContaining({ detail: expect.stringContaining('disable-model-invocation') }),
       ]),
     );
+  });
+
+  test('publishes a directory render as a complete snapshot with normalized modes', async () => {
+    const sourceDir = join(TMP_ROOT, 'planned-render-source');
+    const outDir = join(TMP_ROOT, 'planned-render-output');
+    cpSync(FIXTURE_DIR('with-resources'), sourceDir, { recursive: true });
+    chmodSync(join(sourceDir, 'scripts/run.sh'), 0o755);
+    chmodSync(join(sourceDir, 'references/api.md'), 0o640);
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(join(outDir, 'stale.txt'), 'stale\n');
+
+    await render({ sourceDir, target: 'claude', outDir, artifact: 'skill' });
+
+    expect(readdirSync(outDir).toSorted()).toEqual(['SKILL.md', 'references', 'scripts']);
+    expect(statSync(join(outDir, 'scripts/run.sh')).mode & 0o777).toBe(0o755);
+    expect(statSync(join(outDir, 'references/api.md')).mode & 0o777).toBe(0o644);
+  });
+
+  test('leaves the prior render intact when a planned resource becomes unsafe', async () => {
+    const sourceDir = join(TMP_ROOT, 'unsafe-render-source');
+    const outDir = join(TMP_ROOT, 'unsafe-render-output');
+    cpSync(FIXTURE_DIR('with-resources'), sourceDir, { recursive: true });
+    rmSync(join(sourceDir, 'scripts/run.sh'));
+    symlinkSync('../references/api.md', join(sourceDir, 'scripts/run.sh'));
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(join(outDir, 'known-good.txt'), 'known good\n');
+
+    await expect(
+      render({ sourceDir, target: 'claude', outDir, artifact: 'skill' }),
+    ).rejects.toThrow('must not be a symbolic link');
+
+    expect(readdirSync(outDir)).toEqual(['known-good.txt']);
+    expect(readFileSync(join(outDir, 'known-good.txt'), 'utf8')).toBe('known good\n');
+  });
+
+  test('publishes a bundle snapshot containing the materialized tree and executable modes', async () => {
+    const sourceDir = join(TMP_ROOT, 'planned-bundle-source');
+    const outDir = join(TMP_ROOT, 'planned-bundle-output');
+    cpSync(FIXTURE_DIR('with-resources'), sourceDir, { recursive: true });
+    chmodSync(join(sourceDir, 'scripts/run.sh'), 0o755);
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(join(outDir, 'stale.txt'), 'stale\n');
+
+    const result = await render({
+      sourceDir,
+      target: 'claude-chat',
+      outDir,
+      artifact: 'skill',
+    });
+    const firstArchive = readFileSync(result.outputPath);
+    const zip = await loadZip(result.outputPath);
+    const script = zip.file('with-resources/scripts/run.sh');
+
+    expect(readdirSync(outDir)).toEqual(['with-resources.zip']);
+    expect(Object.keys(zip.files).toSorted()).toEqual([
+      'with-resources/',
+      'with-resources/SKILL.md',
+      'with-resources/references/',
+      'with-resources/references/api.md',
+      'with-resources/scripts/',
+      'with-resources/scripts/run.sh',
+    ]);
+    expect(typeof script?.unixPermissions).toBe('number');
+    expect((typeof script?.unixPermissions === 'number' ? script.unixPermissions : 0) & 0o777).toBe(
+      0o755,
+    );
+
+    await render({ sourceDir, target: 'claude-chat', outDir, artifact: 'skill' });
+    expect(readFileSync(result.outputPath)).toEqual(firstArchive);
   });
 });
 

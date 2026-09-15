@@ -493,6 +493,12 @@ agentforge list-targets
 - The output directory is a complete snapshot. AgentForge stages every
   generated document and copied artifact before replacing an existing build;
   planning or staging failures leave the prior output intact.
+- `render` follows the same complete-snapshot contract for its `--out`
+  directory. It uses the shared compilation plan and materializer, so stale
+  files are removed, executable intent is normalized, unsafe resource symlinks
+  are rejected, and a failed rebuild leaves the prior render intact. Bundled
+  targets first publish a temporary directory tree, then build and publish the
+  archive from those exact bytes.
 - Notes and warnings are printed in deterministic plan order and do not make a
   successful compile exit nonzero.
 - `check` derives the same expected publication plans in memory, validates

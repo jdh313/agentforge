@@ -111,7 +111,7 @@ describe('marketplace materialization', () => {
         ]),
         outDir,
       ),
-    ).toThrow('failed to materialize marketplace');
+    ).toThrow('failed to materialize compilation');
 
     expect(readFileSync(join(outDir, 'marketplace.json'), 'utf8')).toBe('known good\n');
     expect(existsSync(join(outDir, 'packages/missing.txt'))).toBe(false);

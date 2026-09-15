@@ -76,9 +76,10 @@ src/
                       (source path, destination, executable bit, collision
                       handling)
   agent-command.ts  — canonical agent/command behavior parsers
-  render.ts         — pure projection plus the shared relative-output builder;
-                      standalone rendering and package compilation consume the
-                      same desired output shape
+  render.ts         — pure projection plus standalone render orchestration;
+                      every destination write goes through the materializer
+  artifact-plan.ts  — shared projection-to-plan builder used by render and
+                      install, including modes, diagnostics, and provenance
   install.ts        — synthetic one-artifact install plans with resolved roots
   report.ts         — builds the `compile --report` output (JSON/MD),
                       grouping compiler diagnostics by disposition (what
@@ -96,12 +97,13 @@ src/
     pi.ts           — artifacts.skill (~/.pi/agent/skills, .pi/skills)
     claude-chat.ts  — artifacts.skill (~/Downloads/claude-skills, zipped)
 tests/
-  fixtures/         — 4 skills + 2 output-styles
+  fixtures/         — 5 matrix skills + focused skill fixtures + 2 output-styles
                       (output-style-basic, output-style-rich)
   __snapshots__/    — bun test snapshots (committed; regen with
                       `bun test --update-snapshots`)
-  render.test.ts    — skill × target (4×5) + output-style × target
-                      (2×5, 1 supported + 4 rejected per fixture) = 30 cases
+  render.test.ts    — skill × target (5×5) + output-style × target
+                      (2×5, 1 supported + 4 rejected per fixture) = 35 matrix cases,
+                      plus focused projection and materialization cases
 ```
 
 ## Render contract (don't break without good reason)

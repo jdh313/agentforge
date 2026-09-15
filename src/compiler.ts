@@ -88,6 +88,11 @@ export interface DesiredGeneratedOutput extends DesiredOutputBase {
   nativeDocument?: NativeDocumentHandle;
 }
 
+export interface DesiredBinaryOutput extends DesiredOutputBase {
+  kind: 'binary';
+  content: Uint8Array;
+}
+
 export interface DesiredCopiedOutput extends DesiredOutputBase {
   kind: 'copy';
   sourcePath: string;
@@ -95,7 +100,7 @@ export interface DesiredCopiedOutput extends DesiredOutputBase {
   sourceRoot?: string;
 }
 
-export type DesiredOutput = DesiredGeneratedOutput | DesiredCopiedOutput;
+export type DesiredOutput = DesiredGeneratedOutput | DesiredBinaryOutput | DesiredCopiedOutput;
 
 export interface RetainedSource {
   artifactType: string;
@@ -520,11 +525,14 @@ function compareCollisionOutputs(left: DesiredOutput, right: DesiredOutput): num
     compareStrings(left.destination, right.destination) ||
     compareStrings(left.producer ?? '', right.producer ?? '') ||
     compareStrings(left.kind, right.kind) ||
-    compareStrings(
-      left.kind === 'copy' ? left.sourcePath : left.content,
-      right.kind === 'copy' ? right.sourcePath : right.content,
-    )
+    compareStrings(collisionContentKey(left), collisionContentKey(right))
   );
+}
+
+function collisionContentKey(output: DesiredOutput): string {
+  if (output.kind === 'copy') return output.sourcePath;
+  if (output.kind === 'binary') return Buffer.from(output.content).toString('base64');
+  return output.content;
 }
 
 function sameProducerScope(left: DesiredOutput, right: DesiredOutput): boolean {

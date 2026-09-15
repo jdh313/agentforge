@@ -19,6 +19,7 @@
   },
   "exports": {
     "./agent-command": "./src/agent-command.ts",
+    "./artifact-plan": "./src/artifact-plan.ts",
     "./check": "./src/check.ts",
     "./compiler": "./src/compiler.ts",
     "./definitions": "./src/definitions.ts",
