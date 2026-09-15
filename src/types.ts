@@ -1,4 +1,8 @@
-export type TargetName = 'claude' | 'opencode' | 'codex' | 'claude-chat';
+export type TargetName = 'claude' | 'opencode' | 'codex' | 'pi' | 'claude-chat';
+
+export type InstallScope = 'user' | 'project' | 'plugin';
+
+export const INSTALL_SCOPES: readonly InstallScope[] = ['user', 'project', 'plugin'] as const;
 
 export type ConstructSurface = 'skill' | 'prompt' | 'hook';
 
@@ -6,6 +10,7 @@ export const TARGET_NAMES: readonly TargetName[] = [
   'claude',
   'opencode',
   'codex',
+  'pi',
   'claude-chat',
 ] as const;
 

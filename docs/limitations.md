@@ -183,7 +183,8 @@ tell you whether something was ever a problem.
 **Where to look.** `src/schema.ts` — `CanonicalSkillFrontmatter` /
 `CanonicalOutputStyleFrontmatter`, now `z.looseObject`; `canonicalKeys` on each
 `ARTIFACT_DEFS` entry is what "unrecognized" is measured against;
-`disallowed-tools` is now enumerated and listed in `CLAUDE_ONLY_KEYS`.
+`disallowed-tools` is now enumerated in the checked-in acceptance table in
+`src/frontmatter.ts` with Claude as its sole retaining target.
 `src/target-adapter.ts` — the target and artifact contracts.
 `src/render.ts` — authoring-key removal first, then checked-in key filtering and
 the unrecognized-key warning. `src/definitions.ts` —
@@ -498,7 +499,8 @@ key rather than to stop discarding it; the same argument applies here.
 subdirs in `artifactConfig.resourceSubdirs`, so a sibling file at the skill root
 is never enumerated. `src/render.ts:195-198` — a second filter drops anything
 whose first path segment is not an allowlisted subdir. `src/targets/claude.ts:38`
-and the matching lines in `codex.ts:18`, `opencode.ts:18`, `claude-chat.ts:18` —
+and the matching declarations in `codex.ts`, `opencode.ts`, `pi.ts`, and
+`claude-chat.ts` —
 where the three-subdir allowlist is declared, identically, on every target.
 `src/package-payload-plan.ts:34-92` — the package-level `payloads:` path, which
 errors on a declared source matching no files but says nothing about an

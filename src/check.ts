@@ -108,6 +108,39 @@ export function checkMarketplace(
   };
 }
 
+/** Compare one complete, AgentForge-owned destination against its pure plan. */
+export function checkCompilationSnapshot(
+  plan: CompilationPlan,
+  outputRoot: string,
+): MarketplaceCheckResult {
+  const expected = new Map(plan.outputs.map((output) => [output.destination, output]));
+  const publicationId = plan.outputs[0]?.provenance.publicationId ?? 'install';
+  const issues: MarketplaceCheckIssue[] = [];
+
+  for (const output of plan.outputs) {
+    issues.push(...checkManagedOutput(output, publicationAnchor(outputRoot), plan.redactions));
+  }
+  for (const path of listFiles(outputRoot)) {
+    if (expected.has(path)) continue;
+    issues.push({
+      code: 'unexpected-output',
+      publicationId,
+      path,
+      message: 'file is not managed by the compilation plan',
+    });
+  }
+  issues.push(...validateArtifactFrontmatter(plan, outputRoot));
+  issues.sort(
+    (left, right) => compareStrings(left.path, right.path) || compareStrings(left.code, right.code),
+  );
+  return {
+    outputRoot,
+    filesChecked: [...expected.keys()].toSorted(compareStrings),
+    rootFilesChecked: [],
+    issues,
+  };
+}
+
 // Which anchor a managed output is checked against: `--out` for the compiled
 // tree, the marketplace root for a `root-manifest` copy. Parameterized rather
 // than duplicated, because two copies of "exists, is a regular file, has the
@@ -276,7 +309,12 @@ function validateArtifactFrontmatter(
 ): MarketplaceCheckIssue[] {
   const issues: MarketplaceCheckIssue[] = [];
   for (const output of plan.outputs) {
-    if (output.kind !== 'generated' || !output.destination.endsWith('/SKILL.md')) continue;
+    if (
+      output.kind !== 'generated' ||
+      (output.destination !== 'SKILL.md' && !output.destination.endsWith('/SKILL.md'))
+    ) {
+      continue;
+    }
     const config = getArtifactConfig(output.target, 'skill');
     const actualPath = join(outputRoot, ...output.destination.split('/'));
     if (!config || !isRegularFile(actualPath)) continue;

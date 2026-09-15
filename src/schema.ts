@@ -10,12 +10,13 @@ const TargetsBlock = z
     claude: TargetOverride.optional(),
     opencode: TargetOverride.optional(),
     codex: TargetOverride.optional(),
+    pi: TargetOverride.optional(),
     'claude-chat': TargetOverride.optional(),
   })
   .optional();
 
 // Loose on purpose. A closed object here discards an unrecognized key before any
-// target adapter runs, before `allowedFrontmatterKeys` filtering, and before the
+// target adapter runs, before checked-in acceptance filtering, and before the
 // construct detector scans — so a key agentforge has not learned yet ceases to
 // exist with nothing reported. That is the inverse of ndr:17dhph, which keeps
 // generated native documents open precisely to retain unrecognized keys; the
@@ -64,37 +65,6 @@ export const CanonicalOutputStyleFrontmatter = z.looseObject({
 });
 
 export type CanonicalOutputStyleFrontmatterT = z.infer<typeof CanonicalOutputStyleFrontmatter>;
-
-export const CLAUDE_ONLY_KEYS: ReadonlySet<string> = new Set([
-  'when_to_use',
-  'argument-hint',
-  'arguments',
-  'disable-model-invocation',
-  'user-invocable',
-  'allowed-tools',
-  // Claude honors a deny list alongside the allow list. It is Claude-only in
-  // the same sense `allowed-tools` is: no other target enforces a tool filter,
-  // so every non-Claude projection strips it and says so.
-  'disallowed-tools',
-  'model',
-  'effort',
-  'context',
-  'agent',
-  'hooks',
-  'paths',
-  'shell',
-]);
-
-export const COMMON_KEYS: ReadonlySet<string> = new Set(['name', 'description']);
-
-export const ALL_CLAUDE_KEYS: ReadonlySet<string> = new Set([...COMMON_KEYS, ...CLAUDE_ONLY_KEYS]);
-
-export const OUTPUT_STYLE_KEYS: ReadonlySet<string> = new Set([
-  'name',
-  'description',
-  'keep-coding-instructions',
-  'force-for-plugin',
-]);
 
 export interface ArtifactDefinition {
   canonicalFilename: string;

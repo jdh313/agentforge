@@ -3,7 +3,7 @@
 Define and render canonical AI agent artifacts for multiple harnesses.
 
 Takes a single canonical source (e.g. a `SKILL.md`) and emits harness-specific
-outputs for Claude Code, OpenCode, and Codex — each with the right path,
+outputs for Claude Code, OpenCode, Codex, and Pi — each with the right path,
 frontmatter shape, and optional per-target body overrides. Marketplace
 compilation also translates Claude agent and command behaviors into direct
 Claude artifacts or inferred Codex procedures and skills.
@@ -24,7 +24,9 @@ adapters emit validated native marketplace registries, plugin manifests, and
 package payloads, including agent and command translations for the
 representative marketplace corpus. The CLI materializes those plans as atomic,
 complete-snapshot marketplace builds and checks materialized trees for native
-validity and drift without writing.
+validity and drift without writing. Directory artifacts can also be installed
+at target-owned user, project, or plugin locations and checked from the same
+synthetic plan.
 
 ## Requirements
 
@@ -44,6 +46,8 @@ bun run src/cli.ts render tests/fixtures/claude-rich --all-targets --out-base /t
 bun run src/cli.ts validate tests/fixtures/claude-rich
 bun run src/cli.ts compile tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-marketplace
 bun run src/cli.ts check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-marketplace
+bun run src/cli.ts install tests/fixtures/common-subset --target pi --scope project --project-root /tmp/example-project
+bun run src/cli.ts check-install tests/fixtures/common-subset --target pi --scope project --project-root /tmp/example-project
 ```
 
 ### Compilation reports
@@ -473,6 +477,8 @@ agentforge compile <MARKETPLACE.yaml> --out <out-dir> --publication <id>
 agentforge check <MARKETPLACE.yaml> --out <out-dir>
 agentforge check <MARKETPLACE.yaml> --out <out-dir> --publication <id>
 agentforge check <MARKETPLACE.yaml> --out <out-dir> --claude-native
+agentforge install <skill-source-dir> --target <name> --scope <user|project|plugin>
+agentforge check-install <skill-source-dir> --target <name> --scope <user|project|plugin>
 agentforge render <skill-source-dir> --target <name> --out <out-dir>
 agentforge render <skill-source-dir> --all-targets --out-base <out-base>
 agentforge validate <skill-source-dir>
@@ -509,6 +515,17 @@ agentforge list-targets
   the issues in their stable path-then-code order, and the compilation
   diagnostics. Read `status` rather than inferring success from an empty
   `issues` array. Exit codes are unchanged.
+- `install` requires an explicit scope. User and project scopes resolve through
+  the selected target; project scope uses the current repository root (or the
+  current directory outside a repository) unless `--project-root` is supplied.
+  Plugin scope requires `--plugin-root` and is
+  available only where the target declares a package skill directory.
+- An install owns exactly one directory artifact root. It stages the complete
+  projected skill, atomically replaces that root, removes stale files inside
+  it, and leaves sibling skills untouched. File-layout artifacts are refused.
+- `check-install` resolves and builds the same plan without writing, then reports
+  missing, changed, permission-drifted, and unexpected files inside that one
+  installed skill root.
 
 ### `root-manifest` publications
 
@@ -584,12 +601,13 @@ AGENTFORGE_CC_MARKETPLACE_PROJECT=../cc-marketplace bun test tests/cli.test.ts
 
 ## Targets
 
-| Target | Output base dir |
-|---|---|
-| `claude` | `~/.claude/skills` |
-| `opencode` | `~/.config/opencode/skills` |
-| `codex` | `~/.agents/skills` |
-| `claude-chat` | `~/Downloads/claude-skills` |
+| Target | User skill root | Project skill root | Plugin package root |
+|---|---|---|---|
+| `claude` | `~/.claude/skills` | `.claude/skills` | `skills` |
+| `opencode` | `~/.config/opencode/skills` | `.opencode/skills` | unsupported |
+| `codex` | `~/.agents/skills` | `.agents/skills` | `skills` |
+| `pi` | `~/.pi/agent/skills` | `.pi/skills` | `skills` |
+| `claude-chat` | unsupported | unsupported | unsupported |
 
 ## Contributing
 

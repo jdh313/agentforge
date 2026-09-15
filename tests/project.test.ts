@@ -100,6 +100,7 @@ targets:
       { name: 'claude', surfaces: { skill: 'skill', 'output-style': 'skill' }, marketplace: true },
       { name: 'opencode', surfaces: { skill: 'skill' }, marketplace: false },
       { name: 'codex', surfaces: { skill: 'skill' }, marketplace: true },
+      { name: 'pi', surfaces: { skill: 'skill' }, marketplace: false },
       { name: 'claude-chat', surfaces: { skill: 'skill' }, marketplace: false },
     ]);
   });

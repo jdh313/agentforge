@@ -148,6 +148,15 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
     },
   ],
   [
+    'pi/skill',
+    {
+      supported: ['allowed-tools', 'disable-model-invocation'],
+      unsupported: CLAUDE_TOKENS,
+      source:
+        'https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md — Pi implements Agent Skills, natively accepts allowed-tools and disable-model-invocation, and documents no Claude Code body templating. Verified 2026-09-14.',
+    },
+  ],
+  [
     'claude-chat/skill',
     {
       supported: [],

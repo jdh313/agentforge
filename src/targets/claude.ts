@@ -1,7 +1,5 @@
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { ALL_CLAUDE_KEYS, OUTPUT_STYLE_KEYS } from '../schema.ts';
 import type { TargetAdapter } from '../target-adapter.ts';
 
 // Loose for the same reason ndr:17dhph keeps generated native documents loose:
@@ -39,18 +37,27 @@ export const claudeTarget: TargetAdapter = {
   label: 'Claude',
   artifacts: {
     skill: {
-      outputBaseDir: () => join(homedir(), '.claude/skills'),
+      installLocations: {
+        user: ({ homeDirectory }) => join(homeDirectory, '.claude/skills'),
+        project: ({ projectRoot }) => join(projectRoot, '.claude/skills'),
+        plugin: ({ pluginRoot }) => requirePluginRoot(pluginRoot, 'claude'),
+      },
       surface: 'skill',
-      allowedFrontmatterKeys: ALL_CLAUDE_KEYS,
       resourceSubdirs: new Set(['scripts', 'references', 'assets']),
       outputFrontmatterSchema: ClaudeSkillFrontmatter,
     },
     'output-style': {
-      outputBaseDir: () => join(homedir(), '.claude/output-styles'),
+      installLocations: {},
       surface: 'skill',
-      allowedFrontmatterKeys: OUTPUT_STYLE_KEYS,
       resourceSubdirs: new Set(),
       outputFrontmatterSchema: ClaudeOutputStyleFrontmatter,
     },
   },
 };
+
+function requirePluginRoot(pluginRoot: string | undefined, target: string): string {
+  if (pluginRoot === undefined) {
+    throw new Error(`install scope plugin for target ${target} requires --plugin-root <dir>`);
+  }
+  return join(pluginRoot, 'skills');
+}

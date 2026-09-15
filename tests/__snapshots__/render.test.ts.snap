@@ -472,3 +472,120 @@ You are reviewing code as a senior engineer. Surface the single highest-priority
 exports[`render output-style output-style-rich → claude: warnings 1`] = `[]`;
 
 exports[`render output-style output-style-rich → claude: resources 1`] = `[]`;
+
+exports[`render skill claude-rich → pi: canonical 1`] = `
+"---
+name: claude-rich
+description: >-
+  Test fixture exercising Claude-only frontmatter and $ARGUMENTS body
+  substitution.
+disable-model-invocation: true
+allowed-tools: Bash(git *) Read
+---
+
+Fix GitHub issue $ARGUMENTS following the project's coding standards.
+
+1. Read the issue description.
+2. Implement the fix.
+3. Add tests.
+"
+`;
+
+exports[`render skill claude-rich → pi: warnings 1`] = `
+[
+  {
+    "detail": "stripped argument-hint, disallowed-tools",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "pi",
+  },
+  {
+    "detail": "body uses $ARGUMENTS but no targets.pi.body override",
+    "kind": "claude-only-body-feature",
+    "target": "pi",
+  },
+]
+`;
+
+exports[`render skill claude-rich → pi: resources 1`] = `[]`;
+
+exports[`render skill with-overrides → pi: canonical 1`] = `
+"---
+name: with-overrides
+description: Test fixture for per-target body and field overrides.
+disable-model-invocation: true
+allowed-tools: Bash(git *)
+---
+
+Fix issue $ARGUMENTS following the project's coding standards.
+"
+`;
+
+exports[`render skill with-overrides → pi: warnings 1`] = `
+[
+  {
+    "detail": "body uses $ARGUMENTS but no targets.pi.body override",
+    "kind": "claude-only-body-feature",
+    "target": "pi",
+  },
+]
+`;
+
+exports[`render skill with-overrides → pi: resources 1`] = `[]`;
+
+exports[`render skill with-resources → pi: canonical 1`] = `
+"---
+name: with-resources
+description: Test fixture exercising bundled resource subdirectory passthrough.
+---
+
+See \`references/api.md\` for protocol details and run \`scripts/run.sh\` to exercise it.
+"
+`;
+
+exports[`render skill with-resources → pi: warnings 1`] = `[]`;
+
+exports[`render skill with-resources → pi: resources 1`] = `
+[
+  "references",
+  "scripts",
+]
+`;
+
+exports[`render skill common-subset → pi: canonical 1`] = `
+"---
+name: common-subset
+description: Test fixture using only the common-subset frontmatter and a plain body.
+---
+
+A short, plain skill body with no Claude-only features.
+"
+`;
+
+exports[`render skill common-subset → pi: warnings 1`] = `[]`;
+
+exports[`render skill common-subset → pi: resources 1`] = `[]`;
+
+exports[`render skill unrecognized-key → pi: canonical 1`] = `
+"---
+name: unrecognized-key
+description: >-
+  Test fixture carrying a frontmatter key the canonical schema does not
+  enumerate.
+---
+
+A plain body. The interesting part is the frontmatter key above: it stands in
+for whatever key Claude ships next, before agentforge has learned it.
+"
+`;
+
+exports[`render skill unrecognized-key → pi: warnings 1`] = `
+[
+  {
+    "detail": "future-claude-key not in the canonical schema; dropped for pi",
+    "kind": "unrecognized-frontmatter-key",
+    "target": "pi",
+  },
+]
+`;
+
+exports[`render skill unrecognized-key → pi: resources 1`] = `[]`;

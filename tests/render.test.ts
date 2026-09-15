@@ -169,6 +169,7 @@ describe('render skill', () => {
   test.each([
     'opencode',
     'codex',
+    'pi',
     'claude-chat',
   ] as const)('an unrecognized canonical key is dropped with a warning for %s', async (target) => {
     const outDir = join(TMP_ROOT, 'unrecognized-key', target);

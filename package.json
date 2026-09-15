@@ -1,7 +1,7 @@
 {
   "name": "agentforge",
   "version": "0.4.0",
-  "description": "Render canonical AI agent artifacts for multiple harnesses (Claude Code, OpenCode, Codex)",
+  "description": "Render canonical AI agent artifacts for multiple harnesses (Claude Code, Codex, OpenCode, Pi)",
   "license": "Apache-2.0",
   "author": "Jacob Hoehler <accts@jdh.onl>",
   "repository": {
@@ -22,6 +22,7 @@
     "./check": "./src/check.ts",
     "./compiler": "./src/compiler.ts",
     "./definitions": "./src/definitions.ts",
+    "./install": "./src/install.ts",
     "./materializer": "./src/materializer.ts",
     "./marketplace-adapters": "./src/marketplace-adapters.ts",
     "./report": "./src/report.ts",

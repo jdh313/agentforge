@@ -1,12 +1,13 @@
 #!/usr/bin/env bun
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, parse, resolve } from 'node:path';
 import { Command } from 'commander';
 import matter from 'gray-matter';
 import pkg from '../package.json' with { type: 'json' };
-import { checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
+import { checkCompilationSnapshot, checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
 import { type CompilationPlan, compileMarketplace, type RootAnchoredOutput } from './compiler.ts';
 import { type LoadedMarketplace, loadMarketplaceDefinition } from './definitions.ts';
+import { buildInstallPlan } from './install.ts';
 import { materializeCompilation } from './materializer.ts';
 import { render } from './render.ts';
 import { buildCheckReport, formatFromPath, type ReportFormat, renderReport } from './report.ts';
@@ -16,6 +17,8 @@ import { allTargets } from './targets/index.ts';
 import {
   ARTIFACT_TYPES,
   type ArtifactType,
+  INSTALL_SCOPES,
+  type InstallScope,
   type RenderResult,
   TARGET_NAMES,
   type TargetName,
@@ -45,6 +48,9 @@ const isTargetName = (s: string): s is TargetName =>
 
 const isArtifactType = (s: string): s is ArtifactType =>
   (ARTIFACT_TYPES as readonly string[]).includes(s);
+
+const isInstallScope = (s: string): s is InstallScope =>
+  (INSTALL_SCOPES as readonly string[]).includes(s);
 
 const detectArtifact = (sourceDir: string): ArtifactType => {
   const present = ARTIFACT_TYPES.filter((a) =>
@@ -324,6 +330,86 @@ const formatCheckIssue = (issue: MarketplaceCheckIssue): string => {
   return `error [${issue.publicationId}${packageDetail}] ${issue.code}: ${issue.path}: ${issue.message}`;
 };
 
+interface InstallCommandOptions {
+  target: string;
+  scope: string;
+  artifact?: string;
+  projectRoot?: string;
+  pluginRoot?: string;
+}
+
+const resolveInstallPlan = (sourceDir: string, opts: InstallCommandOptions) => {
+  if (!isTargetName(opts.target)) {
+    throw new Error(`unknown target: ${opts.target}. valid: ${TARGET_NAMES.join(', ')}`);
+  }
+  if (!isInstallScope(opts.scope)) {
+    throw new Error(`unknown install scope: ${opts.scope}. valid: ${INSTALL_SCOPES.join(', ')}`);
+  }
+  const source = resolve(sourceDir);
+  const artifact = resolveArtifact(source, opts.artifact);
+  return buildInstallPlan({
+    sourceDir: source,
+    target: opts.target,
+    artifact,
+    scope: opts.scope,
+    projectRoot: resolve(opts.projectRoot ?? workingProjectRoot(process.cwd())),
+    ...(opts.pluginRoot === undefined ? {} : { pluginRoot: resolve(opts.pluginRoot) }),
+  });
+};
+
+const addInstallOptions = (command: Command): Command =>
+  command
+    .requiredOption('-t, --target <name>', `target name (${TARGET_NAMES.join(', ')})`)
+    .requiredOption('-s, --scope <scope>', `install scope (${INSTALL_SCOPES.join(', ')})`)
+    .option('-a, --artifact <name>', `artifact type (${ARTIFACT_TYPES.join(', ')})`)
+    .option('--project-root <dir>', 'project root used for project-scope installation')
+    .option('--plugin-root <dir>', 'package root used for plugin-scope installation');
+
+const workingProjectRoot = (start: string): string => {
+  const fallback = resolve(start);
+  let current = fallback;
+  while (current !== parse(current).root) {
+    if (existsSync(join(current, '.git')) || existsSync(join(current, '.jj'))) return current;
+    current = dirname(current);
+  }
+  return fallback;
+};
+
+addInstallOptions(
+  program.command('install <source-dir>').description('Install one canonical directory artifact'),
+).action((sourceDir: string, opts: InstallCommandOptions) => {
+  try {
+    const install = resolveInstallPlan(sourceDir, opts);
+    materializeCompilation(install.plan, install.destinationRoot);
+    console.log(`installed ${install.plan.outputs.length} files at ${install.destinationRoot}`);
+    for (const line of formatCompilationDiagnostics(install.plan)) console.log(line);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
+});
+
+addInstallOptions(
+  program
+    .command('check-install <source-dir>')
+    .description('Check one installed canonical artifact without writing'),
+).action((sourceDir: string, opts: InstallCommandOptions) => {
+  try {
+    const install = resolveInstallPlan(sourceDir, opts);
+    const result = checkCompilationSnapshot(install.plan, install.destinationRoot);
+    const status = result.issues.length === 0 ? 'ok' : 'failed';
+    console.log(
+      `${status}: ${result.filesChecked.length} managed files at ${install.destinationRoot}`,
+    );
+    for (const line of formatCompilationDiagnostics(install.plan)) console.log(line);
+    for (const issue of result.issues) console.error(formatCheckIssue(issue));
+    if (result.issues.length > 0) process.exitCode = 1;
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
+});
+
 program
   .command('render <source-dir>')
   .description('Render a canonical artifact source directory to one or all targets')
@@ -418,13 +504,16 @@ program
 
 program
   .command('list-targets')
-  .description('List registered render targets and their output base dirs')
+  .description('List registered targets, artifacts, and install scopes')
   .action(() => {
     for (const adapter of allTargets()) {
       const entries = Object.entries(adapter.artifacts);
       for (const [artifact, cfg] of entries) {
         if (!cfg) continue;
-        console.log(`${adapter.name.padEnd(12)} ${artifact.padEnd(14)} ${cfg.outputBaseDir()}`);
+        const scopes = Object.keys(cfg.installLocations);
+        console.log(
+          `${adapter.name.padEnd(12)} ${artifact.padEnd(14)} install: ${scopes.length === 0 ? 'none' : scopes.join(', ')}`,
+        );
       }
     }
   });

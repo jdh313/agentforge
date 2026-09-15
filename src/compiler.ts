@@ -249,7 +249,7 @@ export function compileMarketplace(
     }
   }
 
-  const resolvedOutputs = resolveDestinations(outputs, diagnostics);
+  const resolvedOutputs = resolveOutputDestinations(outputs, diagnostics);
   resolvedOutputs.sort(compareOutputs);
   diagnostics.sort(compareDiagnostics);
   return {
@@ -413,7 +413,7 @@ function compareStrings(left: string, right: string): number {
   return 0;
 }
 
-function resolveDestinations(
+export function resolveOutputDestinations(
   outputs: readonly DesiredOutput[],
   diagnostics: CompilationDiagnostic[],
 ): DesiredOutput[] {

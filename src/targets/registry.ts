@@ -4,6 +4,7 @@ import { claudeTarget } from './claude.ts';
 import { claudeChatTarget } from './claude-chat.ts';
 import { codexTarget } from './codex.ts';
 import { opencodeTarget } from './opencode.ts';
+import { piTarget } from './pi.ts';
 
 // The only target enumeration in AgentForge. Marketplace capabilities attach
 // during full registry assembly, after leaf projection dependencies have
@@ -13,6 +14,7 @@ const REGISTRY: Record<TargetName, TargetAdapter> = {
   claude: claudeTarget,
   opencode: opencodeTarget,
   codex: codexTarget,
+  pi: piTarget,
   'claude-chat': claudeChatTarget,
 };
 

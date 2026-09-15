@@ -16,7 +16,8 @@ import JSZip from 'jszip';
 import { findConstructShapes, supportFor, translationFor } from './capabilities.ts';
 import type { ProposedOutput } from './compiler.ts';
 import { deepMerge } from './deep-merge.ts';
-import { ARTIFACT_DEFS, CLAUDE_ONLY_KEYS } from './schema.ts';
+import { acceptedFrontmatterKeys } from './frontmatter.ts';
+import { ARTIFACT_DEFS } from './schema.ts';
 import { getArtifactConfig } from './targets/registry.ts';
 import type { ArtifactType, ConstructSurface, RenderResult, TargetName, Warning } from './types.ts';
 
@@ -40,6 +41,12 @@ export interface ArtifactProjectionOptions {
   // point: the tooling that reads and rewrites these keys works against the
   // repo, not against published output.
   authoringKeys?: ReadonlySet<string>;
+}
+
+export interface LoadArtifactProjectionOptions {
+  sourceDir: string;
+  target: TargetName;
+  artifact: ArtifactType;
 }
 
 export interface ProjectedResource {
@@ -197,6 +204,7 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
 
   const merged = deepMerge(canonicalFrontmatter as Record<string, unknown>, overrideFields);
   const body = overrideBody ?? canonicalBody;
+  const acceptedKeys = acceptedFrontmatterKeys(target, artifact);
   // A key the artifact's schema does not enumerate used to be gone by now — zod
   // discarded it at parse, so there was nothing here to route or report. The
   // canonical schemas are loose, so the key survives to this point and the
@@ -204,7 +212,7 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
   const unrecognized = Object.keys(merged)
     .filter((key) => !artifactDef.canonicalKeys.has(key))
     .toSorted();
-  const filtered = pickKeys(merged, artifactConfig.allowedFrontmatterKeys);
+  const filtered = pickKeys(merged, acceptedKeys);
   artifactConfig.outputFrontmatterSchema.parse(filtered);
 
   const warnings: Warning[] = [];
@@ -226,7 +234,8 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
     // rather than the answer being restated as a condition here.
     const claudeOnlyPresent = Object.keys(canonicalFrontmatter).filter(
       (key) =>
-        CLAUDE_ONLY_KEYS.has(key) &&
+        artifactDef.canonicalKeys.has(key) &&
+        !acceptedKeys.has(key) &&
         supportFor(target, artifactConfig.surface, key) !== 'translated',
     );
     if (claudeOnlyPresent.length > 0) {
@@ -301,32 +310,40 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
   return { artifactName, content: rendered, generatedFiles, resources, warnings };
 };
 
-export const render = async (opts: RenderOptions): Promise<RenderResult> => {
-  const { sourceDir, target, outDir, artifact = 'skill' } = opts;
+export function loadArtifactProjection(opts: LoadArtifactProjectionOptions): ArtifactProjection {
+  const { sourceDir, target, artifact } = opts;
   const artifactDef = ARTIFACT_DEFS[artifact];
   const canonicalFile = join(sourceDir, artifactDef.canonicalFilename);
   if (!existsSync(canonicalFile)) {
     throw new Error(`${artifactDef.canonicalFilename} not found at ${canonicalFile}`);
   }
-
   const artifactConfig = getArtifactConfig(target, artifact);
   if (!artifactConfig) {
     throw new Error(`target ${target} does not support artifact ${artifact}`);
   }
-
   const resourcePaths = [...artifactConfig.resourceSubdirs].flatMap((subdir) => {
     const resourceDir = join(sourceDir, subdir);
     return existsSync(resourceDir)
       ? walkFiles(resourceDir).map((path) => join(resourceDir, path))
       : [];
   });
-  const projection = projectArtifact({
+  return projectArtifact({
     sourcePath: canonicalFile,
     source: readFileSync(canonicalFile, 'utf-8'),
     target,
     artifact,
     resourcePaths,
   });
+}
+
+export const render = async (opts: RenderOptions): Promise<RenderResult> => {
+  const { sourceDir, target, outDir, artifact = 'skill' } = opts;
+  const artifactDef = ARTIFACT_DEFS[artifact];
+  const artifactConfig = getArtifactConfig(target, artifact);
+  if (!artifactConfig) {
+    throw new Error(`target ${target} does not support artifact ${artifact}`);
+  }
+  const projection = loadArtifactProjection({ sourceDir, target, artifact });
   const resourcesCopied = [
     ...new Set(projection.resources.map(({ relativePath }) => relativePath.split('/')[0])),
   ];

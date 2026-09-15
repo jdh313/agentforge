@@ -4,12 +4,19 @@ import type {
   TargetCompilationResult,
   TargetCompilerAdapter,
 } from './compiler.ts';
-import type { ArtifactType, ConstructSurface, TargetName } from './types.ts';
+import type { ArtifactType, ConstructSurface, InstallScope, TargetName } from './types.ts';
+
+export interface InstallLocationContext {
+  homeDirectory: string;
+  projectRoot: string;
+  pluginRoot?: string;
+}
+
+export type InstallLocation = (context: InstallLocationContext) => string;
 
 export interface ArtifactConfig {
-  outputBaseDir(): string;
+  installLocations: Partial<Record<InstallScope, InstallLocation>>;
   surface: ConstructSurface;
-  allowedFrontmatterKeys: ReadonlySet<string>;
   resourceSubdirs: ReadonlySet<string>;
   outputFrontmatterSchema: z.ZodType;
   bundle?: 'dir' | 'zip';
@@ -36,8 +43,7 @@ export interface TargetAdapter {
 interface AgentSkillsTargetOptions {
   name: TargetName;
   label: string;
-  outputBaseDir(): string;
-  allowedFrontmatterKeys: ReadonlySet<string>;
+  installLocations: Partial<Record<InstallScope, InstallLocation>>;
   outputFrontmatterSchema: z.ZodType;
   bundle?: 'dir' | 'zip';
 }
@@ -49,9 +55,8 @@ export function agentSkillsTarget(options: AgentSkillsTargetOptions): TargetAdap
     label: options.label,
     artifacts: {
       skill: {
-        outputBaseDir: options.outputBaseDir,
+        installLocations: options.installLocations,
         surface: 'skill',
-        allowedFrontmatterKeys: options.allowedFrontmatterKeys,
         resourceSubdirs: new Set(['scripts', 'references', 'assets']),
         outputFrontmatterSchema: options.outputFrontmatterSchema,
         ...(options.bundle === undefined ? {} : { bundle: options.bundle }),

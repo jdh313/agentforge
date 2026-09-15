@@ -2,7 +2,7 @@
 
 TypeScript/Bun CLI that renders canonical AI agent artifacts (`SKILL.md`,
 `OUTPUT_STYLE.md`) into per-harness outputs for Claude Code, OpenCode, Codex,
-and Claude chat. Defers to user-level CLAUDE.md for shell, OS, and global
+Pi, and Claude chat. Defers to user-level CLAUDE.md for shell, OS, and global
 preferences; only narrows or extends here.
 
 ## Terminology
@@ -12,7 +12,7 @@ preferences; only narrows or extends here.
   has a canonical filename (`SKILL.md`, `OUTPUT_STYLE.md`), a canonical
   schema, and a layout (`directory` for skills, `file` for output-styles).
 - **Target** — the harness consuming the output: `claude`, `opencode`,
-  `codex`, `claude-chat`. A target may support a subset of artifacts; e.g.,
+  `codex`, `pi`, `claude-chat`. A target may support a subset of artifacts; e.g.,
   `output-style` only renders to `claude` because no other harness has the
   concept.
 
@@ -51,9 +51,9 @@ src/
                       ARTIFACT_TYPES, RenderResult, Warning
   schema.ts         — CanonicalSkillFrontmatter,
                       CanonicalOutputStyleFrontmatter, ARTIFACT_DEFS
-                      (filename + schema + layout per artifact),
-                      CLAUDE_ONLY_KEYS, COMMON_KEYS, ALL_CLAUDE_KEYS,
-                      OUTPUT_STYLE_KEYS
+                      (filename + schema + layout per artifact)
+  frontmatter.ts    — checked-in key membership by artifact and target;
+                      the single authority for retained output frontmatter
   capabilities.ts   — construct-shape families + the checked-in capability
                       table keyed by (target, surface); one doc citation per
                       row. `supportFor` returns supported/unsupported/unknown,
@@ -62,8 +62,8 @@ src/
                       plus body shapes, over every artifact type and text
                       resource file. Returns occurrences carrying `path:line`.
   deep-merge.ts     — small typed deep-merge (no lodash)
-  target-adapter.ts — one target shape: artifact projections plus optional
-                      marketplace compilation; native target identity lives here
+  target-adapter.ts — one target shape: artifact projections, normative scoped
+                      install locations, plus optional marketplace compilation
   paths.ts          — `portableRelative` (POSIX-separated relative paths, for
                       values that ship inside documents) and `isContainedPath`
                       (strict containment test); shared by the materializer,
@@ -79,10 +79,11 @@ src/
   render.ts         — pure projection plus the shared relative-output builder;
                       standalone rendering and package compilation consume the
                       same desired output shape
+  install.ts        — synthetic one-artifact install plans with resolved roots
   report.ts         — builds the `compile --report` output (JSON/MD),
                       grouping compiler diagnostics by disposition (what
                       became of the thing) rather than severity
-  cli.ts            — commander entry: render, validate, list-targets;
+  cli.ts            — commander entry: install, check-install, render, validate;
                       artifact inferred from canonical filename, or
                       passed via `--artifact`
   targets/
@@ -92,14 +93,15 @@ src/
                       artifacts['output-style'] (~/.claude/output-styles)
     opencode.ts     — artifacts.skill (~/.config/opencode/skills)
     codex.ts        — artifacts.skill (~/.agents/skills)
+    pi.ts           — artifacts.skill (~/.pi/agent/skills, .pi/skills)
     claude-chat.ts  — artifacts.skill (~/Downloads/claude-skills, zipped)
 tests/
   fixtures/         — 4 skills + 2 output-styles
                       (output-style-basic, output-style-rich)
   __snapshots__/    — bun test snapshots (committed; regen with
                       `bun test --update-snapshots`)
-  render.test.ts    — skill × target (4×4) + output-style × target
-                      (2×4, 1 supported + 3 rejected per fixture) = 24 cases
+  render.test.ts    — skill × target (4×5) + output-style × target
+                      (2×5, 1 supported + 4 rejected per fixture) = 30 cases
 ```
 
 ## Render contract (don't break without good reason)
@@ -112,11 +114,12 @@ tests/
 - Per (target, artifact): look up `adapter.artifacts[artifact]`. If missing,
   the render throws (`--all-targets` skips with a log line instead).
   Otherwise: deep-merge `targets.<name>` over top-level frontmatter
-  (excluding `body`), filter to `allowedFrontmatterKeys`, validate with
+  (excluding `body`), filter through `frontmatter.ts`, validate with
   `outputFrontmatterSchema`.
 - Three categories of frontmatter key, and they are not interchangeable:
-  1. **Known Claude key** (schema-enumerated, in `CLAUDE_ONLY_KEYS`) — retained
-     on Claude, stripped elsewhere under `claude-only-frontmatter-stripped`.
+  1. **Known key** — retained where its checked-in membership names the target,
+     translated where the capability table names a native form, and otherwise
+     stripped under `claude-only-frontmatter-stripped` (legacy diagnostic name).
   2. **Unrecognized key** — canonical schemas are `z.looseObject`, so a key they
      do not enumerate survives parse long enough to be reported. It is stripped
      on every target, Claude included, because emitting a key is a claim that
@@ -158,7 +161,7 @@ tests/
 
 ```sh
 bun install
-bun test                          # 24 cases, 54 snapshots
+bun test                          # full test suite, including snapshots
 bun test --update-snapshots       # after intentional output changes
 bunx biome check .                # lint + format check
 bunx biome check . --write        # auto-fix (re-run tests after)
@@ -167,6 +170,8 @@ bunx tsc --noEmit                 # typecheck only
 bun run src/cli.ts list-targets
 bun run src/cli.ts render <source-dir> --target <name> --out <dir>
 bun run src/cli.ts render <source-dir> --all-targets --out-base <dir>
+bun run src/cli.ts install <source-dir> --target <name> --scope <user|project|plugin>
+bun run src/cli.ts check-install <source-dir> --target <name> --scope <user|project|plugin>
 bun run src/cli.ts validate <source-dir>
 # artifact inferred from SKILL.md / OUTPUT_STYLE.md presence;
 # override with -a, --artifact <skill|output-style>
@@ -224,8 +229,8 @@ binaries. Pin `vX.Y.Z` + the `SHA256SUMS` entry, never a commit SHA.
 
 1. Create `src/targets/<name>.ts` exporting a `TargetAdapter`. Use the shared
    Agent Skills constructor unless the target diverges. Each supported
-   artifact goes under `artifacts.<artifact>` with its own `outputBaseDir`,
-   `allowedFrontmatterKeys`, `resourceSubdirs`, `outputFrontmatterSchema`,
+   artifact goes under `artifacts.<artifact>` with its own `installLocations`,
+   `resourceSubdirs`, `outputFrontmatterSchema`,
    and optional `bundle`.
 2. Add the literal to `TargetName` and `TARGET_NAMES` in `src/types.ts`.
 3. Register in `REGISTRY` in `src/targets/registry.ts`. If the target owns a

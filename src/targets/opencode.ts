@@ -1,7 +1,5 @@
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { COMMON_KEYS } from '../schema.ts';
 import { agentSkillsTarget } from '../target-adapter.ts';
 
 const OpenCodeOutputFrontmatter = z.object({
@@ -12,7 +10,9 @@ const OpenCodeOutputFrontmatter = z.object({
 export const opencodeTarget = agentSkillsTarget({
   name: 'opencode',
   label: 'OpenCode',
-  outputBaseDir: () => join(homedir(), '.config/opencode/skills'),
-  allowedFrontmatterKeys: COMMON_KEYS,
+  installLocations: {
+    user: ({ homeDirectory }) => join(homeDirectory, '.config/opencode/skills'),
+    project: ({ projectRoot }) => join(projectRoot, '.opencode/skills'),
+  },
   outputFrontmatterSchema: OpenCodeOutputFrontmatter,
 });
