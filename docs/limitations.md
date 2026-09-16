@@ -747,3 +747,62 @@ now states the absence explicitly instead of implying it is this repo's
 omission. `docs/roadmap.md` 0.8 boundary item 5 — already conditions
 marketplace reuse on native registration being available, which this entry is
 the concrete case of it not being.
+
+---
+
+## L-011 — Codex does not apply custom agent roles to spawned children
+
+**Gap.** A canonical leaf `AGENT.md` projects to native Codex agent-role TOML
+via the native `NativeAgentDocument` form in `src/targets/codex.ts`, which
+installs correctly at `.codex/agents/<name>.toml` and parses without error when
+registered via `.codex/config.toml` `[agents.<role>]` with `config_file`. No
+observed registration path (standalone TOML, config_file + relative path, or
+any feature-flag combination) results in a spawned child applying the custom
+role's `name`, `developer_instructions`, or `model_reasoning_effort`. On codex-cli
+0.154.0 the child always inherits the parent's generic model and effort,
+regardless of what roles are loaded; the spawn tool apparently offers no
+role-selection parameter (inferred, see Evidence). This is distinct from L-010: the role file exists and parses; it is
+simply not selected at spawn time.
+
+**Manifests as.** A generated agent TOML file that installs correctly and
+produces zero errors or warnings, while spawned children continue to use the
+parent's model and effort instead of the configured override. The custom
+`developer_instructions` marker never reaches the child's transcript, so custom
+behavior is silently replaced with generic defaults. The file is inert at
+runtime.
+
+**Affects.** Codex leaf `agent` projection (`src/targets/codex.ts`,
+`NativeAgentDocument`). Generated TOML installs correctly but is not applied to
+spawned children on codex-cli 0.154.0.
+
+**Evidence.** Tested on codex-cli 0.154.0, 2026-09-16. Three `codex exec --json`
+delegation runs used a role with a nonce-bearing `developer_instructions` that
+would appear in the child's transcript if applied:
+1. Standalone `.codex/agents/probe_role.toml` with `--enable multi_agent_v2`
+2. The same file with `--enable multi_agent --disable multi_agent_v2`
+3. Project `.codex/config.toml` with `[agents.probe_role]` and
+   `config_file = "./roles/probe_role.toml"`, under default flags
+
+In all cases, the child's rollout trace carried `agent_role: null`,
+`developer_instructions: null`, and inherited the parent's `model` and
+`reasoning_effort`. The `config_file` form loads without error (confirmed by
+`codex -C <dir> debug prompt-input` running cleanly), so registration succeeds
+up to parse time; selection at spawn does not happen. Every run, under
+either feature-flag combination, reported `multi_agent_version: "v2"`. The spawn tool schema was not inspected directly
+(inferred from model-visible system prompt prose and observed child metadata
+only), so absence is evidenced by three runs all producing `agent_role: null`
+rather than a structurally confirmed empty parameter set.
+
+**Status.** open, upstream. codex-cli issues
+[#26363](https://github.com/openai/codex/issues/26363) and
+[#31097](https://github.com/openai/codex/issues/31097) describe the same
+inherited-model and ignored-instructions behavior. The role loader exists in
+the source and accepts the load paths; the linked issues place the gap in the
+active spawn tool, which does not select a loaded role.
+
+**Revisit trigger.** Re-run the nonce probe on a Codex CLI release where either
+issue is resolved or the spawn tool exposes a role-selection parameter.
+
+**Where to look.** `src/targets/codex.ts` — the leaf `NativeAgentDocument`
+that generates the now-inert TOML. `docs/librarian-agent-acceptance.md` "Codex
+leaf agent" section — the complete test matrix and probe details.

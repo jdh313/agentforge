@@ -26,9 +26,9 @@ No row is supported solely because its native file compiled or validated.
 | Capability | Claude package | Codex package | Codex leaf agent |
 |---|---|---|---|
 | Package discovery | Observed in the fresh runtime init event | Plugin loads skills and other supported components | Not applicable |
-| Named agent registration | Observed by direct selection and parent delegation | Unsupported: package `agents/*.md` is inert procedure text | Generated, but not observed on 0.154.0 |
-| Model | Observed Sonnet selection in runtime usage metadata | Unsupported | A target-specific Codex model can be generated; runtime application not observed |
-| Effort | Declared as `medium`; effective value was not exposed by the Claude result | Unsupported | Generated, but the fresh child inherited `medium` instead of the probe's `high` |
+| Named agent registration | Observed by direct selection and parent delegation | Unsupported: package `agents/*.md` is inert procedure text | Installed at `.codex/agents/<name>.toml` and via `.codex/config.toml` `config_file=` on 0.154.0; not applied to spawned children |
+| Model | Observed Sonnet selection in runtime usage metadata | Unsupported | Installed but spawned child inherits parent's model; no role selector observed on 0.154.0 |
+| Effort | Declared as `medium`; effective value was not exposed by the Claude result | Unsupported | Installed but spawned child inherits parent's effort; no role selector observed on 0.154.0 |
 | Turn limit | Observed in a spawned synthetic agent stopped after its configured two turns | Unsupported | Unsupported by the current Codex projection |
 | Tool/read-only enforcement | Top-level tools were scoped, but `Bash(obsidian-cli *)` did not prevent a delegated child from executing `pwd` | Unsupported and declared as stripped | Unsupported by the current projection; parent sandbox still applies |
 | Delegation and isolation | Observed in a distinct `librarian:vault-reader` child with one `Read` call | Impossible through the package role | A separate child thread was observed, but it was a generic named task rather than the configured custom agent |
@@ -171,6 +171,22 @@ An ephemeral run also produced `collab spawn failed: no thread with id`; the
 same probe without `--ephemeral` spawned normally. Ephemeral mode is therefore
 not suitable evidence for this version's multi-agent acceptance.
 
+Three further delegation runs on codex-cli 0.154.0 covered the remaining
+registration and spawn-surface questions:
+
+- standalone `.codex/agents/<name>.toml` with `--enable multi_agent_v2`;
+- the same file with `--enable multi_agent --disable multi_agent_v2`; and
+- project `.codex/config.toml` `[agents.<role>]` with
+  `config_file = "./roles/<role>.toml"` under default flags, which loaded
+  without error.
+
+In every run, a spawned child's `agent_role` resolved to `null`,
+`developer_instructions` remained `null` (no nonce marker reached the child),
+and `model`/`reasoning_effort` inherited the parent's `gpt-5.6-sol`/`medium`
+rather than the probe's declared `high`. Every run reported
+`multi_agent_version: "v2"`, so no tested flag combination reached a different
+spawn surface. See `docs/limitations.md` L-011 for the narrowed scope.
+
 ## Disposition
 
 The ticket cannot honestly pass as one cross-runtime parity claim.
@@ -183,17 +199,19 @@ The ticket cannot honestly pass as one cross-runtime parity claim.
   reader in the background. A foreground child cannot be resumed on the tested
   release despite returning an agent ID.
 - Codex package agent semantics remain explicitly unsupported.
-- Codex leaf installation is supported. Native custom-agent discovery and
-  setting application remain unverified on 0.154.0 despite successful generic
-  delegation.
+- Codex leaf agents have no runtime effect on codex-cli 0.154.0: an installed
+  custom role is not applied to spawned children by any tested registration
+  path or feature-flag combination, and every run used the `v2` spawn surface.
+  The model-visible spawn tool prose names no role selector (the schema itself
+  was not inspected). Installation is supported, so the leaf projection's
+  runtime claim is narrowed to installation only (L-011).
 - `@vault-reader`, `SendMessage`, and `${CLAUDE_PLUGIN_ROOT}` must be replaced,
   translated, or rejected for a Codex-specific workflow; copied prose is not
   compatibility.
 
-## Next probes
+## Revisit trigger
 
-1. Determine whether Codex 0.154.0 can use the older `[agents.<role>]`
-   `config_file` registration path or a feature gate before standalone TOML is
-   selectable through a V1 spawn surface.
-2. Only after native discovery is visible, test same-thread follow-up using a
-   retained nonce and stable child thread ID.
+Re-run the nonce probe on a Codex CLI release where the spawn tool exposes a
+role selector or upstream issue `openai/codex#26363` or `#31097` is resolved.
+Only then test same-thread follow-up using a retained nonce and stable child
+thread ID.
