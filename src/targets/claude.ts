@@ -58,9 +58,10 @@ export const claudeTarget: TargetAdapter = {
       outputFrontmatterSchema: ClaudeSkillFrontmatter,
     },
     agent: {
-      // File-layout installation needs sibling-preserving ownership semantics;
-      // leaving this empty keeps `list-targets` honest until that lands.
-      installLocations: {},
+      installLocations: {
+        user: ({ homeDirectory }) => join(homeDirectory, '.claude/agents'),
+        project: ({ projectRoot }) => join(projectRoot, '.claude/agents'),
+      },
       surface: 'agent',
       resourceSubdirs: new Set(),
       outputFrontmatterSchema: ClaudeAgentFrontmatter,

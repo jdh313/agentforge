@@ -4,10 +4,10 @@ import { dirname, join, parse, resolve } from 'node:path';
 import { Command } from 'commander';
 import matter from 'gray-matter';
 import pkg from '../package.json' with { type: 'json' };
-import { checkCompilationSnapshot, checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
+import { checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
 import { type CompilationPlan, compileMarketplace, type RootAnchoredOutput } from './compiler.ts';
 import { type LoadedMarketplace, loadMarketplaceDefinition } from './definitions.ts';
-import { buildInstallPlan } from './install.ts';
+import { buildInstallPlan, checkInstallPlan, materializeInstallPlan } from './install.ts';
 import { materializeCompilation } from './materializer.ts';
 import { render } from './render.ts';
 import { buildCheckReport, formatFromPath, type ReportFormat, renderReport } from './report.ts';
@@ -376,11 +376,11 @@ const workingProjectRoot = (start: string): string => {
 };
 
 addInstallOptions(
-  program.command('install <source-dir>').description('Install one canonical directory artifact'),
+  program.command('install <source-dir>').description('Install one canonical artifact'),
 ).action((sourceDir: string, opts: InstallCommandOptions) => {
   try {
     const install = resolveInstallPlan(sourceDir, opts);
-    materializeCompilation(install.plan, install.destinationRoot);
+    materializeInstallPlan(install);
     console.log(`installed ${install.plan.outputs.length} files at ${install.destinationRoot}`);
     for (const line of formatCompilationDiagnostics(install.plan)) console.log(line);
   } catch (error) {
@@ -396,7 +396,7 @@ addInstallOptions(
 ).action((sourceDir: string, opts: InstallCommandOptions) => {
   try {
     const install = resolveInstallPlan(sourceDir, opts);
-    const result = checkCompilationSnapshot(install.plan, install.destinationRoot);
+    const result = checkInstallPlan(install);
     const status = result.issues.length === 0 ? 'ok' : 'failed';
     console.log(
       `${status}: ${result.filesChecked.length} managed files at ${install.destinationRoot}`,

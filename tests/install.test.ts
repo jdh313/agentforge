@@ -8,12 +8,13 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { checkCompilationSnapshot } from 'agentforge/check';
-import { buildInstallPlan } from 'agentforge/install';
+import { buildInstallPlan, checkInstallPlan, materializeInstallPlan } from 'agentforge/install';
 import { materializeCompilation } from 'agentforge/materializer';
 import { getArtifactConfig } from '../src/targets/index.ts';
 
@@ -106,6 +107,171 @@ describe('scoped artifact installation', () => {
     expect(locations('pi')?.user?.(context)).toBe('/home/tester/.pi/agent/skills');
     expect(locations('pi')?.project?.(context)).toBe('/workspace/project/.pi/skills');
     expect(locations('pi')?.plugin?.(context)).toBe('/workspace/plugin/skills');
+    expect(getArtifactConfig('claude', 'agent')?.installLocations.user?.(context)).toBe(
+      '/home/tester/.claude/agents',
+    );
+    expect(getArtifactConfig('claude', 'agent')?.installLocations.project?.(context)).toBe(
+      '/workspace/project/.claude/agents',
+    );
+    expect(getArtifactConfig('codex', 'agent')?.installLocations.user?.(context)).toBe(
+      '/home/tester/.codex/agents',
+    );
+    expect(getArtifactConfig('codex', 'agent')?.installLocations.project?.(context)).toBe(
+      '/workspace/project/.codex/agents',
+    );
+  });
+
+  for (const { target, relativeRoot, filename } of [
+    { target: 'claude' as const, relativeRoot: '.claude/agents', filename: 'vault-reader.md' },
+    { target: 'codex' as const, relativeRoot: '.codex/agents', filename: 'vault-reader.toml' },
+  ]) {
+    test(`installs one ${target} agent without owning sibling files`, () => {
+      const projectRoot = join(temporaryRoot, target);
+      const destinationRoot = join(projectRoot, relativeRoot);
+      const sibling = join(destinationRoot, 'sibling.txt');
+      const destination = join(destinationRoot, filename);
+      mkdirSync(destinationRoot, { recursive: true });
+      writeFileSync(sibling, 'sibling\n');
+      writeFileSync(destination, 'old agent\n');
+
+      const install = buildInstallPlan({
+        sourceDir: FIXTURE_AGENT,
+        target,
+        artifact: 'agent',
+        scope: 'project',
+        projectRoot,
+      });
+      expect(install.destinationRoot).toBe(destinationRoot);
+      expect(install.ownership).toBe('planned-files');
+      expect(install.plan.outputs.map(({ destination }) => destination)).toEqual([filename]);
+
+      materializeInstallPlan(install);
+
+      expect(readFileSync(sibling, 'utf8')).toBe('sibling\n');
+      expect(readFileSync(destination, 'utf8')).not.toBe('old agent\n');
+      expect(checkInstallPlan(install).issues).toEqual([]);
+
+      writeFileSync(sibling, 'changed sibling\n');
+      expect(checkInstallPlan(install).issues).toEqual([]);
+      writeFileSync(destination, 'changed agent\n');
+      expect(checkInstallPlan(install).issues.map(({ code, path }) => `${code}:${path}`)).toEqual([
+        `changed-output:${filename}`,
+      ]);
+    });
+  }
+
+  test('file-layout installation refuses an irregular destination without touching siblings', () => {
+    const projectRoot = join(temporaryRoot, 'irregular');
+    const destinationRoot = join(projectRoot, '.claude/agents');
+    const external = join(temporaryRoot, 'external.md');
+    const destination = join(destinationRoot, 'vault-reader.md');
+    mkdirSync(destinationRoot, { recursive: true });
+    writeFileSync(external, 'external\n');
+    writeFileSync(join(destinationRoot, 'sibling.md'), 'sibling\n');
+    symlinkSync(external, destination);
+    const install = buildInstallPlan({
+      sourceDir: FIXTURE_AGENT,
+      target: 'claude',
+      artifact: 'agent',
+      scope: 'project',
+      projectRoot,
+    });
+
+    expect(() => materializeInstallPlan(install)).toThrow(
+      'managed output must replace only a regular file',
+    );
+    expect(readFileSync(external, 'utf8')).toBe('external\n');
+    expect(readFileSync(join(destinationRoot, 'sibling.md'), 'utf8')).toBe('sibling\n');
+  });
+
+  test('file-layout installation refuses a directory at the managed path', () => {
+    const projectRoot = join(temporaryRoot, 'directory-collision');
+    const destinationRoot = join(projectRoot, '.codex/agents');
+    const destination = join(destinationRoot, 'vault-reader.toml');
+    mkdirSync(destination, { recursive: true });
+    writeFileSync(join(destination, 'keep.txt'), 'keep\n');
+    const install = buildInstallPlan({
+      sourceDir: FIXTURE_AGENT,
+      target: 'codex',
+      artifact: 'agent',
+      scope: 'project',
+      projectRoot,
+    });
+
+    expect(() => materializeInstallPlan(install)).toThrow(
+      'managed output must replace only a regular file',
+    );
+    expect(readFileSync(join(destination, 'keep.txt'), 'utf8')).toBe('keep\n');
+  });
+
+  test('file-layout check refuses a symlinked shared root', () => {
+    const projectRoot = join(temporaryRoot, 'symlinked-root');
+    const destinationRoot = join(projectRoot, '.claude/agents');
+    const externalRoot = join(temporaryRoot, 'external-agents');
+    const install = buildInstallPlan({
+      sourceDir: FIXTURE_AGENT,
+      target: 'claude',
+      artifact: 'agent',
+      scope: 'project',
+      projectRoot,
+    });
+    const output = install.plan.outputs[0];
+    if (output?.kind !== 'generated') throw new Error('missing generated Claude agent');
+    mkdirSync(join(projectRoot, '.claude'), { recursive: true });
+    mkdirSync(externalRoot);
+    writeFileSync(join(externalRoot, 'vault-reader.md'), output.content);
+    symlinkSync(externalRoot, destinationRoot);
+
+    expect(checkInstallPlan(install).issues.map(({ code, path }) => `${code}:${path}`)).toEqual([
+      'unsafe-output-entry:vault-reader.md',
+    ]);
+  });
+
+  test('installs a user-scoped agent into a fresh native root', () => {
+    const homeDirectory = join(temporaryRoot, 'home');
+    const install = buildInstallPlan({
+      sourceDir: FIXTURE_AGENT,
+      target: 'codex',
+      artifact: 'agent',
+      scope: 'user',
+      projectRoot: join(temporaryRoot, 'project'),
+      homeDirectory,
+    });
+
+    materializeInstallPlan(install);
+
+    expect(install.destinationRoot).toBe(join(homeDirectory, '.codex/agents'));
+    expect(readFileSync(join(install.destinationRoot, 'vault-reader.toml'), 'utf8')).toContain(
+      'developer_instructions',
+    );
+  });
+
+  test('renaming a file-layout artifact leaves the old path untouched', () => {
+    const projectRoot = join(temporaryRoot, 'renamed-agent');
+    const original = buildInstallPlan({
+      sourceDir: fixtureAgent('original-reader'),
+      target: 'claude',
+      artifact: 'agent',
+      scope: 'project',
+      projectRoot,
+    });
+    materializeInstallPlan(original);
+    const oldPath = join(original.destinationRoot, 'original-reader.md');
+    const oldBytes = readFileSync(oldPath, 'utf8');
+
+    const renamed = buildInstallPlan({
+      sourceDir: fixtureAgent('renamed-reader'),
+      target: 'claude',
+      artifact: 'agent',
+      scope: 'project',
+      projectRoot,
+    });
+    materializeInstallPlan(renamed);
+
+    expect(readFileSync(oldPath, 'utf8')).toBe(oldBytes);
+    expect(readFileSync(join(renamed.destinationRoot, 'renamed-reader.md'), 'utf8')).toContain(
+      'name: renamed-reader',
+    );
   });
 
   test('Pi retains its native explicit-only and allowed-tools fields', () => {
@@ -144,7 +310,7 @@ describe('scoped artifact installation', () => {
     ).toThrow();
   });
 
-  test('refuses file-layout and unsupported-scope installation', () => {
+  test('refuses unsupported-scope installation', () => {
     const source = fixtureSkill();
     expect(() =>
       buildInstallPlan({
@@ -164,17 +330,18 @@ describe('scoped artifact installation', () => {
         scope: 'user',
         projectRoot: temporaryRoot,
       }),
-    ).toThrow('install supports directory artifacts only');
+    ).toThrow('does not support user-scope installation for artifact output-style');
 
     expect(() =>
       buildInstallPlan({
         sourceDir: FIXTURE_AGENT,
-        target: 'claude',
+        target: 'codex',
         artifact: 'agent',
-        scope: 'user',
+        scope: 'plugin',
         projectRoot: temporaryRoot,
+        pluginRoot: join(temporaryRoot, 'plugin'),
       }),
-    ).toThrow('install supports directory artifacts only; agent uses file layout');
+    ).toThrow('does not support plugin-scope installation for artifact agent');
   });
 });
 
@@ -190,6 +357,16 @@ function fixtureSkill(options: { explicitOnly?: boolean } = {}): string {
   writeFileSync(join(root, 'references/guide.md'), '# Guide\n');
   chmodSync(join(root, 'scripts/run.sh'), 0o755);
   chmodSync(join(root, 'references/guide.md'), 0o640);
+  return root;
+}
+
+function fixtureAgent(name: string): string {
+  const root = join(temporaryRoot, `source-${name}`);
+  mkdirSync(root, { recursive: true });
+  writeFileSync(
+    join(root, 'AGENT.md'),
+    `---\nname: ${name}\ndescription: Read the vault.\n---\n\n# Reader\n\nRead safely.\n`,
+  );
   return root;
 }
 

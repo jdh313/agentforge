@@ -31,9 +31,10 @@ shell, OS, and global preferences; only narrows or extends here.
   shared canonical schema, projecting to Claude Markdown and native Codex
   agent-role TOML. Codex plugin packages cannot register agent roles as of
   codex-cli 0.154.0 (`docs/limitations.md` L-010), so marketplace agent
-  translation keeps the Markdown-procedure fallback for Codex. Leaf
-  installation and remaining target projections stay gated on safe ownership
-  and verified native semantics. See [docs/roadmap.md](docs/roadmap.md).
+  translation keeps the Markdown-procedure fallback for Codex. Leaf agents
+  install at Claude and Codex user/project scope with planned-file ownership;
+  remaining target projections stay gated on verified native semantics. See
+  [docs/roadmap.md](docs/roadmap.md).
 - Releases are automated (semantic-release + per-platform binaries; see
   § Releases).
 
@@ -97,11 +98,12 @@ src/
     registry.ts     — the only target enumeration and projection lookup
     index.ts        — assembles target-owned optional marketplace capabilities
     claude.ts       — artifacts.skill (~/.claude/skills), artifacts.agent
-                      (render-only while safe file installation is pending),
+                      (~/.claude/agents, .claude/agents),
                       artifacts['output-style'] (~/.claude/output-styles)
     opencode.ts     — artifacts.skill (~/.config/opencode/skills)
     codex.ts        — artifacts.skill (~/.agents/skills), artifacts.agent
-                      (native `.toml` via `nativeDocument`, render-only)
+                      (native `.toml` via `nativeDocument`; ~/.codex/agents,
+                      .codex/agents)
     pi.ts           — artifacts.skill (~/.pi/agent/skills, .pi/skills)
     claude-chat.ts  — artifacts.skill (~/Downloads/claude-skills, zipped)
 tests/
@@ -381,8 +383,8 @@ unrecognized key keeps the category-2 behavior above.
 
 ## Out of scope today
 
-- Leaf `agent` installation, remaining non-Claude/Codex projections, and
-  marketplace reuse of the Codex leaf projection (blocked upstream —
+- Plugin-scope `agent` installation, remaining non-Claude/Codex projections,
+  and marketplace reuse of the Codex leaf projection (blocked upstream —
   `docs/limitations.md` L-010) remain in the 0.8 work in
   [docs/roadmap.md](docs/roadmap.md). MCP artifacts remain later work.
 - Watch mode.

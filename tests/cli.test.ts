@@ -437,11 +437,12 @@ describe('leaf agent commands', () => {
     );
   });
 
-  test('lists agent rendering without advertising unsafe install scopes', () => {
+  test('lists sibling-preserving agent install scopes', () => {
     const result = runCli('list-targets');
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('claude       agent          install: none');
+    expect(result.stdout).toContain('claude       agent          install: user, project');
+    expect(result.stdout).toContain('codex        agent          install: user, project');
   });
 });
 

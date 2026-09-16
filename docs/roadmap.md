@@ -23,10 +23,11 @@ renders to Claude's native named Markdown format and Codex's native agent-role
 TOML, both using the package parser's canonical agent schema. Codex plugin
 packages cannot register agent roles as of codex-cli 0.154.0
 (`docs/limitations.md` L-010), so marketplace agent translation keeps the
-Markdown-procedure fallback for Codex until that changes upstream. Other
-target projections, safe file installation, and marketplace reuse of the
-Codex leaf projection remain. The filename, required identity, and default
-layout are recorded in `ndr:2t36rb`.
+Markdown-procedure fallback for Codex until that changes upstream. Claude and
+Codex leaf agents install at user/project scope while owning only their planned
+file paths (`ndr:hjnabw`). Other target projections, plugin-scope agent
+installation, and marketplace reuse of the Codex leaf projection remain. The
+filename, required identity, and default layout are recorded in `ndr:2t36rb`.
 
 ### Boundary
 
@@ -94,16 +95,14 @@ filename or schema rule that the current heads do not decide.
 
 ### Evidence still required
 
-- Reverify the current native agent formats and discovery locations for Claude
-  Code, Codex, OpenCode, and Pi from primary documentation and installed-runtime
-  behavior where practical.
-- Decide the leaf artifact's canonical filename and layout from those formats;
-  the repository does not currently decide them.
+- Complete fresh installed-runtime acceptance for Claude Code and Codex. Their
+  documented leaf formats and discovery locations are encoded; generated files
+  alone do not prove discovery or enforcement.
 - Establish which runtimes enforce model, effort, turns, tools, isolation,
   delegation, and follow-up continuity. Prompt prose does not count as
   enforcement.
-- Record support or omission for Pi explicitly; target presence alone is not an
-  answer.
+- Keep OpenCode and Pi agent support explicitly deferred beyond 1.0; non-agent
+  target presence does not imply agent support.
 
 ### Validation gates
 

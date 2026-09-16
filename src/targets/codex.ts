@@ -6,6 +6,7 @@ import {
   agentSkillsTarget,
   type NativeAgentDocument,
   type NativeAgentDocumentContext,
+  type TargetAdapter,
 } from '../target-adapter.ts';
 
 const CodexOutputFrontmatter = z.object({
@@ -141,15 +142,14 @@ export const codexTarget = {
   artifacts: {
     ...codexAgentSkills.artifacts,
     agent: {
-      // Rendered only, exactly like Claude's own agent artifact:
-      // `.codex/agents/` installation needs the same sibling-preserving
-      // ownership semantics as Claude's file-layout install, which the 0.8
-      // slice has not landed yet.
-      installLocations: {},
+      installLocations: {
+        user: ({ homeDirectory }) => join(homeDirectory, '.codex/agents'),
+        project: ({ projectRoot }) => join(projectRoot, '.codex/agents'),
+      },
       surface: 'agent' as const,
       resourceSubdirs: new Set<string>(),
       outputFrontmatterSchema: CodexAgentOutputFrontmatter,
       nativeDocument: codexAgentDocument,
     },
   },
-};
+} satisfies TargetAdapter;

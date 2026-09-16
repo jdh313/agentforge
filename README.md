@@ -24,16 +24,18 @@ adapters emit validated native marketplace registries, plugin manifests, and
 package payloads, including agent and command translations for the
 representative marketplace corpus. The CLI materializes those plans as atomic,
 complete-snapshot marketplace builds and checks materialized trees for native
-validity and drift without writing. Directory artifacts can also be installed
-at target-owned user, project, or plugin locations and checked from the same
-synthetic plan.
+validity and drift without writing. Directory artifacts install as owned
+snapshots; file-layout artifacts install only their planned paths inside shared
+runtime directories, preserving sibling files (`ndr:hjnabw`).
 
 The canonical-agent roadmap slice is underway. The leaf renderer accepts an
-`AGENT.md` artifact and projects it to Claude's native named Markdown format;
-installation, additional native targets, and marketplace convergence remain.
-Codex still receives inferred Markdown role procedures rather than native
-registered agents. See [the roadmap](docs/roadmap.md) for the implementation
-boundary and acceptance sequence through 1.0.
+`AGENT.md` artifact and projects it to Claude's native named Markdown format and
+Codex's native agent-role TOML. Both install at user or project scope with
+sibling-preserving ownership. Codex plugin packages cannot register agent roles
+as of codex-cli 0.154.0, so marketplace packages retain an explicitly inert
+Markdown procedure rather than claiming native registration. See
+[the roadmap](docs/roadmap.md) for the implementation boundary and acceptance
+sequence through 1.0.
 
 ## Requirements
 
@@ -533,12 +535,16 @@ agentforge list-targets
   current directory outside a repository) unless `--project-root` is supplied.
   Plugin scope requires `--plugin-root` and is
   available only where the target declares a package skill directory.
-- An install owns exactly one directory artifact root. It stages the complete
-  projected skill, atomically replaces that root, removes stale files inside
-  it, and leaves sibling skills untouched. File-layout artifacts are refused.
-- `check-install` resolves and builds the same plan without writing, then reports
-  missing, changed, permission-drifted, and unexpected files inside that one
-  installed skill root.
+- A directory-layout install owns exactly one artifact root. It stages the
+  complete projection, atomically replaces that root, removes stale files
+  inside it, and leaves sibling artifacts untouched.
+- A file-layout install owns only the paths in its plan inside the shared target
+  directory. It may replace a regular file at the identity-derived path, but
+  refuses symlinks and directories, preserves every sibling, and does not prune
+  an old filename after a rename.
+- `check-install` resolves and builds the same plan without writing. Snapshot
+  installs report unexpected files inside their owned root; planned-file
+  installs check only their owned paths and ignore unrelated siblings.
 
 ### `root-manifest` publications
 
@@ -614,13 +620,13 @@ AGENTFORGE_CC_MARKETPLACE_PROJECT=../cc-marketplace bun test tests/cli.test.ts
 
 ## Targets
 
-| Target | User skill root | Project skill root | Plugin package root |
-|---|---|---|---|
-| `claude` | `~/.claude/skills` | `.claude/skills` | `skills` |
-| `opencode` | `~/.config/opencode/skills` | `.opencode/skills` | unsupported |
-| `codex` | `~/.agents/skills` | `.agents/skills` | `skills` |
-| `pi` | `~/.pi/agent/skills` | `.pi/skills` | `skills` |
-| `claude-chat` | unsupported | unsupported | unsupported |
+| Target | User skill root | Project skill root | User agent root | Project agent root | Plugin package root |
+|---|---|---|---|---|---|
+| `claude` | `~/.claude/skills` | `.claude/skills` | `~/.claude/agents` | `.claude/agents` | `skills` |
+| `opencode` | `~/.config/opencode/skills` | `.opencode/skills` | unsupported | unsupported | unsupported |
+| `codex` | `~/.agents/skills` | `.agents/skills` | `~/.codex/agents` | `.codex/agents` | `skills` |
+| `pi` | `~/.pi/agent/skills` | `.pi/skills` | unsupported | unsupported | `skills` |
+| `claude-chat` | unsupported | unsupported | unsupported | unsupported | unsupported |
 
 ## Contributing
 
@@ -628,7 +634,7 @@ Issues and pull requests are welcome. Before opening a PR:
 
 ```sh
 bun install
-bun test          # 150 tests, snapshot-backed
+bun test
 bun run typecheck
 bun run lint
 ```

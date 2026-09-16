@@ -141,6 +141,52 @@ export function checkCompilationSnapshot(
   };
 }
 
+/** Compare only plan-owned paths and ignore siblings in a shared output root. */
+export function checkCompilationOutputs(
+  plan: CompilationPlan,
+  outputRoot: string,
+): MarketplaceCheckResult {
+  const issues = plan.outputs.flatMap((output) =>
+    checkManagedOutputInRealRoot(output, outputRoot, plan.redactions),
+  );
+  issues.push(...validateArtifactFrontmatter(plan, outputRoot));
+  issues.sort(
+    (left, right) => compareStrings(left.path, right.path) || compareStrings(left.code, right.code),
+  );
+  return {
+    outputRoot,
+    filesChecked: plan.outputs.map(({ destination }) => destination).toSorted(compareStrings),
+    rootFilesChecked: [],
+    issues,
+  };
+}
+
+function checkManagedOutputInRealRoot(
+  output: DesiredOutput,
+  outputRoot: string,
+  redactions: readonly string[],
+): MarketplaceCheckIssue[] {
+  const root = outputRoot;
+  let current = root;
+  const parents = output.destination.split('/').slice(0, -1);
+  for (const segment of ['', ...parents]) {
+    if (segment.length > 0) current = join(current, segment);
+    const entry = lstatSync(current, { throwIfNoEntry: false });
+    if (!entry) break;
+    if (entry.isSymbolicLink() || !entry.isDirectory()) {
+      return [
+        issueFor(
+          output,
+          'unsafe-output-entry',
+          'managed output parent must be a real directory',
+          output.destination,
+        ),
+      ];
+    }
+  }
+  return checkManagedOutput(output, publicationAnchor(root), redactions);
+}
+
 // Which anchor a managed output is checked against: `--out` for the compiled
 // tree, the marketplace root for a `root-manifest` copy. Parameterized rather
 // than duplicated, because two copies of "exists, is a regular file, has the

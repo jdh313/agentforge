@@ -14,7 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CompilationPlan, DesiredCopiedOutput, DesiredOutput } from '../src/compiler.ts';
-import { materializeCompilation } from '../src/materializer.ts';
+import { materializeCompilation, materializeCompilationOutputs } from '../src/materializer.ts';
 
 let temporaryRoot: string;
 
@@ -136,6 +136,24 @@ describe('marketplace materialization', () => {
     );
     expect(readFileSync(join(outDir, 'sentinel.txt'), 'utf8')).toBe('keep\n');
     expect(existsSync(join(outDir, 'payload.txt'))).toBe(false);
+  });
+
+  test('rolls back planned-file replacements when a later destination is irregular', () => {
+    const outDir = join(temporaryRoot, 'managed-files-rollback');
+    mkdirSync(join(outDir, 'second.txt'), { recursive: true });
+    writeFileSync(join(outDir, 'first.txt'), 'known good\n');
+    writeFileSync(join(outDir, 'sibling.txt'), 'sibling\n');
+
+    expect(() =>
+      materializeCompilationOutputs(
+        plan([generated('first.txt', 'replacement\n'), generated('second.txt', 'blocked\n')]),
+        outDir,
+      ),
+    ).toThrow('managed output must replace only a regular file');
+
+    expect(readFileSync(join(outDir, 'first.txt'), 'utf8')).toBe('known good\n');
+    expect(readFileSync(join(outDir, 'sibling.txt'), 'utf8')).toBe('sibling\n');
+    expect(existsSync(join(outDir, 'second.txt'))).toBe(true);
   });
 });
 

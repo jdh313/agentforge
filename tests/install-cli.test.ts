@@ -82,6 +82,34 @@ describe('install commands', () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("required option '-s, --scope <scope>' not specified");
   });
+
+  test('installs and checks a Codex project agent without pruning siblings', () => {
+    const projectRoot = join(temporaryRoot, 'agent-project');
+    const agentsRoot = join(projectRoot, '.codex/agents');
+    mkdirSync(agentsRoot, { recursive: true });
+    writeFileSync(join(agentsRoot, 'sibling.toml'), 'name = "sibling"\n');
+    const args = [
+      join(REPO_ROOT, 'tests/fixtures/agent-basic'),
+      '--target',
+      'codex',
+      '--scope',
+      'project',
+      '--project-root',
+      projectRoot,
+    ];
+
+    const installed = runCli('install', ...args);
+    const checked = runCli('check-install', ...args);
+
+    expect(installed.exitCode).toBe(0);
+    expect(installed.stdout).toContain(`installed 1 files at ${agentsRoot}`);
+    expect(readFileSync(join(agentsRoot, 'vault-reader.toml'), 'utf8')).toContain(
+      'developer_instructions',
+    );
+    expect(readFileSync(join(agentsRoot, 'sibling.toml'), 'utf8')).toBe('name = "sibling"\n');
+    expect(checked.exitCode).toBe(0);
+    expect(checked.stdout).toContain(`ok: 1 managed files at ${agentsRoot}`);
+  });
 });
 
 function fixtureSkill(): string {
