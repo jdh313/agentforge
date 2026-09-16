@@ -120,6 +120,9 @@ Librarian is the 0.8 acceptance package. Its `vault-reader` role exercises
 model/effort/turn settings, read-only tool restrictions, isolated delegation,
 same-agent follow-up, and shared references. Each claim must be recorded as a
 documentation claim, generated-artifact finding, or observed runtime result.
+The current evidence and target-specific disposition are recorded in
+[`librarian-agent-acceptance.md`](librarian-agent-acceptance.md); package and
+leaf-agent results must remain separate.
 
 ## 0.9 — hooks
 
