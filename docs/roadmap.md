@@ -135,6 +135,10 @@ blocking behavior is explicitly unsupported.
 ## 1.0 — corpus acceptance and publication
 
 - Use Compass for discovery and explicit-only invocation.
+- Use Teach for explicit-only invocation, approval-before-write behavior,
+  stateful vault workspaces, and truthful degradation when a source integration
+  is unavailable. Track generated and pending runtime evidence in
+  [`teach-runtime-acceptance.md`](teach-runtime-acceptance.md).
 - Use Librarian for registered agents, execution settings, delegation,
   continuity, and resources.
 - Use Commit for hooks, executable scripts, payloads, and blocking.
