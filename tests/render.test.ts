@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import matter from 'gray-matter';
 import JSZip from 'jszip';
 import { projectArtifact, render } from '../src/render.ts';
-import { ARTIFACT_DEFS } from '../src/schema.ts';
+import { ARTIFACT_DEFS, CanonicalAgentFrontmatter } from '../src/schema.ts';
 import { getArtifactConfig } from '../src/targets/index.ts';
 import { type ArtifactType, TARGET_NAMES, type TargetName } from '../src/types.ts';
 
@@ -34,6 +34,7 @@ const AGENT_FIXTURES = [
   'agent-overrides',
   'agent-codex-escaping',
   'agent-codex-model-override',
+  'agent-claude-fields',
 ] as const;
 
 const FIXTURE_DIR = (name: string) => join(import.meta.dir, 'fixtures', name);
@@ -381,6 +382,80 @@ describe('render agent', () => {
       });
     }
   }
+
+  test('retains every field the Claude agent loader enforces', async () => {
+    const outDir = join(TMP_ROOT, 'agent-claude-fields-retained');
+    const result = await render({
+      sourceDir: FIXTURE_DIR('agent-claude-fields'),
+      target: 'claude',
+      outDir,
+      artifact: 'agent',
+    });
+
+    // The security-bearing pair is the reason this fixture exists: an author
+    // who writes them gets an agent Claude actually restricts, not a silent
+    // downgrade to an unrestricted one.
+    expect(matter(readFileSync(result.outputPath, 'utf-8')).data).toMatchObject({
+      permissionMode: 'plan',
+      disallowedTools: ['Write', 'Edit'],
+      isolation: 'worktree',
+      memory: 'project',
+      background: false,
+      omitClaudeMd: true,
+      skills: ['vault-conventions'],
+      initialPrompt: 'Summarize the vault index before waiting for instructions.',
+      color: 'cyan',
+      mcpServers: ['obsidian-mcp'],
+    });
+    expect(result.warnings).toEqual([]);
+  });
+
+  test('reports the Claude agent fields as a confirmed loss on Codex', async () => {
+    const result = await render({
+      sourceDir: FIXTURE_DIR('agent-claude-fields'),
+      target: 'codex',
+      outDir: join(TMP_ROOT, 'agent-claude-fields-codex'),
+      artifact: 'agent',
+    });
+
+    const stripped = result.warnings.filter((w) => w.kind === 'claude-only-frontmatter-stripped');
+    expect(stripped).toHaveLength(1);
+    for (const key of [
+      'permissionMode',
+      'disallowedTools',
+      'isolation',
+      'memory',
+      'background',
+      'omitClaudeMd',
+      'skills',
+      'initialPrompt',
+      'color',
+      'mcpServers',
+      'hooks',
+      'experimental',
+    ]) {
+      expect(stripped[0]?.detail).toContain(key);
+    }
+    // A key Claude Code enforces must never be reported as one agentforge has
+    // never heard of (ndr:4x4yyv draws that line, and it is the whole defect).
+    expect(result.warnings.filter((w) => w.kind === 'unrecognized-frontmatter-key')).toEqual([]);
+  });
+
+  test('rejects values the Claude agent loader rejects', async () => {
+    for (const [key, value] of [
+      ['memory', 'session'],
+      ['isolation', 'sandbox'],
+      ['permissionMode', 'readOnly'],
+    ] as const) {
+      expect(() =>
+        CanonicalAgentFrontmatter.parse({
+          name: 'probe',
+          description: 'Probe.',
+          [key]: value,
+        }),
+      ).toThrow();
+    }
+  });
 
   test('deep-merges Claude fields and replaces the complete body', async () => {
     const outDir = join(TMP_ROOT, 'agent-overrides-explicit');

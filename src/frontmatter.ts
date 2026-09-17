@@ -77,6 +77,60 @@ const ACCEPTANCE: Readonly<
     // agent-roles/plugin-manifest field sets in codex-cli 0.154.0), so tool
     // access stays unenforced on Codex; the constraint remains claude-only here.
     tools: claudeOnly('Claude Code native subagent frontmatter.'),
+
+    // Everything below is read and validated by Claude Code 2.1.274's shipped
+    // `.claude/agents/*.md` loader. Each is claude-only because codex-cli
+    // 0.154.0's agent-role document has exactly eight override fields —
+    // developer_instructions, model, model_reasoning_effort,
+    // model_reasoning_summary, model_verbosity, personality, service_tier,
+    // skills — and `codexAgentDocument.serialize` emits five of them. A key
+    // with no field to land in is a confirmed loss on Codex, which is what
+    // `claude-only-frontmatter-stripped` states; that is a stronger and more
+    // useful claim than reporting a key Claude itself enforces as one nobody
+    // has heard of.
+    disallowedTools: claudeOnly(
+      'Claude Code native subagent frontmatter, parsed by the same tool-list splitter as `tools`. codex-cli 0.154.0 has no tool denylist on any agent-role field set, so the restriction is unenforceable there.',
+    ),
+    permissionMode: claudeOnly(
+      'Claude Code native subagent frontmatter, validated against a fixed allow-list. Ignored with a warning by Claude Code\'s *plugin* agent loader ("which is ignored for plugin agents. Use .claude/agents/ for this level of control"), so it is honored only at the user and project scopes this artifact installs to. No codex-cli 0.154.0 agent-role field carries permission policy.',
+    ),
+    isolation: claudeOnly(
+      'Claude Code native subagent frontmatter, validated against worktree/remote. Codex agent roles have no execution-isolation field.',
+    ),
+    memory: claudeOnly(
+      "Claude Code native subagent frontmatter, validated against user/project/local. The `memory` literal in the codex-cli binary belongs to its Claude-Code importer's path list, not to the agent-role document.",
+    ),
+    background: claudeOnly(
+      'Claude Code native subagent frontmatter. Codex agent roles have no foreground/background field; its backgrounding is a spawn-time tool argument, not role metadata.',
+    ),
+    omitClaudeMd: claudeOnly(
+      'Claude Code native subagent frontmatter. Names CLAUDE.md, a Claude Code file, so no other target can have an equivalent.',
+    ),
+    // codex-cli 0.154.0's `AgentRoleOverrides` does carry a same-named `skills`
+    // field, which is why this row is not simply "no analogue". Its semantics
+    // and value shape were not recoverable from the binary, and the agent-role
+    // serializer emits no `skills` key, so nothing the author wrote reaches
+    // Codex either way. The loss is therefore confirmed on the evidence
+    // agentforge has; mapping the two on a shared field name would assert an
+    // equivalence nothing backs.
+    skills: claudeOnly(
+      'Claude Code native subagent frontmatter: skills preloaded into the subagent at startup. codex-cli 0.154.0 has a same-named agent-role field whose semantics are unverified and which agentforge never emits, so the canonical value is lost on Codex rather than translated.',
+    ),
+    initialPrompt: claudeOnly(
+      'Claude Code native subagent frontmatter, auto-submitted as the first user turn when the agent runs as the main session agent. Codex agent roles have no first-turn field.',
+    ),
+    color: claudeOnly(
+      'Claude Code native subagent frontmatter: display colour, filtered against a named-colour allow-list. Purely a Claude Code UI affordance.',
+    ),
+    mcpServers: claudeOnly(
+      'Claude Code native subagent frontmatter, each item schema-parsed by the loader. Ignored with a warning by the plugin agent loader, same as permissionMode. codex-cli 0.154.0 configures MCP servers session-wide, never per agent role.',
+    ),
+    hooks: claudeOnly(
+      'Claude Code native subagent frontmatter: lifecycle hooks scoped to this subagent. Ignored with a warning by the plugin agent loader, same as permissionMode. Codex hooks live in `.codex/hooks`, outside the agent-role document.',
+    ),
+    experimental: claudeOnly(
+      'Claude Code native subagent frontmatter: a map of experimental options (the loader reads `cacheTtl` from it). Experimental by name, so no cross-target equivalent can be claimed.',
+    ),
   },
   'output-style': {
     name: claudeOnly(),

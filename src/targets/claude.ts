@@ -32,15 +32,36 @@ const ClaudeOutputStyleFrontmatter = z.looseObject({
   'force-for-plugin': z.boolean().optional(),
 });
 
+// Mirrors the full field set Claude Code 2.1.274's agent loader reads, so the
+// target that agentforge treats as the source dialect emits what it honors.
+// Value types track the loader's own validation; see `CanonicalAgentFrontmatter`
+// for why `color`, `hooks`, and `experimental` stay loose.
+const ClaudeLoaderBoolean = z.union([z.boolean(), z.enum(['true', 'false'])]);
+const ClaudeToolList = z.union([z.string(), z.array(z.string())]);
+
 const ClaudeAgentFrontmatter = z.looseObject({
   name: z
     .string()
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'name must be a lowercase hyphenated identifier'),
   description: z.string().min(1),
-  tools: z.union([z.string(), z.array(z.string())]).optional(),
+  tools: ClaudeToolList.optional(),
+  disallowedTools: ClaudeToolList.optional(),
   model: z.string().min(1).optional(),
   maxTurns: z.number().int().positive().optional(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
+  permissionMode: z
+    .enum(['default', 'acceptEdits', 'auto', 'dontAsk', 'bypassPermissions', 'plan', 'manual'])
+    .optional(),
+  isolation: z.enum(['worktree', 'remote']).optional(),
+  memory: z.enum(['user', 'project', 'local']).optional(),
+  background: ClaudeLoaderBoolean.optional(),
+  omitClaudeMd: ClaudeLoaderBoolean.optional(),
+  skills: ClaudeToolList.optional(),
+  initialPrompt: z.string().min(1).optional(),
+  color: z.string().min(1).optional(),
+  mcpServers: z.array(z.unknown()).optional(),
+  hooks: z.unknown().optional(),
+  experimental: z.unknown().optional(),
 });
 
 export const claudeTarget: TargetAdapter = {

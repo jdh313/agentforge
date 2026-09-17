@@ -57,9 +57,29 @@ export const CanonicalSkillFrontmatter = z.looseObject({
 
 export type CanonicalSkillFrontmatterT = z.infer<typeof CanonicalSkillFrontmatter>;
 
+// Claude Code's agent loader accepts either a YAML boolean or the literal
+// strings "true"/"false" for its two boolean-ish keys, so the canonical schema
+// accepts exactly what the runtime does. Narrowing to `z.boolean()` would
+// refuse a document Claude loads.
+const LoaderBoolean = z.union([z.boolean(), z.enum(['true', 'false'])]);
+
 // This is also the package-agent parser's schema. Leaf rendering and
 // marketplace compilation must normalize one canonical behavior model rather
 // than maintain parallel interpretations of the same source (0.8 boundary).
+//
+// The key set is the one Claude Code's shipped `.claude/agents/*.md` loader
+// reads and validates (2.1.274), because a key the source dialect's own runtime
+// enforces must not reach ndr:4x4yyv's unrecognized-key path: that rule strips
+// a key nobody has ruled on, and stripping `permissionMode` or `disallowedTools`
+// out of Claude's own projection silently discards a restriction the author
+// wrote. Values are typed to the loader's own validation, and only where the
+// loader *rejects* a bad value — where it silently ignores one instead (`color`,
+// `hooks` shape, `experimental` shape), the schema stays as loose as the runtime
+// so agentforge never refuses a document Claude accepts.
+//
+// Deliberately absent: `observer`, `observerMessage`, `observeSubagents`. The
+// loader reads all three, but no published documentation does, so enumerating
+// them would claim a contract that nothing backs.
 export const CanonicalAgentFrontmatter = z.looseObject({
   name: CanonicalAgentName,
   description: z.string().min(1),
@@ -67,6 +87,21 @@ export const CanonicalAgentFrontmatter = z.looseObject({
   maxTurns: z.number().int().positive().optional(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
   tools: ToolList.optional(),
+
+  disallowedTools: ToolList.optional(),
+  permissionMode: z
+    .enum(['default', 'acceptEdits', 'auto', 'dontAsk', 'bypassPermissions', 'plan', 'manual'])
+    .optional(),
+  isolation: z.enum(['worktree', 'remote']).optional(),
+  memory: z.enum(['user', 'project', 'local']).optional(),
+  background: LoaderBoolean.optional(),
+  omitClaudeMd: LoaderBoolean.optional(),
+  skills: ToolList.optional(),
+  initialPrompt: z.string().min(1).optional(),
+  color: z.string().min(1).optional(),
+  mcpServers: z.array(z.unknown()).optional(),
+  hooks: z.unknown().optional(),
+  experimental: z.unknown().optional(),
 
   targets: TargetsBlock,
 });
