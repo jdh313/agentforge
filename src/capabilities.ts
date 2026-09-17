@@ -67,7 +67,7 @@ const CLAUDE_TOKENS = [
 // Codex is the only target with translators today. `disable-model-invocation`
 // is a frontmatter key rather than a body shape, so it is keyed by its literal
 // name. It lives on the `codex/skill` row only — see `CODEX_HOOK_ENV_TRANSLATIONS`
-// below for why the plugin-root variables do not share this row (task #101).
+// below for why the plugin-root variables do not share this row (ndr:61cmc9).
 const CODEX_SKILL_TRANSLATIONS: Readonly<Record<string, string>> = {
   'disable-model-invocation': 'agents/openai.yaml',
 };
@@ -78,7 +78,7 @@ const CODEX_SKILL_TRANSLATIONS: Readonly<Record<string, string>> = {
 // SKILL.md body text. They therefore live on the `codex/hook` row rather than
 // `codex/skill`: putting them there would assert they are carried into a
 // native form wherever a skill body mentions them, which no doc or binary
-// evidence supports (task #101, https://developers.openai.com/codex/plugins/build,
+// evidence supports (ndr:61cmc9, https://developers.openai.com/codex/plugins/build,
 // verified 2026-09-17). Keyed by literal spelling rather than the normalized
 // `${CLAUDE_*}` token, because only these two are translated —
 // `${CLAUDE_PROJECT_DIR}` and friends remain unsupported.
@@ -158,7 +158,7 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
       // supports for them. See docs/hook-event-parity.md for the full split.
       unsupported: ['Notification', 'WorktreeCreate', 'WorktreeRemove'],
       source:
-        'codex-cli 0.147.0 binary, `HookEventsToml` field set. Verified 2026-08-09 with: `strings -a "$(readlink -f "$(which codex)")" | grep -o \'trusted_hash[A-Za-z]\\{0,140\\}\' | sort -u`. The maximal hook-context blob reads PreToolUse PermissionRequest PostToolUse PreCompact PostCompact SessionStart SessionEnd UserPromptSubmit SubagentStart SubagentStop Stop; shorter blobs are string-interning artifacts of the same set, and their union adds nothing. `Notification` occurs 189 times in the binary overall and in zero hook blobs — the hook-adjacent hits are `HookStartedNotification` / `HookCompletedNotification`, Codex\'s internal IPC types announcing that a hook ran, not a configurable trigger — so its absence is a finding rather than an omission. `WorktreeCreate` / `WorktreeRemove` are likewise absent from every hook blob while running live as Claude hooks in ~/.claude/settings.json, which is what makes them established rather than merely unlisted. Supersedes the manual 0.146.0 check that left no artifact in the repo. `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` translated entry added for task #101: https://developers.openai.com/codex/plugins/build states "Plugin hook commands receive the Codex-specific environment variables PLUGIN_ROOT and PLUGIN_DATA... along with CLAUDE_PLUGIN_ROOT and CLAUDE_PLUGIN_DATA for backward compatibility," explicitly scoped to hook command execution (and separately, Agent Plugins MCP stdio `cwd`, per the codex-cli 0.154.0 binary\'s validation-error strings). Verified 2026-09-17.',
+        'codex-cli 0.147.0 binary, `HookEventsToml` field set. Verified 2026-08-09 with: `strings -a "$(readlink -f "$(which codex)")" | grep -o \'trusted_hash[A-Za-z]\\{0,140\\}\' | sort -u`. The maximal hook-context blob reads PreToolUse PermissionRequest PostToolUse PreCompact PostCompact SessionStart SessionEnd UserPromptSubmit SubagentStart SubagentStop Stop; shorter blobs are string-interning artifacts of the same set, and their union adds nothing. `Notification` occurs 189 times in the binary overall and in zero hook blobs — the hook-adjacent hits are `HookStartedNotification` / `HookCompletedNotification`, Codex\'s internal IPC types announcing that a hook ran, not a configurable trigger — so its absence is a finding rather than an omission. `WorktreeCreate` / `WorktreeRemove` are likewise absent from every hook blob while running live as Claude hooks in ~/.claude/settings.json, which is what makes them established rather than merely unlisted. Supersedes the manual 0.146.0 check that left no artifact in the repo. `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` translated entry added for ndr:61cmc9: https://developers.openai.com/codex/plugins/build states "Plugin hook commands receive the Codex-specific environment variables PLUGIN_ROOT and PLUGIN_DATA... along with CLAUDE_PLUGIN_ROOT and CLAUDE_PLUGIN_DATA for backward compatibility," explicitly scoped to hook command execution (and separately, Agent Plugins MCP stdio `cwd`, per the codex-cli 0.154.0 binary\'s validation-error strings). Verified 2026-09-17.',
     },
   ],
   [

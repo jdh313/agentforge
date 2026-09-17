@@ -51,7 +51,7 @@ const SESSION_END_TIMEOUT_CAP_SECONDS = 3;
 // keeping a second literal list here is how the fact drifted out of the model
 // in the first place. Sourced from the `codex/hook` row, not `codex/skill`:
 // these two are documented only for a hook command's process environment
-// (and Agent Plugins MCP stdio `cwd`), never for SKILL.md body text (task #101).
+// (and Agent Plugins MCP stdio `cwd`), never for SKILL.md body text (ndr:61cmc9).
 const HOOK_ENV_TRANSLATIONS = translationsFor('codex', 'hook');
 
 const CLAUDE_HOOK_ENV_ALIASES: readonly (readonly [RegExp, string])[] = HOOK_ENV_TRANSLATIONS.map(

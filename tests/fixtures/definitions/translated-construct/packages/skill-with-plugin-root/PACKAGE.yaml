@@ -1,0 +1,19 @@
+schema: agentforge.package/v1
+id: skill-with-plugin-root
+defaults:
+  name: skill-with-plugin-root
+  version: 1.0.0
+  description: Fixture package whose skill body names ${CLAUDE_PLUGIN_ROOT} in prose, not a hook.
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+targets:
+  codex:
+    losses:
+      - construct: body-template-variable
+        state: retained-unenforced
+        note: ${CLAUDE_PLUGIN_ROOT} in the skill body names Claude's plugin-root variable; Codex documents no body substitution, so the literal text reaches the model unchanged (ndr:61cmc9).
+    native:
+      interface:
+        displayName: Skill With Plugin Root
+        category: Developer Tools

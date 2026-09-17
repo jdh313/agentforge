@@ -11,4 +11,4 @@ publications:
     destination: .agents/plugins/marketplace.json
     enrollment:
       mode: include
-      packages: [explicit-skill, hook-env]
+      packages: [explicit-skill, hook-env, skill-with-plugin-root]
