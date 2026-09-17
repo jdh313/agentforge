@@ -83,15 +83,19 @@ describe('install commands', () => {
     expect(result.stderr).toContain("required option '-s, --scope <scope>' not specified");
   });
 
-  test('installs and checks a Codex project agent without pruning siblings', () => {
+  // Claude rather than Codex, because Codex agents are user-scope only
+  // (docs/limitations.md L-012) and the CLI has no home-directory flag, so a
+  // user-scope CLI run would write into the real `~/.codex/agents`. The
+  // planned-files ownership contract under test is shared by both targets.
+  test('installs and checks a Claude project agent without pruning siblings', () => {
     const projectRoot = join(temporaryRoot, 'agent-project');
-    const agentsRoot = join(projectRoot, '.codex/agents');
+    const agentsRoot = join(projectRoot, '.claude/agents');
     mkdirSync(agentsRoot, { recursive: true });
-    writeFileSync(join(agentsRoot, 'sibling.toml'), 'name = "sibling"\n');
+    writeFileSync(join(agentsRoot, 'sibling.md'), '# sibling\n');
     const args = [
       join(REPO_ROOT, 'tests/fixtures/agent-basic'),
       '--target',
-      'codex',
+      'claude',
       '--scope',
       'project',
       '--project-root',
@@ -103,12 +107,33 @@ describe('install commands', () => {
 
     expect(installed.exitCode).toBe(0);
     expect(installed.stdout).toContain(`installed 1 files at ${agentsRoot}`);
-    expect(readFileSync(join(agentsRoot, 'vault-reader.toml'), 'utf8')).toContain(
-      'developer_instructions',
-    );
-    expect(readFileSync(join(agentsRoot, 'sibling.toml'), 'utf8')).toBe('name = "sibling"\n');
+    expect(readFileSync(join(agentsRoot, 'vault-reader.md'), 'utf8')).toContain('vault-reader');
+    expect(readFileSync(join(agentsRoot, 'sibling.md'), 'utf8')).toBe('# sibling\n');
     expect(checked.exitCode).toBe(0);
     expect(checked.stdout).toContain(`ok: 1 managed files at ${agentsRoot}`);
+  });
+
+  test('refuses a Codex project-scope agent install and writes nothing', () => {
+    const projectRoot = join(temporaryRoot, 'codex-agent-project');
+    mkdirSync(projectRoot, { recursive: true });
+
+    const result = runCli(
+      'install',
+      join(REPO_ROOT, 'tests/fixtures/agent-basic'),
+      '--target',
+      'codex',
+      '--scope',
+      'project',
+      '--project-root',
+      projectRoot,
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      'target codex does not support project-scope installation for artifact agent',
+    );
+    expect(result.stderr).toContain('supported scopes for this artifact: user');
+    expect(existsSync(join(projectRoot, '.codex'))).toBe(false);
   });
 });
 

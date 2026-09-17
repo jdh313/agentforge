@@ -32,8 +32,11 @@ shell, OS, and global preferences; only narrows or extends here.
   agent-role TOML. Codex plugin packages cannot register agent roles as of
   codex-cli 0.154.0 (`docs/limitations.md` L-010), so marketplace agent
   translation keeps the Markdown-procedure fallback for Codex. Leaf agents
-  install at Claude and Codex user/project scope with planned-file ownership;
-  remaining target projections stay gated on verified native semantics. See
+  install with planned-file ownership at Claude user and project scope, and at
+  Codex **user scope only** — codex-cli 0.154.0 scans `$CODEX_HOME/agents` and
+  never a repository's `.codex/agents`, so that scope is omitted and a
+  `--scope project` agent install refuses (`docs/limitations.md` L-012).
+  Remaining target projections stay gated on verified native semantics. See
   [docs/roadmap.md](docs/roadmap.md).
 - Releases are automated (semantic-release + per-platform binaries; see
   § Releases).

@@ -58,8 +58,17 @@ export function buildInstallPlan(options: BuildInstallPlanOptions): InstallPlan 
   }
   const location = config.installLocations[options.scope];
   if (!location) {
+    // The scopes this target does support are read off the same declarations
+    // the refusal consulted, never restated. A target's reason for omitting a
+    // scope stays in that target's module and its limitations entry
+    // (ndr:nes397) — shared code may name the alternatives, not explain them.
+    const supported = Object.keys(config.installLocations);
+    const alternative =
+      supported.length > 0
+        ? `supported scopes for this artifact: ${supported.join(', ')}`
+        : 'this artifact has no installable scope on this target';
     throw new Error(
-      `target ${options.target} does not support ${options.scope}-scope installation for artifact ${options.artifact}`,
+      `target ${options.target} does not support ${options.scope}-scope installation for artifact ${options.artifact}; ${alternative}`,
     );
   }
 

@@ -806,3 +806,76 @@ issue is resolved or the spawn tool exposes a role-selection parameter.
 **Where to look.** `src/targets/codex.ts` — the leaf `NativeAgentDocument`
 that generates the now-inert TOML. `docs/librarian-agent-acceptance.md` "Codex
 leaf agent" section — the complete test matrix and probe details.
+
+---
+
+## L-012 — Codex never scans a repository's `.codex/agents`
+
+**Gap.** Codex's agent-role loader discovers standalone role files by scanning
+`$CODEX_HOME/agents` (default `~/.codex/agents`). It does not scan a
+repository's `.codex/agents`, at any trust level, on codex-cli 0.154.0. The
+adapter previously declared a `project` install location at
+`join(projectRoot, '.codex/agents')` for the `agent` artifact, so
+`agentforge install AGENT.md --target codex --scope project` wrote a role file
+that codex never reads and exited zero.
+
+This is distinct from both neighbouring entries. L-010 is a Codex *plugin
+package* being unable to register roles at all; L-011 is a role that loads
+correctly and is then not selected at spawn. L-012 is narrower and earlier than
+either: at this one scope, the file is never loaded, so no later stage runs.
+
+**Manifests as.** A successful-looking `install --scope project` whose output
+is absent from every subsequent Codex run, with no warning at install time and
+nothing in `codex doctor`. `check-install` agrees the file is present and
+unchanged, because it compares bytes on disk against the plan — a question
+that has nothing to do with whether the harness reads the path.
+
+**Affects.** Codex leaf `agent` installation at project scope
+(`src/targets/codex.ts`, `artifacts.agent.installLocations`). Resolved in this
+repo by removing the scope, per ndr:d17fnt's requirement that a target omit
+every scope it does not support and that each declared path be verified against
+the target's own loader. A `--scope project` agent install for Codex now
+refuses, naming `user` as the supported scope.
+
+**Evidence.** Tested on codex-cli 0.154.0, 2026-09-17, with an isolated
+`CODEX_HOME` and a dead `OPENAI_BASE_URL` so role loading runs to completion
+before the network call fails.
+
+The probe is a positive control, because Codex has no command that lists loaded
+roles: plant a role file the loader must complain about, and see whether the
+complaint appears. Silence then means the directory was never read. Two
+independent triggers were used, each run once in `<repo>/.codex/agents` and
+once in `$CODEX_HOME/agents` as the control:
+
+| Planted file | `<repo>/.codex/agents` | `$CODEX_HOME/agents` |
+| --- | --- | --- |
+| two role files sharing one `name` | silent | `warning: Ignoring malformed agent role definition: duplicate agent role name \`vault-reader\` discovered in …/codexhome/agents` |
+| a role file omitting `developer_instructions` | silent | `warning: Ignoring malformed agent role definition: agent role file at …/codexhome/agents/broken.toml must define \`developer_instructions\`` |
+
+The project-directory runs were repeated with
+`[projects."<repo>"] trust_level = "trusted"` in `config.toml`, with the same
+silence. The only `.codex/agents` literal anywhere in the binary sits in the
+`external-agent-migration` module, alongside `.claude.json` and `.codex/hooks`
+— that is a Claude-Code importer's destination list, not a discovery root.
+
+The same probes establish the positive half of the finding, which is stronger
+than L-011's stated scope: at user scope a standalone role file is discovered
+with **no** `[agents.<name>]` registration in `config.toml`, and AgentForge's
+generated TOML loads there with no warning of any kind. `name`, `description`,
+`model_reasoning_effort`, and `developer_instructions` are accepted as written
+by `codexAgentDocument.serialize`.
+
+**Status.** closed in this repo by scope removal; open upstream. Whether Codex
+should scan a project-local role directory is an upstream product question, not
+an AgentForge mapping gap.
+
+**Revisit trigger.** A codex-cli release whose agent-role discovery reads a
+repository-local directory. Re-run both positive controls in
+`<repo>/.codex/agents`; a warning naming that path means the scope can be
+declared again.
+
+**Where to look.** `src/targets/codex.ts` — `artifacts.agent.installLocations`,
+now user-only, with the reason recorded beside it. `src/install.ts` — the
+refusal path, which names the scopes a target does declare. `tests/install.test.ts`
+and `tests/install-cli.test.ts` — the refusal is asserted to write nothing at
+all, not merely to warn.

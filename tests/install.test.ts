@@ -117,18 +117,37 @@ describe('scoped artifact installation', () => {
     expect(getArtifactConfig('codex', 'agent')?.installLocations.user?.(context)).toBe(
       '/home/tester/.codex/agents',
     );
-    expect(getArtifactConfig('codex', 'agent')?.installLocations.project?.(context)).toBe(
-      '/workspace/project/.codex/agents',
-    );
+    // Codex declares no project scope for agents: codex-cli 0.154.0 scans
+    // `$CODEX_HOME/agents` and never a repository's `.codex/agents`
+    // (docs/limitations.md L-012). ndr:d17fnt requires the unsupported scope to
+    // be absent rather than declared, so an install refuses instead of writing
+    // a file the harness never reads.
+    expect(getArtifactConfig('codex', 'agent')?.installLocations.project).toBeUndefined();
   });
 
-  for (const { target, relativeRoot, filename } of [
-    { target: 'claude' as const, relativeRoot: '.claude/agents', filename: 'vault-reader.md' },
-    { target: 'codex' as const, relativeRoot: '.codex/agents', filename: 'vault-reader.toml' },
+  // Each target is exercised at a scope it actually declares. Codex agents are
+  // user-scope only (docs/limitations.md L-012); the sibling-ownership contract
+  // under test is the same either way.
+  for (const { target, scope, relativeRoot, filename } of [
+    {
+      target: 'claude' as const,
+      scope: 'project' as const,
+      relativeRoot: '.claude/agents',
+      filename: 'vault-reader.md',
+    },
+    {
+      target: 'codex' as const,
+      scope: 'user' as const,
+      relativeRoot: '.codex/agents',
+      filename: 'vault-reader.toml',
+    },
   ]) {
     test(`installs one ${target} agent without owning sibling files`, () => {
-      const projectRoot = join(temporaryRoot, target);
-      const destinationRoot = join(projectRoot, relativeRoot);
+      const scopeRoot = join(temporaryRoot, target);
+      const projectRoot =
+        scope === 'project' ? scopeRoot : join(temporaryRoot, `${target}-project`);
+      const homeDirectory = scopeRoot;
+      const destinationRoot = join(scopeRoot, relativeRoot);
       const sibling = join(destinationRoot, 'sibling.txt');
       const destination = join(destinationRoot, filename);
       mkdirSync(destinationRoot, { recursive: true });
@@ -139,8 +158,9 @@ describe('scoped artifact installation', () => {
         sourceDir: FIXTURE_AGENT,
         target,
         artifact: 'agent',
-        scope: 'project',
+        scope,
         projectRoot,
+        homeDirectory,
       });
       expect(install.destinationRoot).toBe(destinationRoot);
       expect(install.ownership).toBe('planned-files');
@@ -186,8 +206,8 @@ describe('scoped artifact installation', () => {
   });
 
   test('file-layout installation refuses a directory at the managed path', () => {
-    const projectRoot = join(temporaryRoot, 'directory-collision');
-    const destinationRoot = join(projectRoot, '.codex/agents');
+    const homeDirectory = join(temporaryRoot, 'directory-collision');
+    const destinationRoot = join(homeDirectory, '.codex/agents');
     const destination = join(destinationRoot, 'vault-reader.toml');
     mkdirSync(destination, { recursive: true });
     writeFileSync(join(destination, 'keep.txt'), 'keep\n');
@@ -195,8 +215,9 @@ describe('scoped artifact installation', () => {
       sourceDir: FIXTURE_AGENT,
       target: 'codex',
       artifact: 'agent',
-      scope: 'project',
-      projectRoot,
+      scope: 'user',
+      projectRoot: join(temporaryRoot, 'directory-collision-project'),
+      homeDirectory,
     });
 
     expect(() => materializeInstallPlan(install)).toThrow(
@@ -371,6 +392,41 @@ describe('scoped artifact installation', () => {
         pluginRoot: join(temporaryRoot, 'plugin'),
       }),
     ).toThrow('does not support plugin-scope installation for artifact agent');
+
+    // The refusal names the scopes that do work, read off the same declarations
+    // it consulted — so a project-scope attempt points at the one scope codex
+    // actually scans rather than leaving the caller to guess.
+    expect(() =>
+      buildInstallPlan({
+        sourceDir: FIXTURE_AGENT,
+        target: 'codex',
+        artifact: 'agent',
+        scope: 'project',
+        projectRoot: temporaryRoot,
+      }),
+    ).toThrow(
+      'target codex does not support project-scope installation for artifact agent; supported scopes for this artifact: user',
+    );
+  });
+
+  test('a codex project-scope agent install writes nothing', () => {
+    const projectRoot = join(temporaryRoot, 'codex-project-refusal');
+    mkdirSync(projectRoot, { recursive: true });
+
+    expect(() =>
+      buildInstallPlan({
+        sourceDir: FIXTURE_AGENT,
+        target: 'codex',
+        artifact: 'agent',
+        scope: 'project',
+        projectRoot,
+      }),
+    ).toThrow('does not support project-scope installation');
+
+    // Refusal happens before planning, so the inert destination is never
+    // created. A written-then-warned file is the failure mode this scope's
+    // removal exists to prevent: codex-cli 0.154.0 never reads it.
+    expect(existsSync(join(projectRoot, '.codex'))).toBe(false);
   });
 });
 
