@@ -16,9 +16,14 @@ import { loadMarketplaceDefinition, parsePackageDefinition } from '../src/defini
 //   (`src/render.ts:135`), which merely suppresses the "stripped" warning. The
 //   compile report says nothing at all.
 // - `${CLAUDE_PLUGIN_ROOT}` in a hook configuration becomes `${PLUGIN_ROOT}`
-//   (`src/targets/codex-marketplace.ts:56-59`), but the detector is told to
-//   skip non-prose artifacts by comment (`src/compatibility.ts:125-126`)
-//   because it has no way to say "this one is handled."
+//   (`src/targets/codex-marketplace.ts`), but the detector is told to skip
+//   non-prose artifacts by comment (`src/compatibility.ts`, `isProse`) because
+//   it has no way to say "this one is handled." This translation lives on the
+//   `codex/hook` capability row, not `codex/skill`: the docs and binary
+//   evidence scope `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` to a hook
+//   command's process environment (and Agent Plugins MCP stdio `cwd`), never
+//   to SKILL.md body text, so a `codex/skill` occurrence resolves unsupported
+//   instead (task #101).
 //
 // The capability table already answers "what does this target do with this
 // construct" per (target, surface). `translated` is the verdict missing from
@@ -75,12 +80,28 @@ describe('translated constructs', () => {
     expect(() => compileMarketplace(loaded, [codexMarketplaceAdapter])).not.toThrow();
   });
 
-  test('resolves both constructs to a `translated` verdict in the capability table', () => {
+  test('resolves both constructs to a `translated` verdict on their own surface', () => {
     // The observable behind "no exemption is expressed as an inline conditional
     // or a comment": both facts are readable from the table itself.
     expect(supportFor('codex', 'skill', 'disable-model-invocation')).toBe('translated');
+    // The plugin-root variables are a hook-surface fact, not a skill-surface
+    // one — see the `codex/hook` row's citation (task #101).
     // biome-ignore lint/suspicious/noTemplateCurlyInString: the literal Claude variable name is the table key
-    expect(supportFor('codex', 'skill', '${CLAUDE_PLUGIN_ROOT}')).toBe('translated');
+    expect(supportFor('codex', 'hook', '${CLAUDE_PLUGIN_ROOT}')).toBe('translated');
+  });
+
+  test('resolves the plugin-root variables as unsupported on the skill surface', () => {
+    // Nothing carries `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` into a
+    // native form inside SKILL.md body text, and `codex/skill`'s translated
+    // map no longer has an entry for the literal, so a body occurrence falls
+    // through to the normalized `${CLAUDE_*}` family (the token `scanBody`
+    // actually looks up once `translationFor` misses) and resolves
+    // unsupported — an honestly reported loss, not a silently claimed one
+    // (task #101).
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the literal Claude variable name is the table key
+    expect(supportFor('codex', 'skill', '${CLAUDE_PLUGIN_ROOT}')).toBe('unknown');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the normalized family token is the table key
+    expect(supportFor('codex', 'skill', '${CLAUDE_*}')).toBe('unsupported');
   });
 
   test('leaves the declared-loss state enum closed to `stripped` and `retained-unenforced`', () => {

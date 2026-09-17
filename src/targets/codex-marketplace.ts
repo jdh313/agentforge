@@ -49,10 +49,10 @@ const SESSION_END_TIMEOUT_CAP_SECONDS = 3;
 // compatibility aliases, so the native names are emitted instead. Which
 // variables those are, and what each becomes, is the capability table's to say;
 // keeping a second literal list here is how the fact drifted out of the model
-// in the first place.
-const HOOK_ENV_TRANSLATIONS = translationsFor('codex', 'skill').filter(([token]) =>
-  token.startsWith('${'),
-);
+// in the first place. Sourced from the `codex/hook` row, not `codex/skill`:
+// these two are documented only for a hook command's process environment
+// (and Agent Plugins MCP stdio `cwd`), never for SKILL.md body text (task #101).
+const HOOK_ENV_TRANSLATIONS = translationsFor('codex', 'hook');
 
 const CLAUDE_HOOK_ENV_ALIASES: readonly (readonly [RegExp, string])[] = HOOK_ENV_TRANSLATIONS.map(
   ([token, replacement]) => [new RegExp(escapeRegExp(token), 'g'), replacement] as const,
