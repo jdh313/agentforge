@@ -41,6 +41,14 @@ const DISPOSITION_BY_CODE: Readonly<Record<string, Disposition>> = {
   'translated-hook-handler-args': 'carried-form-changed',
   'hook-timeout-capped-by-runtime': 'carried-form-changed',
   'inferred-artifact-projection': 'carried-unenforced',
+  // Provisional. ndr:hv9kbf decides a gated disposition between the carried
+  // states and the unestablished one, but it is unbuilt — `Disposition` still
+  // has five members. Until then this is carried-unenforced, which is honest:
+  // the bytes went through and nothing guarantees expansion. When the gated
+  // member lands, revisit rather than move blindly — hv9kbf is scoped to
+  // CONFIG-gating and this is SCOPE-gating, so whether it belongs there is a
+  // decision, not a rename.
+  'construct-unresolved-at-install-scope': 'carried-unenforced',
   'unclassified-construct': 'not-established',
   'unclassified-body-construct': 'not-established',
   'unrecognized-frontmatter-key': 'not-established',

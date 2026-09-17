@@ -33,6 +33,13 @@ export type WarningKind =
   // and an unrecognized key supports neither half of that claim. Whether it was
   // retained or dropped is in the detail — the kind names what we do not know.
   | 'unrecognized-frontmatter-key'
+  // A construct the target DOES support, expanded only at some install scopes.
+  // Distinct from every kind above, which report what a target will not accept:
+  // here the target accepts the construct and the loss belongs to where the
+  // artifact was installed. Naming a target as refusing it would be false, and
+  // ndr:728mf7 forbids a diagnostic asserting ownership besides — so this is the
+  // one warning that fires for `claude` as well.
+  | 'construct-unresolved-at-install-scope'
   | 'artifact-not-supported';
 
 export interface Warning {

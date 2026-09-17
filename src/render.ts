@@ -5,7 +5,13 @@ import matter from 'gray-matter';
 import JSZip from 'jszip';
 import { agentExecutionFrom, type CanonicalAgentBehavior } from './agent-command.ts';
 import { buildArtifactPlan } from './artifact-plan.ts';
-import { findConstructShapes, supportFor, translationFor } from './capabilities.ts';
+import {
+  findConstructShapes,
+  type ScopeGating,
+  scopeGatingFor,
+  supportFor,
+  translationFor,
+} from './capabilities.ts';
 import type { CompilationPlan, DesiredOutput } from './compiler.ts';
 import { deepMerge } from './deep-merge.ts';
 import { acceptedFrontmatterKeys } from './frontmatter.ts';
@@ -94,6 +100,29 @@ const detectClaudeOnlyBodyFeatures = (
     else if (support === 'unknown') unclassified.add(shape.literal);
   }
   return { lost: [...lost].toSorted(), unclassified: [...unclassified].toSorted() };
+};
+
+// Body constructs this (target, surface) expands only at some install scopes.
+// Grouped per gating entry rather than per literal, so one warning states one
+// condition — a reader needs the condition once, not once per token.
+const detectScopeGatedBodyConstructs = (
+  body: string,
+  target: TargetName,
+  surface: ConstructSurface,
+): { literals: string[]; gating: ScopeGating }[] => {
+  const byCondition = new Map<string, { literals: Set<string>; gating: ScopeGating }>();
+  for (const shape of findConstructShapes(body)) {
+    const gating = scopeGatingFor(target, surface, shape.token);
+    if (!gating) continue;
+    const key = gating.resolvedAt.join('/');
+    const entry = byCondition.get(key) ?? { literals: new Set<string>(), gating };
+    entry.literals.add(shape.literal);
+    byCondition.set(key, entry);
+  }
+  return [...byCondition.values()].map(({ literals, gating }) => ({
+    literals: [...literals].toSorted(),
+    gating,
+  }));
 };
 
 const pickKeys = (
@@ -229,6 +258,29 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
           detail: `body uses ${unclassified.join(', ')}, which no capability-table entry covers`,
         });
       }
+    }
+  }
+
+  // Outside the `target !== 'claude'` gate on purpose, and it is the only
+  // warning that is. What this reports is not the target refusing a construct —
+  // Claude accepts `${CLAUDE_PLUGIN_ROOT}` and expands it — but the expansion
+  // running on one install scope's loader and not another's. Naming Claude as
+  // not accepting it would be false, and `claude-only-body-feature` would
+  // assert ownership besides, which ndr:728mf7 forbids outright. So the loss is
+  // the install scope, not the target, and the code and wording say so.
+  //
+  // Phrased as a condition rather than an outcome, per ndr:5ymhmg's commitment
+  // for gated constructs: the renderer cannot know where this output will be
+  // installed, so asserting that it WAS lost would claim a fact the compile
+  // does not have.
+  if (overrideBody === undefined) {
+    const gated = detectScopeGatedBodyConstructs(canonicalBody, target, artifactConfig.surface);
+    for (const { literals, gating } of gated) {
+      warnings.push({
+        kind: 'construct-unresolved-at-install-scope',
+        target,
+        detail: `body uses ${literals.join(', ')}, substituted only for ${gating.resolvedAt.join('/')}-scope ${artifact}s; installed at any other scope it reaches the model as literal text`,
+      });
     }
   }
 

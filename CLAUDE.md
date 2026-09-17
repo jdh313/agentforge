@@ -323,6 +323,10 @@ binaries. Pin `vX.Y.Z` + the `SHA256SUMS` entry, never a commit SHA.
 - `tests/translated-construct.test.ts` suppresses the same rule on two lines,
   for the same reason: the literal variable names are what the assertions are
   about.
+- `tests/codex-agent-surface.test.ts` suppresses it file-wide, on the
+  `src/capabilities.ts` precedent rather than the two-line one: every
+  `${CLAUDE_*}` in it is a capability-table key or a construct under assertion,
+  and six line-level suppressions would bury what they annotate.
 
 ## Document class
 

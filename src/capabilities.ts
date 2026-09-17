@@ -124,7 +124,7 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
       supported: [],
       unsupported: [],
       source:
-        'https://code.claude.com/docs/en/subagents — the Markdown body is the subagent system prompt; no command-style interpolation contract is claimed here. Verified 2026-09-15.',
+        "https://code.claude.com/docs/en/subagents — the Markdown body is the subagent system prompt; no command-style interpolation contract is claimed here. Verified 2026-09-15. Neither list names `${CLAUDE_*}` on purpose: its support is gated on install scope rather than being a property of the target, which this row's two-list shape cannot express — see SCOPE_GATED below. Re-verified 2026-09-17 against Claude Code 2.1.274.",
     },
   ],
   [
@@ -135,6 +135,27 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
       unsupported: CLAUDE_TOKENS,
       source:
         'https://learn.chatgpt.com/docs/build-skills.md — documents no body templating, so `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` in SKILL.md body prose are inert text on this surface (see the `codex/hook` row for where those two are actually translated); agents/openai.yaml carries the invocation policy. On allow_implicit_invocation the published page says only that Codex "won\'t implicitly invoke the skill", which reads as auto-trigger gating; the codex 0.146.0 binary\'s embedded skill-creator doc is the complete statement — "the skill is not injected into the model context by default, but can still be invoked explicitly via $skill". Verified 2026-08-02: a policy-gated skill is absent from the model\'s catalog and still runs from the $-picker, so the translation is faithful. Body-templating scope re-verified 2026-09-17 against https://developers.openai.com/codex/plugins/build.',
+    },
+  ],
+  [
+    // Without this row every construct in a Codex agent body resolved to
+    // `unknown`, so a leaf render called `${CLAUDE_PLUGIN_ROOT}` merely
+    // unclassified while a marketplace compile — which scans agent bodies on
+    // the default `skill` surface — refused the identical construct in the
+    // identical file. One artifact cannot have two verdicts; the evidence for
+    // the skill surface covers this one, and the row makes that explicit
+    // rather than leaving it to the surface a caller happens to pass.
+    //
+    // No `translated` map on purpose. `${CLAUDE_PLUGIN_ROOT}` is translated on
+    // `codex/hook` alone, because the doc scopes it to hook command execution
+    // (ndr:61cmc9); an agent role's instruction body is not that surface, and
+    // claiming the translation here would assert an expansion nothing performs.
+    'codex/agent',
+    {
+      supported: [],
+      unsupported: CLAUDE_TOKENS,
+      source:
+        "codex-cli 0.154.0 agent-role TOML, `AgentRoleOverrides` field set: `developer_instructions`, `model`, `model_reasoning_effort`, `model_reasoning_summary`, `model_verbosity`, `personality`, `service_tier`, `skills`. Verified 2026-09-17 by live load rather than strings alone — a role file agentforge generated was planted in `$CODEX_HOME/agents` and `codex exec` loaded it with no warning, while planted defects produced `agent role file at … must define `developer_instructions`` and `duplicate agent role name … discovered in <dir>`, which is what establishes the field set as the accepted one and not merely the one the binary mentions. `developer_instructions` is a plain TOML string the loader validates for non-blankness and nothing else: no substitution, interpolation, or argument pass is documented or observed, so every Claude construct in an agent body reaches the model as literal text, exactly as the `codex/skill` row already records for SKILL.md prose. `$ARGUMENTS`/`$N` are unsupported on a stronger basis here than there — an agent role has no invocation-time argument at all, being selected by a spawn tool rather than typed by a user (contrast `codex/prompt`, which does substitute them). WHERE THIS CLAIM STOPS: it is verified at load, not at use. codex-cli 0.154.0 never applies a custom role to a spawned child (docs/limitations.md L-011), so no probe can observe what a model does with these instructions, and 'the text is not expanded' rests on the absence of any expansion mechanism in the loader and the absence of any documented one — not on watching unexpanded text arrive. `mcp-tool` is the weakest member: Codex does address MCP tools by their own `mcp__*` names (https://learn.chatgpt.com/docs/hooks, matcher vocabulary), so what a Claude `mcp__*` reference loses on Codex is the server being configured, not the naming convention. It is listed unsupported to match `codex/skill`, which the marketplace path already applies to these same agent bodies; splitting the verdict by surface would reintroduce the disagreement this row exists to close.",
     },
   ],
   [
@@ -153,9 +174,14 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
       translated: CODEX_HOOK_ENV_TRANSLATIONS,
       // Confirmed absent rather than merely unlisted, which is why these are
       // here and not left to resolve as `unknown`. Claude has ~31 hook events
-      // to Codex's 11; the rest stay off this list on purpose, because "we
+      // to Codex's 12; the rest stay off this list on purpose, because "we
       // established Codex lacks it" is a stronger claim than the evidence
       // supports for them. See docs/hook-event-parity.md for the full split.
+      //
+      // `supported` above lists 11, not Codex's 12: `Interrupt` is Codex-only,
+      // and this list answers "what may a Claude event translate into". No
+      // Claude event names that moment, so including it would make the list
+      // answer a different question than `supportFor` asks of it.
       unsupported: ['Notification', 'WorktreeCreate', 'WorktreeRemove'],
       source:
         'codex-cli 0.147.0 binary, `HookEventsToml` field set. Verified 2026-08-09 with: `strings -a "$(readlink -f "$(which codex)")" | grep -o \'trusted_hash[A-Za-z]\\{0,140\\}\' | sort -u`. The maximal hook-context blob reads PreToolUse PermissionRequest PostToolUse PreCompact PostCompact SessionStart SessionEnd UserPromptSubmit SubagentStart SubagentStop Stop; shorter blobs are string-interning artifacts of the same set, and their union adds nothing. `Notification` occurs 189 times in the binary overall and in zero hook blobs — the hook-adjacent hits are `HookStartedNotification` / `HookCompletedNotification`, Codex\'s internal IPC types announcing that a hook ran, not a configurable trigger — so its absence is a finding rather than an omission. `WorktreeCreate` / `WorktreeRemove` are likewise absent from every hook blob while running live as Claude hooks in ~/.claude/settings.json, which is what makes them established rather than merely unlisted. Supersedes the manual 0.146.0 check that left no artifact in the repo. `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` translated entry added for ndr:61cmc9: https://developers.openai.com/codex/plugins/build states "Plugin hook commands receive the Codex-specific environment variables PLUGIN_ROOT and PLUGIN_DATA... along with CLAUDE_PLUGIN_ROOT and CLAUDE_PLUGIN_DATA for backward compatibility," explicitly scoped to hook command execution (and separately, Agent Plugins MCP stdio `cwd`, per the codex-cli 0.154.0 binary\'s validation-error strings). Verified 2026-09-17.',
@@ -187,6 +213,53 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
     },
   ],
 ]);
+
+// Constructs a target expands only at some install scopes, keyed on
+// (target, surface) like the capability rows themselves.
+//
+// This is deliberately a separate map rather than a fifth `Support` state.
+// ndr:5ymhmg decided that config-gated support gets its own state carrying the
+// option that enables it, and ndr:hv9kbf gave it its own disposition — but
+// neither is implemented (`Support` is still four states), and both carry a
+// revisit trigger this case fires: 5ymhmg gates on *consumer configuration*,
+// and install scope is not that, while hv9kbf assumes the outcome is unknowable
+// at compile time, which is false at `install --scope user`. Widening those two
+// decisions is a `/capture-decision` question, so this records the narrow fact
+// beside the table it belongs to and claims nothing more.
+//
+// `claude/skill` is deliberately absent even though the same gating applies to
+// skill bodies: marketplace skills DO go through `projectArtifact` and land at
+// plugin scope, where the substitution runs, so listing it here would warn on
+// output that resolves correctly. Agents reach `projectArtifact` on the leaf
+// path only, which is what makes `claude/agent` the honest entry.
+export interface ScopeGating {
+  tokens: readonly string[];
+  /** Install scopes where the construct IS expanded. */
+  resolvedAt: readonly string[];
+  source: string;
+}
+
+const SCOPE_GATED: ReadonlyMap<string, ScopeGating> = new Map([
+  [
+    'claude/agent',
+    {
+      tokens: ['${CLAUDE_*}'],
+      resolvedAt: ['plugin'],
+      source:
+        'Claude Code 2.1.274 bundle. One function performs the substitution — `EJ` at offset 175078369, `e.replace(/\\$\\{CLAUDE_PLUGIN_ROOT\\}/g, …)` plus `${CLAUDE_PROJECT_DIR}` and `${CLAUDE_PLUGIN_DATA}` — and it has exactly seven call sites, every one plugin-scoped: MCP server config (3), the plugin agent loader `Yvn`, the plugin skill/command body, and the plugin monitor command. The non-plugin agent loader `PUo` assigns `Tn = s.trim()` once and returns it unchanged apart from appending a memory block, so no substitution reaches a user- or project-scope agent. Confirmed live on 2026-09-17, not inferred from strings: a project-scope agent whose body carried `NONCE7Q4<<<${CLAUDE_PLUGIN_ROOT}|${CLAUDE_PROJECT_DIR}>>>NONCE7Q4` was dispatched for real and echoed the span back character-for-character, unexpanded. `${CLAUDE_PROJECT_DIR}` is the load-bearing half of that control: it is scope-relative and needs no plugin, and it still does not expand, which establishes that the gate is the loader rather than the token.',
+    },
+  ],
+]);
+
+/** Constructs this (target, surface) expands only at some install scopes. */
+export function scopeGatingFor(
+  target: TargetName,
+  surface: ConstructSurface,
+  token: string,
+): ScopeGating | undefined {
+  const gating = SCOPE_GATED.get(`${target}/${surface}`);
+  return gating?.tokens.includes(token) ? gating : undefined;
+}
 
 export function capabilitySource(
   target: TargetName,
