@@ -448,6 +448,13 @@ unrecognized key keeps the category-2 behavior above.
 
 - The repo is jj-colocated: use `jj` commands for local history (a hook
   rejects bare `git`). The user's `git-workflow.md` rules apply.
-- `origin` is `git@github.com:jdh313/agentforge.git`, tracked by `main`. The
-  repo is public; push only when asked. CI (`.github/workflows/ci.yml`) runs
-  tests, typecheck, and lint on push and pull requests.
+- Two remotes, and they are not interchangeable:
+  - `origin` is `ssh://git@forgejo-ssh.taileff4c.ts.net/jacob/agentforge.git`
+    — a **private** Forgejo instance reachable over Tailscale, tracked by
+    `main`. This is the default push target.
+  - `github` is `git@github.com:jdh313/agentforge.git` — the **public** mirror.
+    It carries CI (`.github/workflows/ci.yml`: tests, typecheck, lint) and the
+    semantic-release automation, so a push there publishes and can cut a
+    release.
+- Push only when asked, and push to the remote named in the request. "Push"
+  with no remote named means `origin` (private Forgejo), never `github`.
