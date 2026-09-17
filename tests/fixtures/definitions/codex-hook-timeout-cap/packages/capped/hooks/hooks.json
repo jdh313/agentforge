@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "flush-transcript",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "quick-teardown",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "slow-warmup",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

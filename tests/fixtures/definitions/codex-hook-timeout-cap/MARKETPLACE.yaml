@@ -1,0 +1,14 @@
+schema: agentforge.marketplace/v1
+id: codex-hook-timeout-cap
+defaults:
+  name: codex-hook-timeout-cap
+  description: Fixture marketplace for the Codex SessionEnd timeout cap warning.
+packages:
+  - packages/*/PACKAGE.yaml
+publications:
+  - id: codex
+    target: codex
+    destination: .agents/plugins/marketplace.json
+    enrollment:
+      mode: include
+      packages: [capped]

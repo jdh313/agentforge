@@ -130,6 +130,81 @@ describe('Codex hook projection', () => {
   });
 });
 
+// ndr:bm3m2j — a declared hook timeout above a documented runtime cap is
+// *warned about*, not clamped, and never fails the compile. The emission site
+// had no coverage at all, so a regression that silently clamped the value —
+// the one outcome that decision forbids — would have shipped green.
+//
+// Separate fixture on purpose: `compilation-report.test.ts` pins an exact
+// diagnostic census for `codex-hook-projection`, so adding an event there to
+// reach this branch would have rewritten another agent's expectations.
+describe('Codex SessionEnd timeout cap', () => {
+  const TIMEOUT_FIXTURE = join(
+    import.meta.dir,
+    'fixtures',
+    'definitions',
+    'codex-hook-timeout-cap',
+    'MARKETPLACE.yaml',
+  );
+
+  test('warns on a SessionEnd timeout above the runtime cap without clamping the emitted value', async () => {
+    const loaded = await loadMarketplaceDefinition(TIMEOUT_FIXTURE);
+    const plan = compileMarketplace(loaded, [
+      { target: 'claude', compilePublication: () => ({ outputs: [] }) },
+      codexMarketplaceAdapter,
+    ]);
+
+    expect(plan.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'hook-timeout-capped-by-runtime',
+          severity: 'warning',
+          message: expect.stringContaining('10s'),
+          provenance: expect.objectContaining({ packageId: 'capped' }),
+        }),
+      ]),
+    );
+    // The warning has to name the cap, not just the declared value — that is
+    // the number the reader needs in order to act on it.
+    const capWarning = plan.diagnostics.find(
+      (diagnostic) => diagnostic.code === 'hook-timeout-capped-by-runtime',
+    );
+    expect(capWarning?.message).toContain('3s');
+
+    // The load-bearing assertion. Warning and clamping are indistinguishable
+    // from the diagnostic alone; only the emitted bytes tell them apart.
+    const hookOutput = findGenerated(plan.outputs, (destination) =>
+      destination.endsWith('/capped/hooks/hooks.json'),
+    );
+    expect(hookOutput).toBeDefined();
+    const translated = JSON.parse(hookOutput?.content ?? '{}');
+    expect(translated.hooks.SessionEnd[0].hooks[0].timeout).toBe(10);
+  });
+
+  test('leaves an under-cap SessionEnd timeout and any other event uncapped and unreported', async () => {
+    const loaded = await loadMarketplaceDefinition(TIMEOUT_FIXTURE);
+    const plan = compileMarketplace(loaded, [
+      { target: 'claude', compilePublication: () => ({ outputs: [] }) },
+      codexMarketplaceAdapter,
+    ]);
+
+    // Exactly one handler is over the cap, so exactly one warning. A second
+    // would mean the 2s sibling or the 30s SessionStart had been swept in.
+    const capWarnings = plan.diagnostics.filter(
+      (diagnostic) => diagnostic.code === 'hook-timeout-capped-by-runtime',
+    );
+    expect(capWarnings).toHaveLength(1);
+
+    const hookOutput = findGenerated(plan.outputs, (destination) =>
+      destination.endsWith('/capped/hooks/hooks.json'),
+    );
+    const translated = JSON.parse(hookOutput?.content ?? '{}');
+    expect(translated.hooks.SessionEnd[0].hooks[1].timeout).toBe(2);
+    // The cap is SessionEnd-only; 30s on SessionStart is legal and untouched.
+    expect(translated.hooks.SessionStart[0].hooks[0].timeout).toBe(30);
+  });
+});
+
 function findGenerated(
   outputs: readonly unknown[],
   matches: (destination: string) => boolean,

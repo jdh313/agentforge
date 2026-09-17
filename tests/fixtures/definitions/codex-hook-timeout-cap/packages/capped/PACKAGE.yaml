@@ -1,0 +1,15 @@
+schema: agentforge.package/v1
+id: capped
+defaults:
+  name: capped
+  version: 1.0.0
+  description: Fixture package exercising Codex's SessionEnd timeout cap.
+artifacts:
+  - type: hook
+    pattern: hooks/hooks.json
+targets:
+  codex:
+    native:
+      interface:
+        displayName: Capped
+        category: Developer Tools
