@@ -26,7 +26,12 @@ export type MarketplaceCheckIssueCode =
   | 'invalid-artifact-frontmatter'
   | 'invalid-output-document'
   | 'unsafe-output-content'
-  | 'unsafe-output-entry';
+  | 'unsafe-output-entry'
+  // check-install only: a shared install destination (e.g. a plugin
+  // skills/ directory) already holds a different target's projection of
+  // this source. Reported here rather than thrown, since check-install is
+  // read-only; `install` refuses the same collision outright.
+  | 'cross-target-install-collision';
 
 export interface MarketplaceCheckIssue {
   code: MarketplaceCheckIssueCode;

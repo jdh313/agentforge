@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
   chmodSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -227,6 +228,34 @@ describe('scoped artifact installation', () => {
     ]);
   });
 
+  test('check-install does not throw when the destination root itself is a regular file', () => {
+    // Regression: the collision detector's readPathBytes joins a destination
+    // onto this root, and `lstatSync(..., { throwIfNoEntry: false })` only
+    // suppresses ENOENT — a root that is a plain file (not a directory)
+    // still throws ENOTDIR on the joined path. That must not crash
+    // check-install, which is documented and tested as read-only.
+    const projectRoot = join(temporaryRoot, 'malformed-root');
+    const destinationRoot = join(projectRoot, '.claude/agents');
+    mkdirSync(projectRoot, { recursive: true });
+    mkdirSync(join(projectRoot, '.claude'), { recursive: true });
+    writeFileSync(destinationRoot, 'not a directory\n');
+    const install = buildInstallPlan({
+      sourceDir: FIXTURE_AGENT,
+      target: 'claude',
+      artifact: 'agent',
+      scope: 'project',
+      projectRoot,
+    });
+
+    let result: ReturnType<typeof checkInstallPlan> | undefined;
+    expect(() => {
+      result = checkInstallPlan(install);
+    }).not.toThrow();
+    expect(result?.issues.map(({ code, path }) => `${code}:${path}`)).toEqual([
+      'unsafe-output-entry:vault-reader.md',
+    ]);
+  });
+
   test('installs a user-scoped agent into a fresh native root', () => {
     const homeDirectory = join(temporaryRoot, 'home');
     const install = buildInstallPlan({
@@ -342,6 +371,190 @@ describe('scoped artifact installation', () => {
         pluginRoot: join(temporaryRoot, 'plugin'),
       }),
     ).toThrow('does not support plugin-scope installation for artifact agent');
+  });
+});
+
+describe('cross-target install collisions', () => {
+  test('a differing second target refuses and leaves the first target untouched', () => {
+    const source = fixtureSkill({ explicitOnly: true });
+    const pluginRoot = join(temporaryRoot, 'plugin');
+    const claudeInstall = buildInstallPlan({
+      sourceDir: source,
+      target: 'claude',
+      artifact: 'skill',
+      scope: 'plugin',
+      projectRoot: temporaryRoot,
+      pluginRoot,
+    });
+    materializeInstallPlan(claudeInstall);
+    const before = readFileSync(join(claudeInstall.destinationRoot, 'SKILL.md'), 'utf8');
+    expect(before).toContain('allowed-tools: Read Bash');
+
+    const codexInstall = buildInstallPlan({
+      sourceDir: source,
+      target: 'codex',
+      artifact: 'skill',
+      scope: 'plugin',
+      projectRoot: temporaryRoot,
+      pluginRoot,
+    });
+
+    expect(claudeInstall.destinationRoot).toBe(codexInstall.destinationRoot);
+    let thrown: unknown;
+    try {
+      materializeInstallPlan(codexInstall);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    const message = (thrown as Error).message;
+    expect(message).toContain('already holds the "claude" projection');
+    expect(message).toContain('differs from "codex"');
+    expect(message).toContain('differs: frontmatter "allowed-tools"');
+    // One line, so cli.ts formats it as a single console.error and report.ts
+    // keeps it inside one Markdown list item.
+    expect(message).not.toContain('\n');
+    // The first target's output survives byte-for-byte; nothing was staged
+    // or swapped once the collision was detected.
+    expect(readFileSync(join(claudeInstall.destinationRoot, 'SKILL.md'), 'utf8')).toBe(before);
+  });
+
+  test('a byte-identical second target installs without a false-positive refusal', () => {
+    const source = fixtureSkill();
+    const pluginRoot = join(temporaryRoot, 'plugin');
+    const claudeInstall = buildInstallPlan({
+      sourceDir: source,
+      target: 'claude',
+      artifact: 'skill',
+      scope: 'plugin',
+      projectRoot: temporaryRoot,
+      pluginRoot,
+    });
+    materializeInstallPlan(claudeInstall);
+
+    const piInstall = buildInstallPlan({
+      sourceDir: source,
+      target: 'pi',
+      artifact: 'skill',
+      scope: 'plugin',
+      projectRoot: temporaryRoot,
+      pluginRoot,
+    });
+    // Plain name/description content projects identically for claude and pi,
+    // so this is not a collision: it is indistinguishable from re-installing
+    // the same target.
+    expect(() => materializeInstallPlan(piInstall)).not.toThrow();
+    expect(checkInstallPlan(piInstall).issues).toEqual([]);
+  });
+
+  test('the same target re-installing an updated source still overwrites', () => {
+    const pluginRoot = join(temporaryRoot, 'plugin');
+    const v1 = fixtureSkill();
+    const install1 = buildInstallPlan({
+      sourceDir: v1,
+      target: 'claude',
+      artifact: 'skill',
+      scope: 'plugin',
+      projectRoot: temporaryRoot,
+      pluginRoot,
+    });
+    materializeInstallPlan(install1);
+
+    writeFileSync(
+      join(v1, 'SKILL.md'),
+      '---\nname: demo\ndescription: Updated description.\n---\n\n# Demo\n',
+    );
+    const install2 = buildInstallPlan({
+      sourceDir: v1,
+      target: 'claude',
+      artifact: 'skill',
+      scope: 'plugin',
+      projectRoot: temporaryRoot,
+      pluginRoot,
+    });
+
+    expect(() => materializeInstallPlan(install2)).not.toThrow();
+    expect(readFileSync(join(install2.destinationRoot, 'SKILL.md'), 'utf8')).toContain(
+      'Updated description.',
+    );
+  });
+
+  test('a user-scope install does not collide with another target at its own distinct destination', () => {
+    // Regression: the candidate loop used to compare bytes already on disk
+    // against every OTHER target's projection with no check that the
+    // candidate's own resolved destination is the same directory. At
+    // user/project scope every target has its own location root
+    // (.claude/skills vs .agents/skills), so byte-identical content sitting
+    // at codex's own real destination can never actually be claude's
+    // output — claude would never write there. Simulate that scenario
+    // directly (as if the bytes were copied in by hand) and assert it is no
+    // longer misattributed as a collision.
+    const source = fixtureSkill({ explicitOnly: true });
+    const homeDirectory = join(temporaryRoot, 'home');
+    const claudeInstall = buildInstallPlan({
+      sourceDir: source,
+      target: 'claude',
+      artifact: 'skill',
+      scope: 'user',
+      projectRoot: join(temporaryRoot, 'project'),
+      homeDirectory,
+    });
+    const codexInstall = buildInstallPlan({
+      sourceDir: source,
+      target: 'codex',
+      artifact: 'skill',
+      scope: 'user',
+      projectRoot: join(temporaryRoot, 'project'),
+      homeDirectory,
+    });
+    expect(claudeInstall.destinationRoot).not.toBe(codexInstall.destinationRoot);
+    materializeInstallPlan(claudeInstall);
+
+    // Copy claude's real output tree byte-for-byte into codex's own
+    // (distinct) destination, so codex's on-disk bytes are claude's
+    // projection exactly, including passthrough resource files.
+    cpSync(claudeInstall.destinationRoot, codexInstall.destinationRoot, { recursive: true });
+
+    const result = checkInstallPlan(codexInstall);
+    expect(result.issues.map(({ code }) => code)).not.toContain('cross-target-install-collision');
+    expect(() => materializeInstallPlan(codexInstall)).not.toThrow();
+  });
+
+  test('check-install reports the collision as a diagnostic without writing', () => {
+    const source = fixtureSkill({ explicitOnly: true });
+    const pluginRoot = join(temporaryRoot, 'plugin');
+    const claudeInstall = buildInstallPlan({
+      sourceDir: source,
+      target: 'claude',
+      artifact: 'skill',
+      scope: 'plugin',
+      projectRoot: temporaryRoot,
+      pluginRoot,
+    });
+    materializeInstallPlan(claudeInstall);
+    const before = relativeFiles(claudeInstall.destinationRoot);
+    const beforeSkill = readFileSync(join(claudeInstall.destinationRoot, 'SKILL.md'), 'utf8');
+
+    const codexInstall = buildInstallPlan({
+      sourceDir: source,
+      target: 'codex',
+      artifact: 'skill',
+      scope: 'plugin',
+      projectRoot: temporaryRoot,
+      pluginRoot,
+    });
+
+    const result = checkInstallPlan(codexInstall);
+
+    expect(result.issues.map(({ code }) => code)).toContain('cross-target-install-collision');
+    const collisionIssue = result.issues.find(
+      ({ code }) => code === 'cross-target-install-collision',
+    );
+    expect(collisionIssue?.message).toContain('already holds the "claude" projection');
+    expect(collisionIssue?.message).not.toContain('\n');
+    // Read-only: nothing was written or removed.
+    expect(relativeFiles(codexInstall.destinationRoot)).toEqual(before);
+    expect(readFileSync(join(codexInstall.destinationRoot, 'SKILL.md'), 'utf8')).toBe(beforeSkill);
   });
 });
 

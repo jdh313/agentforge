@@ -87,7 +87,13 @@ src/
                       every destination write goes through the materializer
   artifact-plan.ts  — shared projection-to-plan builder used by render and
                       install, including modes, diagnostics, and provenance
-  install.ts        — synthetic one-artifact install plans with resolved roots
+  install.ts        — synthetic one-artifact install plans with resolved roots;
+                      refuses a write that would collide with another
+                      target's projection at a shared destination
+  install-collision.ts — stateless detector for the above: compares on-disk
+                      bytes against the installing target's own plan, then
+                      (only on a mismatch) against every other target's
+                      projection of the same source, via `targets/registry.ts`
   report.ts         — builds the `compile --report` output (JSON/MD),
                       grouping compiler diagnostics by disposition (what
                       became of the thing) rather than severity
@@ -171,6 +177,43 @@ tests/
   - A key covered by `authoring-keys` emits **nothing**. That is not an
     oversight: a declared strip is not a loss, and only a confirmed loss is
     worth recording (ndr:4nshwv).
+
+## Cross-target install collisions
+
+At `--scope plugin`, `claude`, `codex`, and `pi` all resolve a skill install
+to the identical `join(pluginRoot, 'skills')` — correct and unchanged, since
+all three harnesses read a plugin's `skills/` directory in place. That shared
+path means a second target installing the same skill into the same plugin
+root can silently erase the first target's projection: skill installs use
+`ownership: 'snapshot'` (§ Render contract's directory layout), so
+`materializeCompilation` swaps the *whole* destination directory, and neither
+ownership mode records which target wrote a file.
+
+`install-collision.ts` detects this **statelessly** — no manifest, no
+persisted state — at install time for target `T` into `destinationRoot`:
+
+1. Bytes on disk equal what `T`'s own plan would write (or the destination
+   doesn't exist yet): proceed normally. This covers a fresh install and a
+   no-op re-install of the same target.
+2. Otherwise, project the same source directory for every *other* target in
+   `targets/registry.ts` that supports the artifact, and compare each
+   projection's bytes against what is on disk.
+3. A match against another target's projection is a collision: `install`
+   refuses before anything is staged or swapped, and `check-install` reports
+   it as a `cross-target-install-collision` diagnostic instead (it is
+   read-only, so it never throws).
+4. No match anywhere: an ordinary upgrade of `T`'s own earlier output, and
+   the write proceeds.
+
+The refusal message names the colliding target and, where cheap to compute,
+a `differs:` line (frontmatter keys and/or `body`) — not a general diff
+engine, just what the two projections already have in hand.
+
+Known and accepted blind spot: if the source was edited between two installs
+of different targets, the on-disk bytes can match neither current
+projection, and the check degrades to a silent overwrite. This is
+deliberate — closing it would require persistent state that nothing else in
+`install.ts`/`materializer.ts` carries.
 
 ## Common commands
 
