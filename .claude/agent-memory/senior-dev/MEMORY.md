@@ -1,0 +1,8 @@
+- [Cite the atom to push back](feedback-cite-the-atom-to-push-back.md) — an instruction conflicting with an NDR head gets the deviation flagged with its ref, not silent compliance
+- [Admit the whole evidenced set](feedback-admit-whole-evidenced-set.md) — admitting runtime keys goes by the stated criterion, not the subset a ticket enumerated
+- [Verify a dispatch against its primary evidence](feedback-verify-dispatch-against-primary-evidence.md) — a paraphrase of a probe is not the probe; check it and surface contradictions
+- [Hunt the vendor doc before "unestablished"](feedback-hunt-vendor-doc-before-unestablished.md) — a probe that cannot discriminate is a limit of the probe; never warn on a construct the primary source documents as supported
+- [A capability citation is the deliverable](feedback-capability-citation-is-the-deliverable.md) — a newly found primary source belongs in the capabilities row and at the top of the report, not in a footnote
+- [Mark out-of-scope regions explicitly](feedback-mark-out-of-scope-explicitly.md) — a report lists what is finished with file:line, so the next reader cannot re-derive settled work as a gap
+- [Check a proposal against your own rule](feedback-check-proposal-against-own-rule.md) — follow-up work that contradicts a convention the change itself states is not a gap, it is the finished state
+- [Probe with positive controls](probe-with-positive-controls.md) — plant a defect the runtime must report; strings support absence claims far more weakly than a live load
