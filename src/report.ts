@@ -63,6 +63,13 @@ export function dispositionOf(code: string): Disposition {
   return DISPOSITION_BY_CODE[code] ?? 'not-established';
 }
 
+// A source location as a report renders it: the path relative to the
+// marketplace root, so two contributors' reports diff cleanly (ndr:c5snzf).
+export interface ReportedSourceLocation {
+  path: string;
+  line?: number;
+}
+
 export interface ReportedDiagnostic {
   code: string;
   disposition: Disposition;
@@ -72,6 +79,10 @@ export interface ReportedDiagnostic {
   publicationId: string;
   packageId?: string;
   retainedSource?: { artifactType: string; sourcePath: string };
+  // Where in source this diagnostic is about, carried as data so a consumer can
+  // jump rather than parse the sentence in `message`. Omitted when the compiler
+  // established none.
+  locations?: ReportedSourceLocation[];
 }
 
 export interface ReportCounts {
@@ -191,8 +202,12 @@ function bySourceThenDisposition(left: ReportedDiagnostic, right: ReportedDiagno
   return DISPOSITION_ORDER.indexOf(left.disposition) - DISPOSITION_ORDER.indexOf(right.disposition);
 }
 
+// The file a diagnostic is filed under. A retained source names one directly;
+// failing that, the first established location does. Before locations existed,
+// a diagnostic that named its file only in prose fell through to the
+// `(no source file)` bucket even though the compiler knew exactly where it was.
 function sourceOf(diagnostic: ReportedDiagnostic): string {
-  return diagnostic.retainedSource?.sourcePath ?? '';
+  return diagnostic.retainedSource?.sourcePath ?? diagnostic.locations?.[0]?.path ?? '';
 }
 
 function marketplaceRoot(plan: CompilationPlan): string {
@@ -220,6 +235,14 @@ function toReported(diagnostic: CompilationDiagnostic, root: string): ReportedDi
             artifactType: diagnostic.retainedSource.artifactType,
             sourcePath: portableRelativePath(root, diagnostic.retainedSource.sourcePath),
           },
+        }),
+    ...(diagnostic.locations === undefined || diagnostic.locations.length === 0
+      ? {}
+      : {
+          locations: diagnostic.locations.map(({ path, line }) => ({
+            path: portableRelativePath(root, path),
+            ...(line === undefined ? {} : { line }),
+          })),
         }),
   };
 }
@@ -321,6 +344,10 @@ function dispositionTable(counts: ReportCounts): string[] {
   ];
 }
 
+function formatLocation({ path, line }: ReportedSourceLocation): string {
+  return line === undefined ? `\`${path}\`` : `\`${path}:${line}\``;
+}
+
 function formatInline(record: Record<string, number>): string {
   return Object.entries(record)
     .map(([key, count]) => `${key} ${count}`)
@@ -335,7 +362,7 @@ function groupSection(heading: string, group: ReportGroup): string[] {
 
   let currentSource: string | undefined;
   for (const diagnostic of group.diagnostics) {
-    const source = diagnostic.retainedSource?.sourcePath ?? '(no source file)';
+    const source = sourceOf(diagnostic) || '(no source file)';
     if (source !== currentSource) {
       currentSource = source;
       lines.push(`#### \`${source}\``, '');
@@ -347,6 +374,12 @@ function groupSection(heading: string, group: ReportGroup): string[] {
       `- **${DISPOSITION_LABEL[diagnostic.disposition]}** — \`${diagnostic.code}\`${artifact}`,
       `  ${diagnostic.message}`,
     );
+    // `path:line` on its own line rather than folded into the sentence: an
+    // editor and a terminal both linkify that shape, and a reader scanning for
+    // where to go does not have to read the prose to find it.
+    if (diagnostic.locations) {
+      lines.push(`  at ${diagnostic.locations.map(formatLocation).join(', ')}`);
+    }
   }
   lines.push('');
   return lines;
@@ -394,6 +427,9 @@ export interface ReportedCheckDiagnostic {
   publicationId: string;
   packageId?: string;
   message: string;
+  // Same data as the compilation report's, relativized the same way. A check
+  // consumer reads the same diagnostics and has the same reason to jump.
+  locations?: ReportedSourceLocation[];
 }
 
 export function buildCheckReport(
@@ -414,6 +450,8 @@ export function buildCheckReport(
       result.rootFilesChecked.filter(({ publicationId }) => publicationId === id).length,
   }));
 
+  const root = marketplaceRoot(plan);
+
   return {
     schemaVersion: CHECK_SCHEMA_VERSION,
     marketplaceId: plan.marketplaceId,
@@ -431,6 +469,14 @@ export function buildCheckReport(
         ? {}
         : { packageId: diagnostic.provenance.packageId }),
       message: diagnostic.message,
+      ...(diagnostic.locations === undefined || diagnostic.locations.length === 0
+        ? {}
+        : {
+            locations: diagnostic.locations.map(({ path, line }) => ({
+              path: portableRelativePath(root, path),
+              ...(line === undefined ? {} : { line }),
+            })),
+          }),
     })),
   };
 }

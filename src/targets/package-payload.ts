@@ -12,6 +12,7 @@ import {
   type ProposedCompilationDiagnostic,
   type ProposedOutput,
   type PublicationCompilation,
+  type SourceLocation,
 } from '../compiler.ts';
 import type {
   ClaudeOnlyConstruct,
@@ -97,6 +98,11 @@ export function compilePackagePayload(
             severity: 'warning' as const,
             packageId: packageInput.id,
             message: `Skill "${projection.artifactName}": ${warning.detail}.`,
+            // File granularity only: a leaf `Warning` aggregates every lost
+            // literal into one detail string and carries no positions, so the
+            // canonical file is the finest location available without widening
+            // the renderer's own warning shape.
+            locations: [locationOf(artifact.path)],
           })),
         );
         continue;
@@ -233,6 +239,7 @@ function reportDeclaredLosses(
       severity: 'warning',
       packageId: packageInput.id,
       message: `Unclassified Claude-only construct "${literal}" at ${siteOf(packageInput, sourcePath, line)} for target "${target}"; no capability-table entry covers it.`,
+      locations: [locationOf(sourcePath, line)],
     });
   }
 
@@ -245,6 +252,7 @@ function reportDeclaredLosses(
       severity: 'note',
       packageId: packageInput.id,
       message: `Claude-only construct "${literal}" at ${siteOf(packageInput, sourcePath, line)} is translated to ${becomes} for target "${target}"; nothing is lost, so no declared loss is required.`,
+      locations: [locationOf(sourcePath, line)],
     });
   }
 
@@ -270,6 +278,7 @@ function reportDeclaredLosses(
       message:
         `Claude-only construct "${loss.construct}" is ${loss.state} for target "${target}"${loss.note ? `: ${loss.note}` : '.'}` +
         ` Occurrences: ${matched.map(({ sourcePath, line }) => siteOf(packageInput, sourcePath, line)).join(', ')}.`,
+      locations: matched.map(({ sourcePath, line }) => locationOf(sourcePath, line)),
     });
   }
 
@@ -345,6 +354,14 @@ function survives(retention: RetentionCheck, content: string): boolean {
 function siteOf(packageInput: CompilationPackage, sourcePath: string, line?: number): string {
   const relative = relativePackageArtifactPath(packageInput.path, sourcePath);
   return line === undefined ? relative : `${relative}:${line}`;
+}
+
+// The machine-readable half of what `siteOf` renders as prose. Kept absolute and
+// package-agnostic: `siteOf` relativizes against the package for a human reading
+// a terminal line, while a location is relativized once, against the marketplace
+// root, by the report layer (ndr:c5snzf).
+function locationOf(sourcePath: string, line?: number): SourceLocation {
+  return line === undefined ? { path: sourcePath } : { path: sourcePath, line };
 }
 
 function unsupportedProjection(

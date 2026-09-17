@@ -107,12 +107,29 @@ export interface RetainedSource {
   sourcePath: string;
 }
 
+// A jumpable place in canonical source. Absolute here, like every other path a
+// diagnostic carries: in-process consumers open the file, and only the report
+// layer relativizes (ndr:c5snzf).
+export interface SourceLocation {
+  path: string;
+  // 1-indexed. Absent when the construct is identified by a key rather than a
+  // position — a frontmatter key has no line that identifies it.
+  line?: number;
+}
+
 export interface ProposedCompilationDiagnostic {
   code: string;
   severity: 'note' | 'warning';
   message: string;
   packageId?: string;
   retainedSource?: RetainedSource;
+  // Where in canonical source this diagnostic is about, as data rather than as
+  // prose inside `message`. Plural because one diagnostic can cover several
+  // occurrences — a declared loss names every site it matched — and splitting
+  // it into one diagnostic per site would change diagnostic cardinality to
+  // deliver a field. Omitted rather than empty, so its presence always means a
+  // location was established.
+  locations?: readonly SourceLocation[];
 }
 
 export interface CompilationDiagnostic extends Omit<ProposedCompilationDiagnostic, 'packageId'> {
