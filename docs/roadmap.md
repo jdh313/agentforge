@@ -143,8 +143,11 @@ blocking behavior is explicitly unsupported.
 - Use Librarian for registered agents, execution settings, delegation,
   continuity, and resources.
 - Use Commit for hooks, executable scripts, payloads, and blocking.
-- Keep `attention-workflow` unsupported wherever its structural guarantee
-  cannot survive projection.
+- `attention-workflow` is out of 1.0 scope. It is unused, and is slated for
+  removal from `jdh-agents` rather than for a verified support boundary, so
+  proving where its structural guarantee survives projection buys nothing.
+  Until it is removed it stays in the corpus and compiles like any other
+  package; 1.0 simply makes no claim about it.
 - Compile, check, publish, and install the complete `jdh-agents` corpus.
 - Retire redundant generated native maintenance only after the replacement
   workflow passes its runtime acceptance gates.
