@@ -30,6 +30,14 @@ export type Disposition =
   | 'lost-declared'
   | 'carried-form-changed'
   | 'carried-unenforced'
+  // Nothing existed to carry or lose: the compile fully established that a
+  // construct's fate was a no-op, not that a construct's fate is unknown.
+  // ndr:hv9kbf: "A disposition does not name a construct's final fate; it
+  // names what the compile established about it" — a no-op is as established
+  // as a loss is, so it cannot sit in the leading loss states (nothing was
+  // lost) nor in `not-established` (nothing is unknown here). See its position
+  // in `DISPOSITION_ORDER` below for the placement argument (ndr:bqh2gz).
+  | 'nothing-to-carry'
   | 'not-established';
 
 // Total over `DiagnosticCode` (ndr:bqh2gz): the type checker refuses to
@@ -41,13 +49,6 @@ const DISPOSITION_BY_CODE: Readonly<Record<DiagnosticCode, Disposition>> = {
   'claude-only-body-feature': 'lost-undeclared',
   'unsupported-artifact-projection': 'lost-undeclared',
   'unsupported-hook-event': 'lost-undeclared',
-  // A hook configuration that declares zero events yields zero Codex output
-  // (`empty-hook-configuration`, src/targets/codex-marketplace.ts). Nothing
-  // was carried, so the carried dispositions don't fit; the diagnostic
-  // reactively reports the no-op rather than the author declaring it via the
-  // `losses` mechanism `declared-loss` covers, so it lands beside the other
-  // reactive, undeclared losses rather than `lost-declared` (ndr:bqh2gz).
-  'empty-hook-configuration': 'lost-undeclared',
   'declared-loss': 'lost-declared',
   'translated-construct': 'carried-form-changed',
   'translated-hook-handler-args': 'carried-form-changed',
@@ -60,25 +61,43 @@ const DISPOSITION_BY_CODE: Readonly<Record<DiagnosticCode, Disposition>> = {
   'supplied-output-override': 'carried-form-changed',
   'inferred-artifact-projection': 'carried-unenforced',
   // Provisional. ndr:hv9kbf decides a gated disposition between the carried
-  // states and the unestablished one, but it is unbuilt — `Disposition` still
-  // has five members. Until then this is carried-unenforced, which is honest:
-  // the bytes went through and nothing guarantees expansion. When the gated
+  // states and the unestablished one, but it is unbuilt — `Disposition`'s
+  // sixth member (`nothing-to-carry`, ndr:bqh2gz) fills different territory
+  // (a no-op, not a gated-but-uncertain carry) and does not resolve hv9kbf.
+  // Until hv9kbf lands, this is carried-unenforced, which is honest: the
+  // bytes went through and nothing guarantees expansion. When the gated
   // member lands, revisit rather than move blindly — hv9kbf is scoped to
   // CONFIG-gating and this is SCOPE-gating, so whether it belongs there is a
-  // decision, not a rename.
+  // decision, not a rename. Where hv9kbf's member sits relative to
+  // `nothing-to-carry` on the scale is also undecided — left for whoever
+  // lands hv9kbf to place deliberately, not by appending.
   'construct-unresolved-at-install-scope': 'carried-unenforced',
+  // A hook configuration that declares zero events yields zero Codex output
+  // (`empty-hook-configuration`, src/targets/codex-marketplace.ts) — a fully
+  // established no-op, not a loss (nothing existed to lose) and not carried
+  // (there is no output). See `nothing-to-carry` above (ndr:bqh2gz).
+  'empty-hook-configuration': 'nothing-to-carry',
   'unclassified-construct': 'not-established',
   'unclassified-body-construct': 'not-established',
   'unrecognized-frontmatter-key': 'not-established',
   'unclassified-hook-event': 'not-established',
 };
 
-// Order the reader scans in: confirmed losses first, unknowns last.
+// Order the reader scans in: confirmed losses first, unknowns last — a scale,
+// not an alphabet (ndr:71jgk2). `nothing-to-carry` sits after the carried
+// states and before `not-established`: it cannot lead, because it names no
+// loss, and it cannot trail beside `not-established`, because — per
+// ndr:hv9kbf's framing that a disposition names what the compile established
+// rather than a construct's final fate — a no-op is fully established, not
+// unknown. ndr:hv9kbf's still-unbuilt gated member also wants this same
+// stretch of the scale; its position relative to `nothing-to-carry` is left
+// for that work to decide deliberately (ndr:bqh2gz).
 const DISPOSITION_ORDER: readonly Disposition[] = [
   'lost-undeclared',
   'lost-declared',
   'carried-form-changed',
   'carried-unenforced',
+  'nothing-to-carry',
   'not-established',
 ];
 
@@ -327,6 +346,7 @@ const DISPOSITION_LABEL: Readonly<Record<Disposition, string>> = {
   'lost-declared': 'lost, declared',
   'carried-form-changed': 'carried, form changed',
   'carried-unenforced': 'carried, unenforced',
+  'nothing-to-carry': 'nothing to carry',
   'not-established': 'not established',
 };
 
