@@ -92,7 +92,7 @@ const DISPOSITION_BY_CODE: Readonly<Record<DiagnosticCode, Disposition>> = {
 // unknown. ndr:hv9kbf's still-unbuilt gated member also wants this same
 // stretch of the scale; its position relative to `nothing-to-carry` is left
 // for that work to decide deliberately (ndr:bqh2gz).
-const DISPOSITION_ORDER: readonly Disposition[] = [
+export const DISPOSITION_ORDER: readonly Disposition[] = [
   'lost-undeclared',
   'lost-declared',
   'carried-form-changed',

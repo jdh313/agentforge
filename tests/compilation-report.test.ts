@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DISPOSITION_ORDER, dispositionOf } from '../src/report.ts';
 
 // Coverage for the compilation report companion contract (Fibery #31):
 // `agentforge compile --report <path>` renders that compile's diagnostics to
@@ -260,6 +261,23 @@ describe('compile --report', () => {
       expect(text.toLowerCase()).toContain('translation');
       expect(text.toLowerCase()).toContain('omission');
     }
+  });
+
+  // Protects the `nothing-to-carry` disposition added in c68e8e60 against
+  // accidental removal or reordering. The fixture does not emit
+  // `empty-hook-configuration` diagnostics, so the compact report built from
+  // it would never include this disposition — `countOf` (src/report.ts:306-314)
+  // builds `byDisposition` sparsely, only for dispositions actually present.
+  // This test runs outside the fixture to verify the code path directly.
+  test('nothing-to-carry disposition exists and sits correctly in order', () => {
+    expect(dispositionOf('empty-hook-configuration')).toBe('nothing-to-carry');
+
+    const nothingToCarryIdx = DISPOSITION_ORDER.indexOf('nothing-to-carry');
+    const carriedUnenforceIdx = DISPOSITION_ORDER.indexOf('carried-unenforced');
+    const notEstablishedIdx = DISPOSITION_ORDER.indexOf('not-established');
+
+    expect(nothingToCarryIdx).toBeGreaterThan(carriedUnenforceIdx);
+    expect(nothingToCarryIdx).toBeLessThan(notEstablishedIdx);
   });
 });
 
