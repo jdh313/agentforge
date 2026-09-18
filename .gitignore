@@ -13,3 +13,8 @@ CLAUDE.local.md
 .docs/
 .env
 .env.*
+
+# Agent working notes. Ignored rather than merely unused: jj snapshots new
+# files automatically, so without this every agent report lands in whichever
+# branch happens to be open.
+.jj-scratch/
