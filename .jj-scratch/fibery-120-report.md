@@ -241,3 +241,67 @@ Found 1 info.
 - `check.ts`/`install.ts` codes and the report's grouping axis untouched.
 - Nothing else needed remapping; `supplied-output-override` is unaffected by
   this follow-up.
+
+---
+
+## Follow-up: test coverage for `nothing-to-carry` disposition
+
+Commit: `1f461d86` (test-only, after `8eb1d157`).
+
+### What the test protects
+
+The `nothing-to-carry` disposition added in commit `8eb1d157` had **zero test
+coverage** before this change. The fixture in `tests/compilation-report.test.ts`
+(`codex-hook-projection`) does not emit `empty-hook-configuration` diagnostics,
+so the sparse disposition-counting logic in `countOf` (src/report.ts:306-314)
+never exercises this member. `byDisposition` is built sparsely — only for
+dispositions that actually appear in a compile run — so an unseen disposition
+could be removed entirely from the codebase and all 271 pre-existing tests would
+still pass.
+
+This test runs outside the fixture to verify the disposition directly:
+1. `dispositionOf('empty-hook-configuration')` returns `'nothing-to-carry'`.
+2. `nothing-to-carry` sits in `DISPOSITION_ORDER` strictly after
+   `'carried-unenforced'` and strictly before `'not-established'`, via index
+   comparison (not array-literal equality).
+
+### Implementation
+
+- Exported `DISPOSITION_ORDER` from `src/report.ts` (was `const`, now `export
+  const`).
+- Added test `nothing-to-carry disposition exists and sits correctly in order`
+  to `tests/compilation-report.test.ts`.
+- Comment explains the fixture gap and protects against accidental removal or
+  reordering.
+
+### Bite-check result
+
+Temporarily changed the mapping `'empty-hook-configuration': 'nothing-to-carry'`
+to `'empty-hook-configuration': 'carried-unenforced'`. The test **fails** as
+expected with the message:
+```
+Expected: "nothing-to-carry"
+Received: "carried-unenforced"
+```
+Reverted and confirmed tests pass.
+
+### Verification (this session)
+
+`bun test`:
+```
+ 272 pass
+ 1 skip
+ 0 fail
+ 112 snapshots, 875 expect() calls
+Ran 273 tests across 23 files. [4.81s]
+```
+
+`bunx tsc --noEmit`:
+```
+(no output)
+```
+
+`bunx biome check .`:
+```
+(only pre-existing $schema mismatch info; no new issues)
+```

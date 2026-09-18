@@ -86,12 +86,15 @@ and is a real loss, while `translated-construct` is also a note and is not one.
 | `lost-declared` | destroyed, but acknowledged in the package's `losses` |
 | `carried-form-changed` | survives as a native equivalent |
 | `carried-unenforced` | survives in the output, unenforced by the target |
+| `nothing-to-carry` | there was nothing to translate, and nothing was lost |
 | `not-established` | construct-shaped, and never ruled on |
 
 Disposition is derived from the diagnostic code rather than stored on the
-diagnostic, so the compiler stays unaware a report exists. A code the mapping
-does not know resolves to `not-established`, never to a loss — asserting
-otherwise is the error the severity axis made.
+diagnostic, so the compiler stays unaware a report exists. The mapping is total
+over the diagnostic code union, so adding a code without classifying it fails
+the build rather than resolving to `not-established` — and `not-established`
+means the construct was genuinely never ruled on, never that a loss went
+unasserted. Asserting otherwise is the error the severity axis made.
 
 The JSON carries `schemaVersion`, marketplace-wide `counts`, and diagnostics
 nested by target, then package (with a sibling `publication` key for any that

@@ -273,10 +273,10 @@ describe('compile --report', () => {
     expect(dispositionOf('empty-hook-configuration')).toBe('nothing-to-carry');
 
     const nothingToCarryIdx = DISPOSITION_ORDER.indexOf('nothing-to-carry');
-    const carriedUnenforceIdx = DISPOSITION_ORDER.indexOf('carried-unenforced');
+    const carriedUnenforcedIdx = DISPOSITION_ORDER.indexOf('carried-unenforced');
     const notEstablishedIdx = DISPOSITION_ORDER.indexOf('not-established');
 
-    expect(nothingToCarryIdx).toBeGreaterThan(carriedUnenforceIdx);
+    expect(nothingToCarryIdx).toBeGreaterThan(carriedUnenforcedIdx);
     expect(nothingToCarryIdx).toBeLessThan(notEstablishedIdx);
   });
 });
