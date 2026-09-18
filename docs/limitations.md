@@ -709,6 +709,20 @@ leaf `AGENT.md` render, with no way to close that gap from this side.
 `librarian`'s `vault-reader` role in cc-marketplace (`tests/marketplace-adapters.test.ts`,
 `tests/fixtures/definitions/cc-marketplace/packages/librarian/`).
 
+**Reported as.** `body-agent-reference`, the declared loss behind the
+`agent-reference` construct family (ndr:c5haze). A body naming an agent the
+package declares is detected and must be declared under
+`targets.codex.losses`, so this limitation now surfaces at the call site rather
+than only here. Two bounds on that coverage, both deliberate:
+
+- Resolution is **package-local**. A body naming a *sibling* package's agent —
+  `teach` naming `librarian`'s `@vault-reader` — is not detected. Whether it
+  should be is Fibery Charting #23, deferred rather than decided.
+- The construct reports the *reference*, not the projection. The inert
+  Markdown procedure `translateAgentProcedure` emits is reported separately as
+  `inferred-artifact-projection`, which is what names this limitation for the
+  agent file itself.
+
 **Evidence.** Verified 2026-09-15 against the installed `codex-cli 0.154.0`
 binary (`strings` plus targeted byte-offset dumps; no `codex exec` session was
 started). The agent-role loader's demangled symbol table contains exactly three

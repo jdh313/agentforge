@@ -44,13 +44,35 @@ collaborator abstraction or changing the declared-loss policy.
 |---|---|---|---|
 | Obsidian | Read and write vault notes with `obsidian-cli`; use a targeted patch tool for surgical edits | The CLI is portable. The allowed/disallowed tool fences and MCP patch tool are stripped | Generated; runtime I/O not yet accepted |
 | DEVONthink | Search owned textbooks before web sources using read-only MCP tools | Integration is unavailable; the retained references are declared unenforced and the interface says Codex falls back to web sources | Explicit declared loss |
-| Reader/editor collaboration | `@vault-reader` may read learning style; complex restructuring goes to `@note-editor` | The names do not register Codex agents. Teach carries no local Codex role procedure, and the Librarian package's agent Markdown is inert | Unsupported until rewritten or given a demonstrated runtime-subagent path |
+| Reader/editor collaboration | `@vault-reader` may read learning style; complex restructuring goes to `@note-editor` | The names do not register Codex agents. Teach carries no local Codex role procedure, and the Librarian package's agent Markdown is inert | Undetected here, by design — see below |
 | User input | Propose and confirm the workspace path before creation; confirm mission changes and source choices | Ordinary conversation or structured input can preserve the pause | Requires a no-write-before-confirmation runtime trace |
 | Vault guidance | Read the learning-style note and the vault's `.claude/CLAUDE.md` Location Decision Tree | A literal content read may work, but there is no tested Codex fallback | Requires an observed read and path proposal |
 
 The source should prefer target-neutral intent where only a small phrase
 differs. A full `targets.codex.body` copy of the long Teach procedure would
 create avoidable drift and is not justified by the current gaps.
+
+### Why the reader/editor row is still unresolved
+
+AgentForge now carries `body-agent-reference` (ndr:c5haze), so a body naming an
+agent the target cannot register is a declarable loss rather than silent prose.
+That closed the row for `librarian` (71 occurrences) and `skillsmith` (2), where
+each body names an agent its **own package** declares.
+
+It does not close it for Teach. Teach declares no agents; `@vault-reader` and
+`@note-editor` belong to `librarian`, and resolution is package-local, so the
+gate is silent on Teach's body by design rather than by oversight. Widening
+resolution to the whole publication is Fibery Charting #23 — deferred, and
+explicitly outside the 1.0 gate.
+
+Two consequences for this record:
+
+- The row cannot be closed by a compiler diagnostic today. It closes when the
+  runtime acceptance plan below produces a trace showing what a Codex session
+  actually does with those two names — the evidence this document exists to
+  demand.
+- Teach's collaborator prose stays unchanged meanwhile. It is correct on Claude,
+  and nothing here establishes a better Codex form to replace it with.
 
 ## Generated artifact findings
 
@@ -68,17 +90,17 @@ For Teach it reports four distinct dispositions:
 The generated package contains the projected skill, its format documents,
 `UPSTREAM.md`, the lesson CSS asset, and the explicit-only policy sidecar.
 
-Two content defects remain outside the compiler's semantic checks:
+One content defect remains outside the compiler's semantic checks:
 
-- The Codex interface `longDescription` says lessons and cheat sheets are
-  self-contained HTML. The current workflow stores Markdown lessons and wiki
-  pages and explicitly says there is no HTML.
 - The generated Codex body still names Claude's Obsidian MCP integration and
   `@note-editor`, even though neither is a working Codex dispatch contract.
 
-The repository's dual-runtime status document also says Codex is limited to
-four pilots while the authoritative all-compatible publication already enrolls
-Teach. That status text must not be used as runtime evidence.
+Two defects recorded here earlier are now closed in `jdh-agents` and are kept
+only so the record shows what moved. The Codex interface `longDescription` said
+lessons were self-contained HTML; it now says Markdown lessons and wiki pages.
+The dual-runtime status document said Codex was limited to four pilots while the
+authoritative publication enrolled more; the counts are reconciled. Neither
+correction is runtime evidence for anything.
 
 ## Runtime acceptance plan
 
@@ -95,9 +117,14 @@ The following gates remain deliberately unclaimed:
 4. **Stateful Codex flow.** With approval, create a disposable Mission,
    Resources, Glossary, Records, and lesson set, then advance the same workspace
    from a second fresh session. Record the exact vault diff.
-5. **Truthful fallback.** Verify the session says DEVONthink is unavailable and
+5. **Collaborator degradation.** Verify the session does not claim to dispatch
+   `@vault-reader` or `@note-editor`, and performs the delegated vault work
+   inline instead. No compiler diagnostic covers this — the reference is
+   cross-package, so `body-agent-reference` is silent on it by design — which
+   makes an observed trace the only evidence available.
+6. **Truthful fallback.** Verify the session says DEVONthink is unavailable and
    uses web sources without claiming it searched owned textbooks.
-6. **Claude regression.** Validate and exercise the corresponding Claude
+7. **Claude regression.** Validate and exercise the corresponding Claude
    workflow separately.
 
 The disposable vault workflow is a persistent external change. It must not run
@@ -113,7 +140,9 @@ generated correctly. Runtime acceptance is not complete.
 Before the live smoke:
 
 - correct the stale Codex interface description and regenerate `jdh-agents`;
-- replace or explicitly disposition the Claude-native reader/editor dispatch;
+- disposition the Claude-native reader/editor dispatch, noting that the
+  `body-agent-reference` gate does not cover it (see above) and that gate 5
+  below is what settles it;
 - state the Codex tool boundary as advisory rather than mechanically enforced;
   and
 - reconcile the stale pilot-status documentation with the authoritative

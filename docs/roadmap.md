@@ -141,7 +141,11 @@ blocking behavior is explicitly unsupported.
   is unavailable. Track generated and pending runtime evidence in
   [`teach-runtime-acceptance.md`](teach-runtime-acceptance.md).
 - Use Librarian for registered agents, execution settings, delegation,
-  continuity, and resources.
+  continuity, and resources. Its collaborator dispatches are covered by the
+  `body-agent-reference` gate (ndr:c5haze) and declared as a Codex loss; that
+  gate resolves names **package-locally**, so it says nothing about a body
+  naming another package's agent. Widening it is Fibery Charting #23, and is
+  deliberately outside 1.0.
 - Use Commit for hooks, executable scripts, payloads, and blocking.
 - `attention-workflow` is out of 1.0 scope. It is unused, and is slated for
   removal from `jdh-agents` rather than for a verified support boundary, so
