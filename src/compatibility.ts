@@ -1,6 +1,8 @@
+import { basename, extname } from 'node:path';
 import matter from 'gray-matter';
 import {
   type ConstructFamily,
+  type ConstructShape,
   findConstructShapes,
   supportFor,
   translationFor,
@@ -73,6 +75,7 @@ const FAMILY_CONSTRUCTS: Readonly<Record<ConstructFamily, ClaudeOnlyConstruct>> 
   'fenced-shell': 'body-shell-injection',
   'file-reference': 'body-file-reference',
   'mcp-tool': 'mcp-tool-reference',
+  'agent-reference': 'body-agent-reference',
 };
 
 export interface DetectionInput {
@@ -97,6 +100,7 @@ export function detectClaudeOnlyConstructs(input: DetectionInput): DetectionResu
   const detected: DetectedConstruct[] = [];
   const unknown: UnknownConstruct[] = [];
   const translated: TranslatedConstruct[] = [];
+  const declaredAgents = declaredAgentNames(artifacts);
 
   for (const [artifactType, loaded] of artifacts) {
     for (const artifact of loaded) {
@@ -110,14 +114,23 @@ export function detectClaudeOnlyConstructs(input: DetectionInput): DetectionResu
       }
       pushTranslatedFrontmatter(translated, artifact, artifactType, target, surface);
       if (!exemptDocuments.has(artifact.path)) {
-        scanBody(artifact, artifactType, target, surface, detected, unknown, translated);
+        scanBody(
+          artifact,
+          artifactType,
+          target,
+          surface,
+          detected,
+          unknown,
+          translated,
+          declaredAgents,
+        );
       }
     }
   }
 
   for (const resource of resources) {
     if (exemptDocuments.has(resource.path)) continue;
-    scanBody(resource, 'resource', target, surface, detected, unknown, translated);
+    scanBody(resource, 'resource', target, surface, detected, unknown, translated, declaredAgents);
   }
 
   detected.sort(
@@ -138,6 +151,39 @@ export function detectClaudeOnlyConstructs(input: DetectionInput): DetectionResu
   return { detected, unknown, translated };
 }
 
+// The agents a package declares, by the name each one registers under: its
+// frontmatter `name:`, or the filename stem when that key is absent — the same
+// fallback `agent-command.ts` applies when it parses the artifact. This is the
+// only place a body scan reads another artifact's contents, and it stays inside
+// one package on purpose (ndr:c5haze).
+function declaredAgentNames(
+  artifacts: ReadonlyMap<string, readonly LoadedArtifact[]>,
+): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const artifact of artifacts.get('agent') ?? []) {
+    let declared: unknown;
+    try {
+      declared = matter(artifact.content).data.name;
+    } catch {
+      declared = undefined;
+    }
+    names.add(
+      typeof declared === 'string' && declared.length > 0
+        ? declared
+        : basename(artifact.path, extname(artifact.path)),
+    );
+  }
+  return names;
+}
+
+function detailFor(shape: ConstructShape): string {
+  if (shape.family === 'mcp-tool') return `references Claude MCP tool "${shape.literal}"`;
+  if (shape.family === 'agent-reference') {
+    return `body dispatches declared agent ${shape.literal}`;
+  }
+  return `body uses ${shape.literal}`;
+}
+
 function scanBody(
   file: LoadedArtifact,
   artifactType: string,
@@ -146,6 +192,7 @@ function scanBody(
   detected: DetectedConstruct[],
   unknown: UnknownConstruct[],
   translated: TranslatedConstruct[],
+  declaredAgents: ReadonlySet<string>,
 ): void {
   // Only prose reaches a model's context, so only prose is scanned for what a
   // model would have read. A structured artifact is the business of whichever
@@ -157,7 +204,7 @@ function scanBody(
   const { body, offset } = bodyOf(file, artifactType);
   const seen = new Set<string>();
 
-  for (const shape of findConstructShapes(body)) {
+  for (const shape of findConstructShapes(body, declaredAgents)) {
     // Ordinary shell scripts use `$1` for their own arguments. Treating that as
     // a Claude positional would make every helper script a compile failure.
     if (shape.family === 'positional-argument' && isShellResource(file.path)) continue;
@@ -204,10 +251,7 @@ function scanBody(
       artifactType,
       sourcePath: file.path,
       line,
-      detail:
-        shape.family === 'mcp-tool'
-          ? `references Claude MCP tool "${shape.literal}"`
-          : `body uses ${shape.literal}`,
+      detail: detailFor(shape),
       retention: { kind: 'body-literal', literal: shape.literal },
     });
   }

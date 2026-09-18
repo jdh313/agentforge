@@ -70,6 +70,9 @@ src/
   compatibility.ts  — the single construct detector: frontmatter tool filters
                       plus body shapes, over every artifact type and text
                       resource file. Returns occurrences carrying `path:line`.
+                      One family, `agent-reference`, is matched against the
+                      package's own declared agent names rather than a shape —
+                      see § Collaborator references.
   deep-merge.ts     — small typed deep-merge (no lodash)
   target-adapter.ts — one target shape: artifact projections, normative scoped
                       install locations, plus optional marketplace compilation
@@ -407,6 +410,33 @@ consumer's build error is the overreach ndr:17dhph rejected for strict target
 schemas. A publishing repo that wants those keeps them as its own pre-push hook,
 alongside the repo-wide secret scan that cannot move here — agentforge only ever
 sees files a publication declares.
+
+## Collaborator references
+
+A body naming an agent the target does not register is the `agent-reference`
+construct family, declarable as `body-agent-reference` (ndr:c5haze). Codex
+registers no agent role from a plugin package (`docs/limitations.md` L-010), so
+a Codex body saying `@vault-reader` instructs a dispatch that cannot resolve —
+the model confabulates rather than degrades. That loss is unconditional, which
+is what puts it inside the declared-loss gate rather than beside it (ndr:5ymhmg).
+
+**Matched against data, not shape.** Every other family is a regex over body
+text. This one resolves each `@token` against the agents the *same package*
+declares — frontmatter `name:`, or the filename stem when that key is absent.
+A declared name is a collaborator reference; anything else is prose. That is why
+the detector has no heuristic in it, and why the leading guard can afford to
+admit `` `@name` ``, `(@name)` and `[@name]` when the shape-keyed
+`file-reference` matcher cannot.
+
+The `file-reference` family is untouched. Its path-separator requirement is a
+deliberate exclusion, and the two families stay disjoint: `@name` never matches
+when a `/` follows.
+
+**Package-local, deliberately.** A body naming a *sibling* package's agent is
+not detected — Teach naming Librarian's `@vault-reader` is the motivating case
+this does **not** cover. Widening resolution to the whole publication would make
+a package's diagnostics depend on its siblings' contents, which is its own fork;
+it is tracked as Fibery Charting #23, not decided here.
 
 ## Authoring keys
 

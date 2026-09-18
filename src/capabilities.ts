@@ -22,7 +22,8 @@ export type ConstructFamily =
   | 'inline-shell'
   | 'fenced-shell'
   | 'file-reference'
-  | 'mcp-tool';
+  | 'mcp-tool'
+  | 'agent-reference';
 
 export interface ConstructShape {
   family: ConstructFamily;
@@ -62,6 +63,7 @@ const CLAUDE_TOKENS = [
   'fenced-shell',
   'file-reference',
   'mcp-tool',
+  'agent-reference',
 ] as const;
 
 // Codex is the only target with translators today. `disable-model-invocation`
@@ -121,10 +123,10 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
   [
     'claude/agent',
     {
-      supported: [],
+      supported: ['agent-reference'],
       unsupported: [],
       source:
-        "https://code.claude.com/docs/en/subagents — the Markdown body is the subagent system prompt; no command-style interpolation contract is claimed here. Verified 2026-09-15. Neither list names `${CLAUDE_*}` on purpose: its support is gated on install scope rather than being a property of the target, which this row's two-list shape cannot express — see SCOPE_GATED below. Re-verified 2026-09-17 against Claude Code 2.1.274.",
+        "https://code.claude.com/docs/en/subagents — the Markdown body is the subagent system prompt; no command-style interpolation contract is claimed here. Verified 2026-09-15. Neither list names `${CLAUDE_*}` on purpose: its support is gated on install scope rather than being a property of the target, which this row's two-list shape cannot express — see SCOPE_GATED below. Re-verified 2026-09-17 against Claude Code 2.1.274. `agent-reference` is listed supported because Claude registers a package's agents by name and dispatches them from body prose; it is the one construct this surface can claim without the scope gate above, since registration is a property of the package rather than the install scope.",
     },
   ],
   [
@@ -134,7 +136,7 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
       translated: CODEX_SKILL_TRANSLATIONS,
       unsupported: CLAUDE_TOKENS,
       source:
-        'https://learn.chatgpt.com/docs/build-skills.md — documents no body templating, so `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` in SKILL.md body prose are inert text on this surface (see the `codex/hook` row for where those two are actually translated); agents/openai.yaml carries the invocation policy. On allow_implicit_invocation the published page says only that Codex "won\'t implicitly invoke the skill", which reads as auto-trigger gating; the codex 0.146.0 binary\'s embedded skill-creator doc is the complete statement — "the skill is not injected into the model context by default, but can still be invoked explicitly via $skill". Verified 2026-08-02: a policy-gated skill is absent from the model\'s catalog and still runs from the $-picker, so the translation is faithful. Body-templating scope re-verified 2026-09-17 against https://developers.openai.com/codex/plugins/build.',
+        'https://learn.chatgpt.com/docs/build-skills.md — documents no body templating, so `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` in SKILL.md body prose are inert text on this surface (see the `codex/hook` row for where those two are actually translated); agents/openai.yaml carries the invocation policy. On allow_implicit_invocation the published page says only that Codex "won\'t implicitly invoke the skill", which reads as auto-trigger gating; the codex 0.146.0 binary\'s embedded skill-creator doc is the complete statement — "the skill is not injected into the model context by default, but can still be invoked explicitly via $skill". Verified 2026-08-02: a policy-gated skill is absent from the model\'s catalog and still runs from the $-picker, so the translation is faithful. Body-templating scope re-verified 2026-09-17 against https://developers.openai.com/codex/plugins/build. `agent-reference` is unsupported on a separate basis: codex-cli 0.154.0 registers no agent role from a plugin package (docs/limitations.md L-010), so a body naming a collaborator addresses nothing the runtime can resolve. The shortfall is unconditional rather than enabled by a configuration option, which is what places it inside the declared-loss gate (ndr:5ymhmg) rather than beside it.',
     },
   ],
   [
@@ -155,14 +157,21 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
       supported: [],
       unsupported: CLAUDE_TOKENS,
       source:
-        "codex-cli 0.154.0 agent-role TOML, `AgentRoleOverrides` field set: `developer_instructions`, `model`, `model_reasoning_effort`, `model_reasoning_summary`, `model_verbosity`, `personality`, `service_tier`, `skills`. Verified 2026-09-17 by live load rather than strings alone — a role file agentforge generated was planted in `$CODEX_HOME/agents` and `codex exec` loaded it with no warning, while planted defects produced `agent role file at … must define `developer_instructions`` and `duplicate agent role name … discovered in <dir>`, which is what establishes the field set as the accepted one and not merely the one the binary mentions. `developer_instructions` is a plain TOML string the loader validates for non-blankness and nothing else: no substitution, interpolation, or argument pass is documented or observed, so every Claude construct in an agent body reaches the model as literal text, exactly as the `codex/skill` row already records for SKILL.md prose. `$ARGUMENTS`/`$N` are unsupported on a stronger basis here than there — an agent role has no invocation-time argument at all, being selected by a spawn tool rather than typed by a user (contrast `codex/prompt`, which does substitute them). WHERE THIS CLAIM STOPS: it is verified at load, not at use. codex-cli 0.154.0 never applies a custom role to a spawned child (docs/limitations.md L-011), so no probe can observe what a model does with these instructions, and 'the text is not expanded' rests on the absence of any expansion mechanism in the loader and the absence of any documented one — not on watching unexpanded text arrive. `mcp-tool` is the weakest member: Codex does address MCP tools by their own `mcp__*` names (https://learn.chatgpt.com/docs/hooks, matcher vocabulary), so what a Claude `mcp__*` reference loses on Codex is the server being configured, not the naming convention. It is listed unsupported to match `codex/skill`, which the marketplace path already applies to these same agent bodies; splitting the verdict by surface would reintroduce the disagreement this row exists to close.",
+        "codex-cli 0.154.0 agent-role TOML, `AgentRoleOverrides` field set: `developer_instructions`, `model`, `model_reasoning_effort`, `model_reasoning_summary`, `model_verbosity`, `personality`, `service_tier`, `skills`. Verified 2026-09-17 by live load rather than strings alone — a role file agentforge generated was planted in `$CODEX_HOME/agents` and `codex exec` loaded it with no warning, while planted defects produced `agent role file at … must define `developer_instructions`` and `duplicate agent role name … discovered in <dir>`, which is what establishes the field set as the accepted one and not merely the one the binary mentions. `developer_instructions` is a plain TOML string the loader validates for non-blankness and nothing else: no substitution, interpolation, or argument pass is documented or observed, so every Claude construct in an agent body reaches the model as literal text, exactly as the `codex/skill` row already records for SKILL.md prose. `$ARGUMENTS`/`$N` are unsupported on a stronger basis here than there — an agent role has no invocation-time argument at all, being selected by a spawn tool rather than typed by a user (contrast `codex/prompt`, which does substitute them). WHERE THIS CLAIM STOPS: it is verified at load, not at use. codex-cli 0.154.0 never applies a custom role to a spawned child (docs/limitations.md L-011), so no probe can observe what a model does with these instructions, and 'the text is not expanded' rests on the absence of any expansion mechanism in the loader and the absence of any documented one — not on watching unexpanded text arrive. `mcp-tool` is the weakest member: Codex does address MCP tools by their own `mcp__*` names (https://learn.chatgpt.com/docs/hooks, matcher vocabulary), so what a Claude `mcp__*` reference loses on Codex is the server being configured, not the naming convention. It is listed unsupported to match `codex/skill`, which the marketplace path already applies to these same agent bodies; splitting the verdict by surface would reintroduce the disagreement this row exists to close. `agent-reference` is unsupported here for the reason recorded on `codex/skill`: no plugin-registered role exists to address (L-010), and 0.154.0 additionally never applies a custom role to a spawned child (L-011), so neither the package path nor the leaf path resolves a collaborator named in prose.",
     },
   ],
   [
     'codex/prompt',
     {
       supported: ['$ARGUMENTS', '$N'],
-      unsupported: ['${CLAUDE_*}', 'inline-shell', 'fenced-shell', 'file-reference', 'mcp-tool'],
+      unsupported: [
+        '${CLAUDE_*}',
+        'inline-shell',
+        'fenced-shell',
+        'file-reference',
+        'mcp-tool',
+        'agent-reference',
+      ],
       source:
         'https://learn.chatgpt.com/docs/custom-prompts — supports $ARGUMENTS, $1-$9, named $UPPER; "No inline shell execution is supported."',
     },
@@ -192,7 +201,8 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
     {
       supported: [],
       unsupported: CLAUDE_TOKENS,
-      source: 'https://opencode.ai/docs/skills.md — no templating, no shell, no tool namespace.',
+      source:
+        "https://opencode.ai/docs/skills.md — no templating, no shell, no tool namespace. `agent-reference` is unsupported on this repository's own basis rather than a doc claim: agentforge projects no `agent` artifact to OpenCode (`src/targets/opencode.ts` declares `artifacts.skill` alone), so no collaborator a body names is ever installed alongside it.",
     },
   ],
   [
@@ -201,7 +211,7 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
       supported: ['allowed-tools', 'disable-model-invocation'],
       unsupported: CLAUDE_TOKENS,
       source:
-        'https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md — Pi implements Agent Skills, natively accepts allowed-tools and disable-model-invocation, and documents no Claude Code body templating. Verified 2026-09-14.',
+        'https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md — Pi implements Agent Skills, natively accepts allowed-tools and disable-model-invocation, and documents no Claude Code body templating. Verified 2026-09-14. `agent-reference` is unsupported because agentforge projects no `agent` artifact to Pi (`src/targets/pi.ts` declares `artifacts.skill` alone), so a collaborator named in a body is never installed with it.',
     },
   ],
   [
@@ -209,7 +219,8 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
     {
       supported: [],
       unsupported: CLAUDE_TOKENS,
-      source: 'Uploaded chat skills run without Claude Code substitution or shell access.',
+      source:
+        'Uploaded chat skills run without Claude Code substitution or shell access. `agent-reference` is unsupported for the same reason the rest of this row is: an uploaded chat skill carries no companion agents, and agentforge projects no `agent` artifact to this target.',
     },
   ],
 ]);
@@ -348,8 +359,44 @@ const PATTERNS: readonly {
 
 // biome-ignore-end lint/suspicious/noTemplateCurlyInString: tokens are literal docs of Claude-only patterns
 
-export function findConstructShapes(content: string): ConstructShape[] {
+// A collaborator reference has no shape that distinguishes it from prose — an
+// `@name` is a name, and every regex that tries to tell `@vault-reader` from
+// `@everyone` guesses. So this one family is matched against data instead: the
+// agents the same package declares. A name the package declares is a
+// collaborator; anything else is text. That keeps the file-reference matcher's
+// separator requirement untouched (it is a deliberate exclusion, not an
+// oversight) and leaves the detector with no heuristic in it (ndr:c5haze).
+//
+// Deliberately package-local. A body naming a *sibling* package's agent is not
+// detected — see the atom's Scope and Fibery Charting #23 for the deferred
+// question of whether resolution should widen to the whole publication.
+// The trailing guard rejects only a path separator. The name match is already
+// greedy over word characters, so `/` is the single continuation that would
+// make this the prefix of a file reference — and that family owns it.
+// The leading guard admits a backtick, bracket or paren as well as
+// whitespace: prose overwhelmingly spells a collaborator as `@name`, and
+// requiring whitespace would miss the dominant spelling. Widening it costs
+// nothing here precisely because the match is keyed on declared names — the
+// file-reference family, which is keyed on shape, cannot afford the same.
+const AGENT_REFERENCE = /(?<=^|[\s`([])@([A-Za-z0-9_-]+)(?!\/)/g;
+
+export function findConstructShapes(
+  content: string,
+  declaredAgents: ReadonlySet<string> = new Set(),
+): ConstructShape[] {
   const shapes: ConstructShape[] = [];
+  if (declaredAgents.size > 0) {
+    AGENT_REFERENCE.lastIndex = 0;
+    for (const match of content.matchAll(AGENT_REFERENCE)) {
+      if (!declaredAgents.has(match[1] ?? '')) continue;
+      shapes.push({
+        family: 'agent-reference',
+        token: 'agent-reference',
+        literal: match[0],
+        line: lineOf(content, match.index ?? 0),
+      });
+    }
+  }
   for (const { family, pattern, token } of PATTERNS) {
     // Each entry owns a global regex; reset lastIndex so repeated scans over
     // different content cannot inherit a stale cursor.

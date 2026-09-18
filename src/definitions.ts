@@ -66,6 +66,10 @@ export const CLAUDE_ONLY_CONSTRUCTS = [
   'body-template-variable',
   'body-shell-injection',
   'body-file-reference',
+  // A body naming an agent the target does not register. Detected against the
+  // agents the same package declares rather than against `@`-shape, so the
+  // entry covers a confirmed reference and never a prose mention (ndr:c5haze).
+  'body-agent-reference',
 ] as const;
 
 export type ClaudeOnlyConstruct = (typeof CLAUDE_ONLY_CONSTRUCTS)[number];
