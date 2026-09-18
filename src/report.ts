@@ -3,6 +3,7 @@ import type { MarketplaceCheckIssue, MarketplaceCheckResult } from './check.ts';
 import type { CompilationDiagnostic, CompilationPlan } from './compiler.ts';
 import { portableRelativePath } from './definitions.ts';
 import { rootDisplayPath } from './root-manifest.ts';
+import type { DiagnosticCode } from './types.ts';
 
 // Bump when the JSON shape changes in a way a parser would notice. An
 // unversioned machine format turns the first shape change into a silent
@@ -31,15 +32,32 @@ export type Disposition =
   | 'carried-unenforced'
   | 'not-established';
 
-const DISPOSITION_BY_CODE: Readonly<Record<string, Disposition>> = {
+// Total over `DiagnosticCode` (ndr:bqh2gz): the type checker refuses to
+// compile this object literal unless every member of the union has an entry,
+// so a code minted without a disposition fails the build instead of drifting
+// in unclassified until someone notices.
+const DISPOSITION_BY_CODE: Readonly<Record<DiagnosticCode, Disposition>> = {
   'claude-only-frontmatter-stripped': 'lost-undeclared',
   'claude-only-body-feature': 'lost-undeclared',
   'unsupported-artifact-projection': 'lost-undeclared',
   'unsupported-hook-event': 'lost-undeclared',
+  // A hook configuration that declares zero events yields zero Codex output
+  // (`empty-hook-configuration`, src/targets/codex-marketplace.ts). Nothing
+  // was carried, so the carried dispositions don't fit; the diagnostic
+  // reactively reports the no-op rather than the author declaring it via the
+  // `losses` mechanism `declared-loss` covers, so it lands beside the other
+  // reactive, undeclared losses rather than `lost-declared` (ndr:bqh2gz).
+  'empty-hook-configuration': 'lost-undeclared',
   'declared-loss': 'lost-declared',
   'translated-construct': 'carried-form-changed',
   'translated-hook-handler-args': 'carried-form-changed',
   'hook-timeout-capped-by-runtime': 'carried-form-changed',
+  // A supplied payload winning a producer collision (`supplied-output-override`,
+  // src/compiler.ts) carries the destination through in changed form: content
+  // still lands there, just from the supplied producer instead of the
+  // generated/translated one it replaced. Nothing is lost — the note exists to
+  // say which producer's bytes are at that destination now (ndr:bqh2gz).
+  'supplied-output-override': 'carried-form-changed',
   'inferred-artifact-projection': 'carried-unenforced',
   // Provisional. ndr:hv9kbf decides a gated disposition between the carried
   // states and the unestablished one, but it is unbuilt — `Disposition` still
@@ -66,8 +84,15 @@ const DISPOSITION_ORDER: readonly Disposition[] = [
 
 // An unmapped code resolves here rather than to a loss or a non-loss. Claiming
 // either would be the same mistake severity-grouping made: asserting a
-// disposition the table has not established (ndr:szdn5s).
-export function dispositionOf(code: string): Disposition {
+// disposition the table has not established (ndr:szdn5s). `DISPOSITION_BY_CODE`
+// is now total over `DiagnosticCode` (ndr:bqh2gz), so for any value that
+// actually type-checks as a `DiagnosticCode` this lookup never falls through —
+// the `??` branch is provably dead. It stays in source anyway, unreachable, as
+// the statement of intent ndr:bqh2gz commits to keeping: deleting it would
+// assert a disposition table nothing has actually verified stays total forever
+// against a `code` read back from outside the type system (e.g. a persisted
+// report re-parsed as `string`).
+export function dispositionOf(code: DiagnosticCode): Disposition {
   return DISPOSITION_BY_CODE[code] ?? 'not-established';
 }
 

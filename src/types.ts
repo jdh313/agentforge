@@ -18,7 +18,14 @@ export type ArtifactType = 'skill' | 'agent' | 'output-style';
 
 export const ARTIFACT_TYPES: readonly ArtifactType[] = ['skill', 'agent', 'output-style'] as const;
 
-export type WarningKind =
+// The closed vocabulary every compiler diagnostic's `code` is drawn from
+// (ndr:bqh2gz). `src/report.ts`'s `DISPOSITION_BY_CODE` is required by the
+// type checker to be total over this union, so a member added here without a
+// matching disposition entry fails the build rather than drifting silently.
+// The renderer's `WarningKind` below is a subset of this same union — never a
+// second union assigned into the `code` field — because the renderer and the
+// compiler share one runtime vocabulary of codes.
+export type DiagnosticCode =
   | 'claude-only-frontmatter-stripped'
   | 'claude-only-body-feature'
   // Construct-shaped but unclassified. Kept separate from
@@ -40,7 +47,32 @@ export type WarningKind =
   // ndr:728mf7 forbids a diagnostic asserting ownership besides — so this is the
   // one warning that fires for `claude` as well.
   | 'construct-unresolved-at-install-scope'
-  | 'artifact-not-supported';
+  // Compiler-only codes below: never assigned from a leaf `Warning.kind`, so
+  // they are outside `WarningKind`'s `Extract` even though they share this
+  // union.
+  | 'supplied-output-override'
+  | 'translated-construct'
+  | 'unsupported-hook-event'
+  | 'unclassified-hook-event'
+  | 'translated-hook-handler-args'
+  | 'hook-timeout-capped-by-runtime'
+  | 'empty-hook-configuration'
+  | 'inferred-artifact-projection'
+  | 'unclassified-construct'
+  | 'declared-loss'
+  | 'unsupported-artifact-projection';
+
+// The renderer's warning vocabulary, derived rather than re-declared
+// (ndr:bqh2gz): every member here is a `DiagnosticCode`, and the renderer can
+// never mint a code the compiler's union does not already carry.
+export type WarningKind = Extract<
+  DiagnosticCode,
+  | 'claude-only-frontmatter-stripped'
+  | 'claude-only-body-feature'
+  | 'unclassified-body-construct'
+  | 'unrecognized-frontmatter-key'
+  | 'construct-unresolved-at-install-scope'
+>;
 
 export interface Warning {
   kind: WarningKind;

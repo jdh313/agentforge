@@ -151,13 +151,13 @@ describe('marketplace compiler interface', () => {
         ],
         diagnostics: [
           {
-            code: 'z-last',
+            code: 'unclassified-construct',
             severity: 'warning',
             packageId: 'spec-flow',
             message: 'Later diagnostic',
           },
           {
-            code: 'unresolved-projection',
+            code: 'unsupported-artifact-projection',
             severity: 'note',
             packageId: 'librarian',
             message: 'No Claude projection exists for agent artifacts; source retained.',
@@ -182,7 +182,7 @@ describe('marketplace compiler interface', () => {
     ]);
     expect(plan.diagnostics).toEqual([
       {
-        code: 'unresolved-projection',
+        code: 'unsupported-artifact-projection',
         severity: 'note',
         message: 'No Claude projection exists for agent artifacts; source retained.',
         retainedSource: {
@@ -197,7 +197,7 @@ describe('marketplace compiler interface', () => {
         },
       },
       {
-        code: 'z-last',
+        code: 'unclassified-construct',
         severity: 'warning',
         message: 'Later diagnostic',
         target: 'claude',
@@ -422,7 +422,7 @@ describe('marketplace compiler interface', () => {
             outputs: [],
             diagnostics: [
               {
-                code: 'unexpected-package',
+                code: 'unclassified-construct',
                 severity: 'warning',
                 packageId: 'coach',
                 message: 'Coach is not enrolled for Codex.',

@@ -12,7 +12,7 @@ import type {
 import type { PackagePayload } from './package-payload-plan.ts';
 import { buildRootManifestOutput } from './root-manifest.ts';
 import type { TargetAdapter } from './target-adapter.ts';
-import type { TargetName } from './types.ts';
+import type { DiagnosticCode, TargetName } from './types.ts';
 
 type PublicationDefinition = MarketplaceDefinition['publications'][number];
 type MarketplaceMetadata = MarketplaceDefinition['defaults'];
@@ -118,7 +118,7 @@ export interface SourceLocation {
 }
 
 export interface ProposedCompilationDiagnostic {
-  code: string;
+  code: DiagnosticCode;
   severity: 'note' | 'warning';
   message: string;
   packageId?: string;
