@@ -5,13 +5,15 @@ that the stateful teaching workflow behaves correctly. Teach is authored in
 `jdh-agents/plugins/teach`; AgentForge supplies its target projection and
 diagnostics.
 
-Last exercised: 2026-09-16
+Last exercised: 2026-09-18
 
 Harness and source baseline:
 
 - Codex CLI 0.154.0
-- AgentForge parent revision `bbfb0d70`
-- Teach 0.11.1 from `jdh-agents`
+- AgentForge parent revision `029f2e69`
+- Teach 0.11.5 from `jdh-agents`
+- Fresh Codex sessions using `gpt-5.6-luna` for the neutral, explicit, and
+  continuation traces
 
 ## Evidence classes
 
@@ -42,11 +44,11 @@ collaborator abstraction or changing the declared-loss policy.
 
 | Procedure | Canonical instruction | Codex disposition | Current status |
 |---|---|---|---|
-| Obsidian | Read and write vault notes with `obsidian-cli`; use whichever targeted note-patch tool the runtime offers for surgical edits | The CLI is portable. The shared wording no longer names Claude's Obsidian MCP integration; the allowed/disallowed tool fences are still stripped | Static mapping closed; runtime I/O not yet accepted |
+| Obsidian | Read and write vault notes with `obsidian-cli`; use whichever targeted note-patch tool the runtime offers for surgical edits | The CLI is portable. The shared wording no longer names Claude's Obsidian MCP integration; the allowed/disallowed tool fences are still stripped | Static mapping closed; observed Codex I/O accepted for the dated baseline below |
 | DEVONthink | Search owned textbooks before web sources using read-only MCP tools | Integration is unavailable; the retained references are declared unenforced and the interface says Codex falls back to web sources | Explicit declared loss |
-| Reader/editor collaboration | A registered read-only vault collaborator may read learning style, and a registered bounded vault-editor collaborator may handle complex restructuring when available | The wording is capability-conditional and names no runtime-specific collaborator. Without one, the CLI/direct-edit paths remain explicit and the runtime must not invent a collaborator | Static mapping closed; runtime behavior not yet accepted |
-| User input | Propose and confirm the workspace path before creation; confirm mission changes and source choices | Ordinary conversation or structured input can preserve the pause | Requires a no-write-before-confirmation runtime trace |
-| Vault guidance | Read the learning-style note and the vault's `.claude/CLAUDE.md` Location Decision Tree | A literal content read may work, but there is no tested Codex fallback | Requires an observed read and path proposal |
+| Reader/editor collaboration | A registered read-only vault collaborator may read learning style, and a registered bounded vault-editor collaborator may handle complex restructuring when available | The wording is capability-conditional and names no runtime-specific collaborator. Without one, the CLI/direct-edit paths remain explicit and the runtime must not invent a collaborator | Static mapping closed; the observed Codex run used the direct fallback and invented no collaborator |
+| User input | Propose and confirm the workspace path before creation; confirm mission changes and source choices | Ordinary conversation or structured input can preserve the pause | Observed pause before the first write |
+| Vault guidance | Read the learning-style note and the vault's `.claude/CLAUDE.md` Location Decision Tree | The Codex run can use literal, path-qualified reads | Observed full reads and a compliant path proposal |
 
 The source should prefer target-neutral intent where only a small phrase
 differs. A full `targets.codex.body` copy of the long Teach procedure would
@@ -130,40 +132,78 @@ run**, by that model, under that sandbox. It does not demonstrate that a
 violating call would have been refused, because on the current evidence nothing
 in the projection would refuse it.
 
-## Runtime acceptance plan
+## Runtime acceptance result
 
-The following gates remain deliberately unclaimed:
+The seven gates were exercised against the baselines above, with the Claude
+regression supplied by its separate 2026-09-16 trace:
 
-1. **Fresh install and discovery.** Reinstall Teach from the local Codex
-   publication, inspect the installed cache rather than only publication
-   bytes, and verify the projected sidecar is present.
-2. **Explicit-only invocation.** In a fresh task, verify natural-language
-   prompting does not inject Teach and explicit `$teach` selection does.
-3. **Pre-write safety gate.** Invoke Teach explicitly, have it read the
-   learning-style and location guidance, propose a disposable workspace path,
-   and prove it stops before the first write for user confirmation.
-4. **Stateful Codex flow.** With approval, create a disposable Mission,
-   Resources, Glossary, Records, and lesson set, then advance the same workspace
-   from a second fresh session. Record the exact vault diff.
-5. **Capability-conditional collaboration.** Verify the session delegates vault
-   work only when an appropriate registered collaborator is actually available;
-   otherwise it must follow the CLI/direct-edit fallback and must not invent a
-   collaborator. The static wording is corrected, but only an observed trace
-   establishes runtime behavior.
-6. **Truthful fallback.** Verify the session says DEVONthink is unavailable and
-   uses web sources without claiming it searched owned textbooks.
-7. **Claude regression.** Validate and exercise the corresponding Claude
-   workflow separately.
+1. **Fresh install and discovery — passed.** Teach was removed and reinstalled
+   from the local `jdh-agents` Codex publication. The installed 0.11.5 cache was
+   byte-for-byte identical to the publication and contained
+   `skills/teach/agents/openai.yaml` with
+   `policy.allow_implicit_invocation: false`.
+2. **Explicit-only invocation — passed.** In a fresh neutral directory, the
+   natural-language request “Teach me how Bloom filters work as a multi-session
+   course” produced an ordinary in-chat course. The session did not load Teach,
+   inspect vault guidance, propose a workspace, or write a file. A separate
+   fresh session selected with `$teach` loaded and followed the installed
+   skill. An earlier natural-language trial inside the `jdh-agents-teach-103`
+   source worktree is excluded: source search let that agent find and manually
+   load Teach, so the trial cannot establish invocation policy either way.
+3. **Pre-write safety gate — passed.** The explicit session found the vault,
+   read the complete learning-style note and 661-line vault guidance, proposed
+   `Reference/Developer/Bloom Filters/`, and stopped for confirmation. The path
+   did not exist before approval.
+4. **Stateful Codex flow — passed.** After approval, the first session created
+   only `Mission.md`, `Resources.md`, `Glossary.md`, an empty `Records/`, and
+   `lessons/0001-bloom-filter-membership.md` in the confirmed workspace. A
+   second fresh session reconstructed that state and added only
+   `lessons/0002-bloom-filter-saturation.md`; the existing three top-level notes
+   were unchanged and `Records/` remained empty.
+5. **Capability-conditional collaboration — passed for the observed run.** No
+   applicable registered vault collaborator was available. Both Codex sessions
+   used the CLI/direct path and invented no collaborator.
+6. **Truthful fallback — passed.** The explicit session said DEVONthink was
+   unavailable and had not been searched, then used direct web links. It made
+   no claim about searching owned textbooks.
+7. **Claude regression — passed separately.** The 2026-09-16 fresh Claude
+   0.11.5 trace loaded the generated plugin, invoked `/teach:teach`, read the
+   full vault guidance, waited for path confirmation, and created the expected
+   five Markdown notes. That trace was not rerun as part of the Codex exercise.
 
-The disposable vault workflow is a persistent external change. It must not run
-without an approved path and cleanup plan. A successful smoke test would prove
-the observed workflow was non-destructive; it would not prove universal tool
-enforcement because Codex does not retain Teach's tool filters.
+The final observed Codex workspace inventory was:
+
+```text
+Glossary.md
+Mission.md
+Records/
+Resources.md
+lessons/
+lessons/0001-bloom-filter-membership.md
+lessons/0002-bloom-filter-saturation.md
+```
+
+This is dated runtime evidence, not a claim of universal enforcement. In
+particular, gate 5 shows compliance by these sessions under their parent
+sandbox; it does not change the advisory tool boundary described above.
+
+### Test-environment notes
+
+The disposable workspace remains in the approved vault path pending explicit
+cleanup. Installation also exposed a stale `cc-marketplace` source in the user
+configuration. The test controller repaired it reversibly with a compatibility
+marketplace at `~/.codex/marketplaces/cc-marketplace-compat`, preserving prior
+plugin enablement states, and backed up the original configuration before
+registering the live `jdh-agents` publication. Those environment changes made
+the test possible; they are not Teach product behavior.
 
 ## Current disposition
 
-Teach is compiled and enrolled for Codex, and its explicit-only sidecar is
-generated correctly. Runtime acceptance is not complete.
+Teach 0.11.5 is accepted on the observed Claude and Codex baselines. The Codex
+publication was freshly installed, explicit-only invocation held in a neutral
+directory, the approval boundary held before the first vault write, and a fresh
+continuation session advanced the same workspace without disturbing its prior
+state.
 
 The pre-smoke documentation work is done. For the record, what each item
 settled:
@@ -179,8 +219,13 @@ settled:
   the authoritative marketplace definition, with declared enrollment described
   separately from runtime acceptance.
 
-None of that is runtime evidence. It only stops the record from claiming
-things the artifacts do not support.
+The live trace also resolves the remaining ownership question without a body
+fork: the shared, capability-conditional procedure degraded correctly when the
+Codex session had no registered vault collaborator. A full
+`targets.codex.body` copy would still create avoidable drift, and the trace
+supplies no reason to remove a Claude feature merely because Codex lacks it.
 
-The final live gate requires explicit approval because it creates notes in the
-user's vault.
+Acceptance remains scoped to the versions and dated observations in this
+record. It does not turn Teach's prose tool fences into enforcement, promise
+that future runtime versions behave identically, or erase the declared
+DEVONthink loss.
