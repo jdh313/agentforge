@@ -119,6 +119,7 @@ function diagnosticsFor(
     message: `Artifact ${JSON.stringify(projection.artifactName)}: ${warning.detail}.`,
     target,
     provenance,
+    locations: warning.locations,
   }));
 }
 

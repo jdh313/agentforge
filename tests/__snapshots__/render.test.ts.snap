@@ -52,6 +52,12 @@ exports[`render skill claude-rich → opencode: warnings 1`] = `
   {
     "detail": "body uses $ARGUMENTS but no targets.opencode.body override",
     "kind": "claude-only-body-feature",
+    "locations": [
+      {
+        "line": 12,
+        "path": "tests/fixtures/claude-rich/SKILL.md",
+      },
+    ],
     "target": "opencode",
   },
 ]
@@ -85,6 +91,12 @@ exports[`render skill claude-rich → codex: warnings 1`] = `
   {
     "detail": "body uses $ARGUMENTS but no targets.codex.body override",
     "kind": "claude-only-body-feature",
+    "locations": [
+      {
+        "line": 12,
+        "path": "tests/fixtures/claude-rich/SKILL.md",
+      },
+    ],
     "target": "codex",
   },
 ]
@@ -120,6 +132,12 @@ exports[`render skill claude-rich → pi: warnings 1`] = `
   {
     "detail": "body uses $ARGUMENTS but no targets.pi.body override",
     "kind": "claude-only-body-feature",
+    "locations": [
+      {
+        "line": 12,
+        "path": "tests/fixtures/claude-rich/SKILL.md",
+      },
+    ],
     "target": "pi",
   },
 ]
@@ -153,6 +171,12 @@ exports[`render skill claude-rich → claude-chat: warnings 1`] = `
   {
     "detail": "body uses $ARGUMENTS but no targets.claude-chat.body override",
     "kind": "claude-only-body-feature",
+    "locations": [
+      {
+        "line": 12,
+        "path": "tests/fixtures/claude-rich/SKILL.md",
+      },
+    ],
     "target": "claude-chat",
   },
 ]
@@ -236,6 +260,12 @@ exports[`render skill with-overrides → pi: warnings 1`] = `
   {
     "detail": "body uses $ARGUMENTS but no targets.pi.body override",
     "kind": "claude-only-body-feature",
+    "locations": [
+      {
+        "line": 17,
+        "path": "tests/fixtures/with-overrides/SKILL.md",
+      },
+    ],
     "target": "pi",
   },
 ]
@@ -263,6 +293,12 @@ exports[`render skill with-overrides → claude-chat: warnings 1`] = `
   {
     "detail": "body uses $ARGUMENTS but no targets.claude-chat.body override",
     "kind": "claude-only-body-feature",
+    "locations": [
+      {
+        "line": 17,
+        "path": "tests/fixtures/with-overrides/SKILL.md",
+      },
+    ],
     "target": "claude-chat",
   },
 ]

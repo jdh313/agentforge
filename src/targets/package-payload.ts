@@ -98,11 +98,10 @@ export function compilePackagePayload(
             severity: 'warning' as const,
             packageId: packageInput.id,
             message: `Skill "${projection.artifactName}": ${warning.detail}.`,
-            // File granularity only: a leaf `Warning` aggregates every lost
-            // literal into one detail string and carries no positions, so the
-            // canonical file is the finest location available without widening
-            // the renderer's own warning shape.
-            locations: [locationOf(artifact.path)],
+            // Per-occurrence positions when the leaf `Warning` carries them
+            // (body constructs); file granularity otherwise (e.g. a
+            // frontmatter key, which has no line that identifies it).
+            locations: warning.locations ?? [locationOf(artifact.path)],
           })),
         );
         continue;

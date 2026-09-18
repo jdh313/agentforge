@@ -217,13 +217,19 @@ function bodyOf(file: LoadedArtifact, artifactType: string): { body: string; off
   if (artifactType === 'resource') return { body: file.content, offset: 0 };
   try {
     const parsed = matter(file.content);
-    // gray-matter strips the frontmatter block; recover the line offset so a
-    // reported line still points at the right place in the real file.
-    const consumed = file.content.length - parsed.content.length;
-    return { body: parsed.content, offset: countNewlines(file.content.slice(0, consumed)) };
+    return { body: parsed.content, offset: frontmatterOffset(file.content, parsed.content) };
   } catch {
     return { body: file.content, offset: 0 };
   }
+}
+
+// gray-matter strips the frontmatter block; recover the line offset so a line
+// found in `body` can be reported as file-relative. `render.ts` needs the
+// identical recipe for the leaf projection path, so it is composed once here
+// rather than kept in sync by comment alone (Fibery #121).
+export function frontmatterOffset(rawSource: string, body: string): number {
+  const consumed = rawSource.length - body.length;
+  return countNewlines(rawSource.slice(0, consumed));
 }
 
 function pushToolFilter(

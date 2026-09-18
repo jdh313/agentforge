@@ -16,10 +16,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 import JSZip from 'jszip';
+import { portableRelative } from '../src/paths.ts';
 import { projectArtifact, render } from '../src/render.ts';
 import { ARTIFACT_DEFS, CanonicalAgentFrontmatter } from '../src/schema.ts';
 import { getArtifactConfig } from '../src/targets/index.ts';
-import { type ArtifactType, TARGET_NAMES, type TargetName } from '../src/types.ts';
+import { type ArtifactType, TARGET_NAMES, type TargetName, type Warning } from '../src/types.ts';
 
 const SKILL_FIXTURES = [
   'claude-rich',
@@ -38,6 +39,23 @@ const AGENT_FIXTURES = [
 ] as const;
 
 const FIXTURE_DIR = (name: string) => join(import.meta.dir, 'fixtures', name);
+const REPO_ROOT = join(import.meta.dir, '..');
+
+// `Warning.locations` is absolute in memory by design (ndr:c5snzf) — a
+// contributor's own checkout path, so it can never sit in a committed
+// snapshot. Relativize against the repo root for the snapshot only; the
+// production value asserted elsewhere stays absolute.
+const forSnapshot = (warnings: readonly Warning[]): unknown =>
+  warnings.map((warning) => {
+    if (!warning.locations) return warning;
+    return {
+      ...warning,
+      locations: warning.locations.map((location) => ({
+        ...location,
+        path: portableRelative(REPO_ROOT, location.path),
+      })),
+    };
+  });
 
 let TMP_ROOT: string;
 
@@ -102,7 +120,7 @@ const runFixture = async (
     ARTIFACT_DEFS[artifact].canonicalFilename,
   );
   expect(content).toMatchSnapshot('canonical');
-  expect(result.warnings).toMatchSnapshot('warnings');
+  expect(forSnapshot(result.warnings)).toMatchSnapshot('warnings');
   expect(result.resourcesCopied.toSorted()).toMatchSnapshot('resources');
 
   for (const sub of result.resourcesCopied) {

@@ -1,3 +1,5 @@
+import type { SourceLocation } from './compiler.ts';
+
 export type TargetName = 'claude' | 'opencode' | 'codex' | 'pi' | 'claude-chat';
 
 export type InstallScope = 'user' | 'project' | 'plugin';
@@ -78,6 +80,10 @@ export interface Warning {
   kind: WarningKind;
   target: TargetName;
   detail: string;
+  // Per-occurrence positions, when the detector that raised this warning knows
+  // them. Absent means file-granularity only (e.g. a frontmatter key, which
+  // has no line that identifies it — see `src/compatibility.ts`).
+  locations?: readonly SourceLocation[];
 }
 
 export interface RenderResult {

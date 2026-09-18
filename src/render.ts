@@ -12,7 +12,8 @@ import {
   supportFor,
   translationFor,
 } from './capabilities.ts';
-import type { CompilationPlan, DesiredOutput } from './compiler.ts';
+import { frontmatterOffset } from './compatibility.ts';
+import type { CompilationPlan, DesiredOutput, SourceLocation } from './compiler.ts';
 import { deepMerge } from './deep-merge.ts';
 import { acceptedFrontmatterKeys } from './frontmatter.ts';
 import { materializeCompilation } from './materializer.ts';
@@ -87,19 +88,47 @@ export { buildArtifactOutputs } from './artifact-plan.ts';
 // `unsupported` and `unknown` are kept apart. A confirmed loss and an
 // unrecognized shape warrant different words — collapsing them would report an
 // ordinary `$PATH` as a Claude-only feature the target is about to drop.
+interface BodyConstructOccurrences {
+  literals: string[];
+  locations: SourceLocation[];
+}
+
 const detectClaudeOnlyBodyFeatures = (
   body: string,
+  // Newlines gray-matter's frontmatter block consumed, so a body-relative
+  // `shape.line` can be reported as file-relative — the same recovery
+  // `bodyOf` in `src/compatibility.ts` does for the marketplace path.
+  lineOffset: number,
+  sourcePath: string,
   target: TargetName,
   surface: ConstructSurface,
-): { lost: string[]; unclassified: string[] } => {
+): { lost: BodyConstructOccurrences; unclassified: BodyConstructOccurrences } => {
   const lost = new Set<string>();
   const unclassified = new Set<string>();
+  // Positions per occurrence, kept separate from the deduped literal sets
+  // above: the message still names each lost literal once, but a warning
+  // recorded against one literal for the whole file lost every repeat's own
+  // location. `findConstructShapes` already yields shapes in line order, so
+  // these arrive sorted too. Paired with its own literal set structurally
+  // (rather than as four parallel top-level fields) so the two can no longer
+  // drift out of lockstep (Fibery #121).
+  const lostLocations: SourceLocation[] = [];
+  const unclassifiedLocations: SourceLocation[] = [];
   for (const shape of findConstructShapes(body)) {
     const support = supportFor(target, surface, shape.token);
-    if (support === 'unsupported') lost.add(shape.literal);
-    else if (support === 'unknown') unclassified.add(shape.literal);
+    const line = shape.line + lineOffset;
+    if (support === 'unsupported') {
+      lost.add(shape.literal);
+      lostLocations.push({ path: sourcePath, line });
+    } else if (support === 'unknown') {
+      unclassified.add(shape.literal);
+      unclassifiedLocations.push({ path: sourcePath, line });
+    }
   }
-  return { lost: [...lost].toSorted(), unclassified: [...unclassified].toSorted() };
+  return {
+    lost: { literals: [...lost].toSorted(), locations: lostLocations },
+    unclassified: { literals: [...unclassified].toSorted(), locations: unclassifiedLocations },
+  };
 };
 
 // Body constructs this (target, surface) expands only at some install scopes.
@@ -176,6 +205,10 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
     targets?: Record<string, unknown>;
   };
   const canonicalBody = parsed.content;
+  // Same recovery `bodyOf` in `src/compatibility.ts` does, via the shared
+  // helper: gray-matter strips the frontmatter block, so a line found in
+  // `canonicalBody` is off by however many newlines that block consumed.
+  const frontmatterLineOffset = frontmatterOffset(source, canonicalBody);
 
   // Authoring-layer keys are removed here, before anything else looks at the
   // frontmatter, so no later step can report or emit one. Stripping a declared
@@ -241,21 +274,25 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
     if (overrideBody === undefined) {
       const { lost, unclassified } = detectClaudeOnlyBodyFeatures(
         canonicalBody,
+        frontmatterLineOffset,
+        sourcePath,
         target,
         artifactConfig.surface,
       );
-      if (lost.length > 0) {
+      if (lost.literals.length > 0) {
         warnings.push({
           kind: 'claude-only-body-feature',
           target,
-          detail: `body uses ${lost.join(', ')} but no targets.${target}.body override`,
+          detail: `body uses ${lost.literals.join(', ')} but no targets.${target}.body override`,
+          locations: lost.locations,
         });
       }
-      if (unclassified.length > 0) {
+      if (unclassified.literals.length > 0) {
         warnings.push({
           kind: 'unclassified-body-construct',
           target,
-          detail: `body uses ${unclassified.join(', ')}, which no capability-table entry covers`,
+          detail: `body uses ${unclassified.literals.join(', ')}, which no capability-table entry covers`,
+          locations: unclassified.locations,
         });
       }
     }
