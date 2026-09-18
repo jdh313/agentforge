@@ -1,3 +1,34 @@
+# [1.0.0](https://github.com/jdh313/agentforge/compare/v0.5.0...v1.0.0) (2026-09-18)
+
+
+* feat(install)!: drop the inert Codex agent project scope ([c725c45](https://github.com/jdh313/agentforge/commit/c725c45b637b6aaefb17d2f9ab01be979ca3a5dd))
+
+
+### Bug Fixes
+
+* **capabilities:** correct the hook parity record and cite its source ([d9da868](https://github.com/jdh313/agentforge/commit/d9da868f3af505ecb73183099417227d80518525))
+* **capabilities:** move Codex plugin-root translation to the hook surface ([ca5692c](https://github.com/jdh313/agentforge/commit/ca5692c246c82dc5901422e0fb4c91b7a4386bf0))
+* **capabilities:** review followups for ndr:61cmc9 ([2e42a03](https://github.com/jdh313/agentforge/commit/2e42a0305f09f3a44be7fad7d085f86073a7bb08))
+
+
+### Features
+
+* **agent:** admit the Claude fields its loader enforces ([4c0c2df](https://github.com/jdh313/agentforge/commit/4c0c2dfbfbcbadc097b59c07ce513bebdf5192c2))
+* **capabilities:** classify agent constructs on Codex and at leaf scope ([b16eabf](https://github.com/jdh313/agentforge/commit/b16eabfbb178cd15c2835f0ab382fe68e8d0c65c))
+* **codex-hooks:** locate hook diagnostics at the event's key line ([5b22346](https://github.com/jdh313/agentforge/commit/5b2234619ce2d0a2c5addd93ef8819754cfd2b69))
+* **compatibility:** detect an unregistrable collaborator reference ([32da2de](https://github.com/jdh313/agentforge/commit/32da2de799f00b73f1467fa5eea9b0a642e480ba)), closes [#23](https://github.com/jdh313/agentforge/issues/23)
+* **install:** refuse cross-target collisions at a shared install destination ([88bc543](https://github.com/jdh313/agentforge/commit/88bc54342f44ba1a4815b2b0d4388ce04db7bfd1))
+* **render:** give leaf body warnings per-occurrence source locations ([f9a2f3a](https://github.com/jdh313/agentforge/commit/f9a2f3a4abf0798804dd3c5690732d08aecc1e9f))
+* **report:** carry source locations on compiler diagnostics ([a709f88](https://github.com/jdh313/agentforge/commit/a709f882275eb44ee91cb0dd5609d41e23f47fbd))
+
+
+### BREAKING CHANGES
+
+* `install --target codex --scope project` for an agent
+now exits 1 instead of writing an unread file.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
 # [0.5.0](https://github.com/jdh313/agentforge/compare/v0.4.0...v0.5.0) (2026-09-17)
 
 
