@@ -205,6 +205,73 @@ describe('Codex SessionEnd timeout cap', () => {
   });
 });
 
+// Fibery #121, surface B. A hook diagnostic already names the offending
+// event in its message, but `retainedSource` only carries the file, so on a
+// `hooks.json` declaring several events the reader gets the file and then
+// scans. These diagnostics now also carry `locations`, found by re-scanning
+// the raw JSON text for the event name anchored in key position.
+describe('Codex hook diagnostic source locations', () => {
+  const LOCATIONS_FIXTURE = join(
+    import.meta.dir,
+    'fixtures',
+    'definitions',
+    'codex-hook-locations',
+    'MARKETPLACE.yaml',
+  );
+
+  test('points an unsupported-hook-event diagnostic at the event key line, not the decoy text above it', async () => {
+    const loaded = await loadMarketplaceDefinition(LOCATIONS_FIXTURE);
+    const plan = compileMarketplace(loaded, [
+      { target: 'claude', compilePublication: () => ({ outputs: [] }) },
+      codexMarketplaceAdapter,
+    ]);
+
+    const diagnostic = plan.diagnostics.find(
+      (candidate) =>
+        candidate.code === 'unsupported-hook-event' && candidate.provenance.packageId === 'located',
+    );
+    expect(diagnostic).toBeDefined();
+
+    // The fixture's "Notification" key sits on line 13; a decoy occurrence of
+    // the same word inside a `command` string on line 8 must not be mistaken
+    // for it.
+    expect(diagnostic?.locations).toEqual([
+      expect.objectContaining({
+        path: expect.stringContaining('located/hooks/hooks.json'),
+        line: 13,
+      }),
+    ]);
+  });
+
+  // `JSON.parse` keeps the last duplicate key, so a hooks.json declaring the
+  // same event twice yields a `source.hooks` entry built from the SECOND
+  // block. The location must scan for the last occurrence too, or it points
+  // at the stale first declaration while the diagnostic describes the second.
+  test('points a diagnostic for a duplicated hook event at its second (surviving) declaration', async () => {
+    const loaded = await loadMarketplaceDefinition(LOCATIONS_FIXTURE);
+    const plan = compileMarketplace(loaded, [
+      { target: 'claude', compilePublication: () => ({ outputs: [] }) },
+      codexMarketplaceAdapter,
+    ]);
+
+    const diagnostic = plan.diagnostics.find(
+      (candidate) =>
+        candidate.code === 'unsupported-hook-event' &&
+        candidate.provenance.packageId === 'duplicated',
+    );
+    expect(diagnostic).toBeDefined();
+
+    // The fixture declares "Notification" twice: line 3 (stale) and line 23
+    // (the declaration JSON.parse actually kept).
+    expect(diagnostic?.locations).toEqual([
+      expect.objectContaining({
+        path: expect.stringContaining('duplicated/hooks/hooks.json'),
+        line: 23,
+      }),
+    ]);
+  });
+});
+
 function findGenerated(
   outputs: readonly unknown[],
   matches: (destination: string) => boolean,

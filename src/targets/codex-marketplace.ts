@@ -9,6 +9,7 @@ import {
   type PackageManifestHandle,
   type ProposedCompilationDiagnostic,
   type PublicationCompilation,
+  type SourceLocation,
   type TargetCompilationResult,
 } from '../compiler.ts';
 import { deepMerge } from '../deep-merge.ts';
@@ -292,6 +293,7 @@ function translateHookConfiguration({
 
   for (const [event, groups] of Object.entries(source.hooks)) {
     const support = supportFor('codex', 'hook', event);
+    const eventLocation = locateHookEventKey(artifact.path, artifact.content, event);
     if (support !== 'supported') {
       // Two different claims, kept apart for the reason ndr:szdn5s keeps
       // `unclassified-body-construct` apart from `claude-only-body-feature`:
@@ -308,6 +310,7 @@ function translateHookConfiguration({
               packageId: packageInput.id,
               message: `Hook event "${event}" in ${relativePath} has no Codex analog and is absent from Codex output.`,
               retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
+              ...(eventLocation === undefined ? {} : { locations: [eventLocation] }),
             }
           : {
               code: 'unclassified-hook-event',
@@ -315,6 +318,7 @@ function translateHookConfiguration({
               packageId: packageInput.id,
               message: `Hook event "${event}" in ${relativePath} is not classified by the "codex/hook" capability table row, so whether Codex fires it is unestablished; the event is absent from Codex output. Add a table row entry once confirmed.`,
               retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
+              ...(eventLocation === undefined ? {} : { locations: [eventLocation] }),
             },
       );
       continue;
@@ -330,6 +334,7 @@ function translateHookConfiguration({
             packageId: packageInput.id,
             message: `Hook handler for "${event}" in ${relativePath} declares "args", which Codex has no field for; folded into the "command" string.`,
             retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
+            ...(eventLocation === undefined ? {} : { locations: [eventLocation] }),
           });
         }
         if (
@@ -343,6 +348,7 @@ function translateHookConfiguration({
             packageId: packageInput.id,
             message: `Hook handler for "SessionEnd" in ${relativePath} declares a ${handler.timeout}s timeout; Codex caps SessionEnd at ${SESSION_END_TIMEOUT_CAP_SECONDS}s, so the declared value is not honored in full.`,
             retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
+            ...(eventLocation === undefined ? {} : { locations: [eventLocation] }),
           });
         }
         const { args, ...rest } = handler;
@@ -442,6 +448,43 @@ function escapeQuotedSegment(segment: string): string {
     .replaceAll('"', '\\"')
     .replaceAll('$', '\\$')
     .replaceAll('`', '\\`');
+}
+
+// A hook diagnostic names the offending event in its message, but
+// `retainedSource` only carries the file, so on a `hooks.json` declaring a
+// dozen events the reader gets the file and then scans. `hooks.json` goes
+// through `JSON.parse` (no position-aware parse in hand at this call site),
+// so this re-scans the raw text for the event name anchored in *key*
+// position: `"<event>"` immediately followed by `:`. That excludes the
+// far more common case of the event name showing up inside a `command`
+// string or a matcher, where it is never followed by a colon. It is still
+// heuristic — an event name could in principle appear as `"<event>":` inside
+// a string value too — and that risk is accepted deliberately: the exact
+// alternative is a position-aware JSON parse run beside the existing zod one,
+// which this file does not take on. The event name in the message remains the
+// real identifier, so a close-but-wrong line is still a useful jump target.
+// No match found (event declared via dynamic construction, minified onto one
+// shared line as a decoy, etc.) means `undefined`, and callers omit
+// `locations` rather than guess.
+//
+// A duplicate top-level key scans to its LAST occurrence, matching
+// `JSON.parse`, which keeps the last duplicate key's value: `source.hooks`
+// (built by that same parse) reflects the second declaration, so the location
+// has to agree with the object the parser actually produced, not the first
+// textual match.
+function locateHookEventKey(
+  sourcePath: string,
+  content: string,
+  event: string,
+): SourceLocation | undefined {
+  const keyPattern = new RegExp(`"${escapeRegExp(event)}"\\s*:`);
+  const lines = content.split('\n');
+  for (let index = lines.length - 1; index >= 0; index--) {
+    if (keyPattern.test(lines[index])) {
+      return { path: sourcePath, line: index + 1 };
+    }
+  }
+  return undefined;
 }
 
 function rewriteClaudeHookEnv(value: string): string {

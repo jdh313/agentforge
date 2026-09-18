@@ -1,0 +1,15 @@
+schema: agentforge.package/v1
+id: located
+defaults:
+  name: located
+  version: 1.0.0
+  description: Fixture package exercising hook diagnostic source locations.
+artifacts:
+  - type: hook
+    pattern: hooks/hooks.json
+targets:
+  codex:
+    native:
+      interface:
+        displayName: Located
+        category: Developer Tools

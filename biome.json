@@ -5,6 +5,7 @@
       "src/**",
       "tests/**",
       "!!tests/fixtures/expected",
+      "!!tests/fixtures/definitions/codex-hook-locations/packages/duplicated/hooks/hooks.json",
       "*.json",
       "*.md",
       "!!**/node_modules",

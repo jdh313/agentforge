@@ -1,0 +1,15 @@
+schema: agentforge.package/v1
+id: duplicated
+defaults:
+  name: duplicated
+  version: 1.0.0
+  description: Fixture package exercising a hooks.json with a duplicate top-level event key.
+artifacts:
+  - type: hook
+    pattern: hooks/hooks.json
+targets:
+  codex:
+    native:
+      interface:
+        displayName: Duplicated
+        category: Developer Tools
