@@ -9,6 +9,7 @@ import {
 } from './check.ts';
 import type { CompilationPlan } from './compiler.ts';
 import { canonicalOutput, detectInstallCollision } from './install-collision.ts';
+import { resolveFileInstallLayout } from './install-layout.ts';
 import {
   type MaterializationResult,
   materializeCompilation,
@@ -72,27 +73,7 @@ export function buildInstallPlan(options: BuildInstallPlanOptions): InstallPlan 
     );
   }
 
-  const projection = loadArtifactProjection({
-    sourceDir,
-    target: options.target,
-    artifact: options.artifact,
-  });
-  const planned = buildArtifactPlan({
-    sourceDir,
-    target: options.target,
-    artifact: options.artifact,
-    publicationId: 'install',
-    projection,
-  });
   const artifactDef = ARTIFACT_DEFS[options.artifact];
-  if (
-    artifactDef.layout === 'directory' &&
-    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(planned.artifactName)
-  ) {
-    throw new Error(
-      `artifact name ${JSON.stringify(planned.artifactName)} is not a portable skill directory name`,
-    );
-  }
   const resolvedHomeDirectory = resolve(options.homeDirectory ?? homedir());
   const resolvedProjectRoot = resolve(options.projectRoot);
   const resolvedPluginRoot =
@@ -102,8 +83,39 @@ export function buildInstallPlan(options: BuildInstallPlanOptions): InstallPlan 
     projectRoot: resolvedProjectRoot,
     ...(resolvedPluginRoot === undefined ? {} : { pluginRoot: resolvedPluginRoot }),
   });
+  const fileLayout =
+    artifactDef.layout === 'file'
+      ? resolveFileInstallLayout(locationRoot, options.scope, resolvedPluginRoot)
+      : undefined;
+  const projection = loadArtifactProjection({
+    sourceDir,
+    target: options.target,
+    artifact: options.artifact,
+    installScope: options.scope,
+  });
+  const planned = buildArtifactPlan({
+    sourceDir,
+    target: options.target,
+    artifact: options.artifact,
+    publicationId: 'install',
+    projection,
+    ...(fileLayout?.artifactPrefix === undefined ? {} : { prefix: fileLayout.artifactPrefix }),
+    ...(fileLayout?.resourcePrefix === undefined
+      ? {}
+      : { resourcePrefix: fileLayout.resourcePrefix }),
+  });
+  if (
+    artifactDef.layout === 'directory' &&
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(planned.artifactName)
+  ) {
+    throw new Error(
+      `artifact name ${JSON.stringify(planned.artifactName)} is not a portable skill directory name`,
+    );
+  }
   const destinationRoot =
-    artifactDef.layout === 'directory' ? join(locationRoot, planned.artifactName) : locationRoot;
+    artifactDef.layout === 'directory'
+      ? join(locationRoot, planned.artifactName)
+      : (fileLayout?.destinationRoot ?? locationRoot);
 
   return {
     sourceDir,

@@ -43,6 +43,11 @@ export interface ArtifactConfig {
   installLocations: Partial<Record<InstallScope, InstallLocation>>;
   surface: ConstructSurface;
   resourceSubdirs: ReadonlySet<string>;
+  // When present, standalone rendering still carries these resources, but an
+  // install includes them only at the named scopes. File-layout agents use
+  // this to stay one-file at user/project scope while plugin scope publishes
+  // the package-root resources their bodies address.
+  resourceInstallScopes?: ReadonlySet<InstallScope>;
   outputFrontmatterSchema: z.ZodType;
   bundle?: 'dir' | 'zip';
   // Present only for a target/artifact pair that registers as a native

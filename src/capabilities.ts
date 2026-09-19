@@ -241,8 +241,9 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
 // `claude/skill` is deliberately absent even though the same gating applies to
 // skill bodies: marketplace skills DO go through `projectArtifact` and land at
 // plugin scope, where the substitution runs, so listing it here would warn on
-// output that resolves correctly. Agents reach `projectArtifact` on the leaf
-// path only, which is what makes `claude/agent` the honest entry.
+// output that resolves correctly. Agents also reach `projectArtifact` through
+// the leaf path, where an unscoped render or a user/project install must expose
+// the condition. A plugin install passes its known scope and suppresses it.
 export interface ScopeGating {
   tokens: readonly string[];
   /** Install scopes where the construct IS expanded. */
@@ -257,7 +258,7 @@ const SCOPE_GATED: ReadonlyMap<string, ScopeGating> = new Map([
       tokens: ['${CLAUDE_*}'],
       resolvedAt: ['plugin'],
       source:
-        'Claude Code 2.1.274 bundle. One function performs the substitution — `EJ` at offset 175078369, `e.replace(/\\$\\{CLAUDE_PLUGIN_ROOT\\}/g, …)` plus `${CLAUDE_PROJECT_DIR}` and `${CLAUDE_PLUGIN_DATA}` — and it has exactly seven call sites, every one plugin-scoped: MCP server config (3), the plugin agent loader `Yvn`, the plugin skill/command body, and the plugin monitor command. The non-plugin agent loader `PUo` assigns `Tn = s.trim()` once and returns it unchanged apart from appending a memory block, so no substitution reaches a user- or project-scope agent. Confirmed live on 2026-09-17, not inferred from strings: a project-scope agent whose body carried `NONCE7Q4<<<${CLAUDE_PLUGIN_ROOT}|${CLAUDE_PROJECT_DIR}>>>NONCE7Q4` was dispatched for real and echoed the span back character-for-character, unexpanded. `${CLAUDE_PROJECT_DIR}` is the load-bearing half of that control: it is scope-relative and needs no plugin, and it still does not expand, which establishes that the gate is the loader rather than the token.',
+        'Claude Code 2.1.274 bundle. One function performs the substitution — `EJ` at offset 175078369, `e.replace(/\\$\\{CLAUDE_PLUGIN_ROOT\\}/g, …)` plus `${CLAUDE_PROJECT_DIR}` and `${CLAUDE_PLUGIN_DATA}` — and it has exactly seven call sites, every one plugin-scoped: MCP server config (3), the plugin agent loader `Yvn`, the plugin skill/command body, and the plugin monitor command. The non-plugin agent loader `PUo` assigns `Tn = s.trim()` once and returns it unchanged apart from appending a memory block, so no substitution reaches a user- or project-scope agent. Confirmed live on 2026-09-17, not inferred from strings: a project-scope agent whose body carried `NONCE7Q4<<<${CLAUDE_PLUGIN_ROOT}|${CLAUDE_PROJECT_DIR}>>>NONCE7Q4` was dispatched for real and echoed the span back character-for-character, unexpanded. `${CLAUDE_PROJECT_DIR}` is the load-bearing half of that control: it is scope-relative and needs no plugin, and it still does not expand, which establishes that the gate is the loader rather than the token. Reconfirmed positively on 2026-09-19 with Claude Code 2.1.278: a plugin-scoped leaf-installed Librarian vault-reader resolved `${CLAUDE_PLUGIN_ROOT}` and read all three package-root reference files.',
     },
   ],
 ]);

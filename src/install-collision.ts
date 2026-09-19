@@ -3,6 +3,7 @@ import { join, relative, sep } from 'node:path';
 import matter from 'gray-matter';
 import { buildArtifactPlan } from './artifact-plan.ts';
 import type { CompilationPlan, DesiredOutput } from './compiler.ts';
+import { resolveFileInstallLayout } from './install-layout.ts';
 import { loadArtifactProjection } from './render.ts';
 import { ARTIFACT_DEFS } from './schema.ts';
 import { getArtifactConfig } from './targets/registry.ts';
@@ -93,23 +94,40 @@ export function detectInstallCollision(input: InstallCollisionInput): InstallCol
       continue;
     }
 
+    const candidateFileLayout =
+      artifactDef.layout === 'file'
+        ? resolveFileInstallLayout(candidateLocationRoot, scope, pluginRoot)
+        : undefined;
+
     // A target that writes somewhere else can never be the thing already on
-    // disk at `destinationRoot`. File-layout artifacts write straight to
-    // their location root, so this is decisive here; directory-layout
-    // artifacts still need the candidate's own artifact name (below) before
-    // the full destination is known.
-    if (artifactDef.layout === 'file' && candidateLocationRoot !== destinationRoot) continue;
+    // disk at `destinationRoot`. Directory-layout artifacts still need the
+    // candidate's own artifact name (below) before the full destination is
+    // known.
+    if (artifactDef.layout === 'file' && candidateFileLayout?.destinationRoot !== destinationRoot) {
+      continue;
+    }
 
     let candidateOutputs: readonly DesiredOutput[];
     let candidateArtifactName: string;
     try {
-      const projection = loadArtifactProjection({ sourceDir, target: candidate, artifact });
+      const projection = loadArtifactProjection({
+        sourceDir,
+        target: candidate,
+        artifact,
+        installScope: scope,
+      });
       const built = buildArtifactPlan({
         sourceDir,
         target: candidate,
         artifact,
         publicationId: 'install-collision-check',
         projection,
+        ...(candidateFileLayout?.artifactPrefix === undefined
+          ? {}
+          : { prefix: candidateFileLayout.artifactPrefix }),
+        ...(candidateFileLayout?.resourcePrefix === undefined
+          ? {}
+          : { resourcePrefix: candidateFileLayout.resourcePrefix }),
       });
       candidateOutputs = built.plan.outputs;
       candidateArtifactName = built.artifactName;
@@ -124,7 +142,7 @@ export function detectInstallCollision(input: InstallCollisionInput): InstallCol
     const candidateDestinationRoot =
       artifactDef.layout === 'directory'
         ? join(candidateLocationRoot, candidateArtifactName)
-        : candidateLocationRoot;
+        : (candidateFileLayout?.destinationRoot ?? candidateLocationRoot);
     if (candidateDestinationRoot !== destinationRoot) continue;
 
     const candidateBytes = bytesByDestination(candidateOutputs);
@@ -253,7 +271,8 @@ export function canonicalOutput(
         output.kind === 'generated' && output.destination === artifactDef.canonicalFilename,
     );
   }
-  // File layout ships exactly one managed destination per install.
+  // A file-layout install may also carry resources; the canonical document is
+  // still the generated output, while resources are copied outputs.
   return outputs.find((output) => output.kind === 'generated');
 }
 

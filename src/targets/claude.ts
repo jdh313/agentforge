@@ -72,7 +72,7 @@ export const claudeTarget: TargetAdapter = {
       installLocations: {
         user: ({ homeDirectory }) => join(homeDirectory, '.claude/skills'),
         project: ({ projectRoot }) => join(projectRoot, '.claude/skills'),
-        plugin: ({ pluginRoot }) => requirePluginRoot(pluginRoot, 'claude'),
+        plugin: ({ pluginRoot }) => requirePluginSubdir(pluginRoot, 'claude', 'skills'),
       },
       surface: 'skill',
       resourceSubdirs: new Set(['scripts', 'references', 'assets']),
@@ -82,9 +82,11 @@ export const claudeTarget: TargetAdapter = {
       installLocations: {
         user: ({ homeDirectory }) => join(homeDirectory, '.claude/agents'),
         project: ({ projectRoot }) => join(projectRoot, '.claude/agents'),
+        plugin: ({ pluginRoot }) => requirePluginSubdir(pluginRoot, 'claude', 'agents'),
       },
       surface: 'agent',
-      resourceSubdirs: new Set(),
+      resourceSubdirs: new Set(['scripts', 'references', 'assets']),
+      resourceInstallScopes: new Set(['plugin']),
       outputFrontmatterSchema: ClaudeAgentFrontmatter,
     },
     'output-style': {
@@ -96,9 +98,13 @@ export const claudeTarget: TargetAdapter = {
   },
 };
 
-function requirePluginRoot(pluginRoot: string | undefined, target: string): string {
+function requirePluginSubdir(
+  pluginRoot: string | undefined,
+  target: string,
+  subdir: string,
+): string {
   if (pluginRoot === undefined) {
     throw new Error(`install scope plugin for target ${target} requires --plugin-root <dir>`);
   }
-  return join(pluginRoot, 'skills');
+  return join(pluginRoot, subdir);
 }

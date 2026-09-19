@@ -42,6 +42,34 @@ describe('install-scope gated constructs', () => {
     expect(kinds(projection)).toContain('construct-unresolved-at-install-scope');
   });
 
+  test('suppresses the condition for a plugin-scope install only', () => {
+    const pluginProjection = projectArtifact({
+      artifact: 'agent',
+      target: 'claude',
+      installScope: 'plugin',
+      sourcePath: '/virtual/scope-probe/AGENT.md',
+      source: agentSource(PLUGIN_ROOT_BODY),
+    });
+    const projectProjection = projectArtifact({
+      artifact: 'agent',
+      target: 'claude',
+      installScope: 'project',
+      sourcePath: '/virtual/scope-probe/AGENT.md',
+      source: agentSource(PLUGIN_ROOT_BODY),
+    });
+    const userProjection = projectArtifact({
+      artifact: 'agent',
+      target: 'claude',
+      installScope: 'user',
+      sourcePath: '/virtual/scope-probe/AGENT.md',
+      source: agentSource(PLUGIN_ROOT_BODY),
+    });
+
+    expect(kinds(pluginProjection)).not.toContain('construct-unresolved-at-install-scope');
+    expect(kinds(projectProjection)).toContain('construct-unresolved-at-install-scope');
+    expect(kinds(userProjection)).toContain('construct-unresolved-at-install-scope');
+  });
+
   test('states the condition, and never that the target refuses the construct', () => {
     const projection = projectArtifact({
       artifact: 'agent',

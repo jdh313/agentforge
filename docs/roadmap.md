@@ -23,11 +23,16 @@ renders to Claude's native named Markdown format and Codex's native agent-role
 TOML, both using the package parser's canonical agent schema. Codex plugin
 packages cannot register agent roles as of codex-cli 0.154.0
 (`docs/limitations.md` L-010), so marketplace agent translation keeps the
-Markdown-procedure fallback for Codex until that changes upstream. Claude and
-Codex leaf agents install at user/project scope while owning only their planned
-file paths (`ndr:hjnabw`). Other target projections, plugin-scope agent
-installation, and marketplace reuse of the Codex leaf projection remain. The
-filename, required identity, and default layout are recorded in `ndr:2t36rb`.
+Markdown-procedure fallback for Codex until that changes upstream. Claude leaf
+agents install at user, project, and plugin scope; Codex leaf agents install at
+user scope only. Every file-layout install owns only its planned paths
+(`ndr:hjnabw`). At Claude plugin scope, the plan is anchored at the package root
+so the agent lands under `agents/` and its declared resources land under
+`references/`, `scripts/`, and `assets/`, where `${CLAUDE_PLUGIN_ROOT}` resolves
+them. User/project installs remain one-file and report plugin-root references
+as scope-gated. Other target projections and marketplace reuse of the Codex
+leaf projection remain. The filename, required identity, and default layout are
+recorded in `ndr:2t36rb`.
 
 ### Boundary
 

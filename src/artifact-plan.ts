@@ -13,6 +13,7 @@ export interface BuildArtifactPlanOptions {
   publicationId: string;
   projection: ArtifactProjection;
   prefix?: string;
+  resourcePrefix?: string;
 }
 
 export interface PlannedArtifact {
@@ -27,7 +28,12 @@ export interface PlannedArtifact {
 export function buildArtifactPlan(options: BuildArtifactPlanOptions): PlannedArtifact {
   const sourceDir = resolve(options.sourceDir);
   const projection = options.projection;
-  const proposed = buildArtifactOutputs(projection, options.artifact, options.prefix);
+  const proposed = buildArtifactOutputs(
+    projection,
+    options.artifact,
+    options.prefix,
+    options.resourcePrefix,
+  );
   const canonicalDestination = proposed[0]?.destination;
   if (!canonicalDestination) throw new Error('missing canonical output');
 
@@ -77,10 +83,13 @@ export function buildArtifactOutputs(
   projection: ArtifactProjection,
   artifact: ArtifactType,
   prefix = '',
+  resourcePrefix = prefix,
 ): readonly import('./compiler.ts').ProposedOutput[] {
   const artifactDef = ARTIFACT_DEFS[artifact];
   const at = (relativePath: string) =>
     prefix.length === 0 ? relativePath : `${prefix}/${relativePath}`;
+  const atResource = (relativePath: string) =>
+    resourcePrefix.length === 0 ? relativePath : `${resourcePrefix}/${relativePath}`;
   const canonicalDestination =
     artifactDef.layout === 'file'
       ? at(`${projection.artifactName}${projection.extension ?? '.md'}`)
@@ -102,7 +111,7 @@ export function buildArtifactOutputs(
     ...projection.resources.map(({ relativePath, sourcePath }) => ({
       kind: 'copy' as const,
       producer: 'generated' as const,
-      destination: at(relativePath),
+      destination: atResource(relativePath),
       sourcePath,
     })),
   ];

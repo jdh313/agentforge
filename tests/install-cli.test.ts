@@ -113,6 +113,46 @@ describe('install commands', () => {
     expect(checked.stdout).toContain(`ok: 1 managed files at ${agentsRoot}`);
   });
 
+  test('installs a Claude plugin agent and package-root references', () => {
+    const source = join(temporaryRoot, 'plugin-agent-source');
+    const pluginRoot = join(temporaryRoot, 'plugin');
+    mkdirSync(join(source, 'references'), { recursive: true });
+    mkdirSync(pluginRoot, { recursive: true });
+    writeFileSync(
+      join(source, 'AGENT.md'),
+      [
+        '---',
+        'name: vault-reader',
+        'description: Read the vault.',
+        '---',
+        '',
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Claude variable under test
+        'Read ${CLAUDE_PLUGIN_ROOT}/references/vault-conventions.md.',
+        '',
+      ].join('\n'),
+    );
+    writeFileSync(join(source, 'references/vault-conventions.md'), '# Vault conventions\n');
+    writeFileSync(join(pluginRoot, 'keep.txt'), 'keep\n');
+    const args = [source, '--target', 'claude', '--scope', 'plugin', '--plugin-root', pluginRoot];
+
+    const installed = runCli('install', ...args);
+    const checked = runCli('check-install', ...args);
+
+    expect(installed.exitCode).toBe(0);
+    expect(installed.stdout).toContain(`installed 2 files at ${pluginRoot}`);
+    expect(installed.stdout).not.toContain('construct-unresolved-at-install-scope');
+    expect(readFileSync(join(pluginRoot, 'agents/vault-reader.md'), 'utf8')).toContain(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Claude variable under test
+      '${CLAUDE_PLUGIN_ROOT}/references/vault-conventions.md',
+    );
+    expect(readFileSync(join(pluginRoot, 'references/vault-conventions.md'), 'utf8')).toBe(
+      '# Vault conventions\n',
+    );
+    expect(readFileSync(join(pluginRoot, 'keep.txt'), 'utf8')).toBe('keep\n');
+    expect(checked.exitCode).toBe(0);
+    expect(checked.stdout).toContain(`ok: 2 managed files at ${pluginRoot}`);
+  });
+
   test('refuses a Codex project-scope agent install and writes nothing', () => {
     const projectRoot = join(temporaryRoot, 'codex-agent-project');
     mkdirSync(projectRoot, { recursive: true });

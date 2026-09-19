@@ -114,6 +114,9 @@ describe('scoped artifact installation', () => {
     expect(getArtifactConfig('claude', 'agent')?.installLocations.project?.(context)).toBe(
       '/workspace/project/.claude/agents',
     );
+    expect(getArtifactConfig('claude', 'agent')?.installLocations.plugin?.(context)).toBe(
+      '/workspace/plugin/agents',
+    );
     expect(getArtifactConfig('codex', 'agent')?.installLocations.user?.(context)).toBe(
       '/home/tester/.codex/agents',
     );
@@ -180,6 +183,81 @@ describe('scoped artifact installation', () => {
       ]);
     });
   }
+
+  test('installs a Claude agent and its resources as planned files at plugin scope', () => {
+    const source = fixtureAgentWithResources();
+    const pluginRoot = join(temporaryRoot, 'plugin');
+    mkdirSync(pluginRoot, { recursive: true });
+    writeFileSync(join(pluginRoot, 'plugin.json'), '{"name":"keep"}\n');
+    mkdirSync(join(pluginRoot, 'agents'), { recursive: true });
+    writeFileSync(join(pluginRoot, 'agents/sibling.md'), '# sibling\n');
+    mkdirSync(join(pluginRoot, 'references'), { recursive: true });
+    writeFileSync(join(pluginRoot, 'references/sibling.md'), '# sibling reference\n');
+
+    const install = buildInstallPlan({
+      sourceDir: source,
+      target: 'claude',
+      artifact: 'agent',
+      scope: 'plugin',
+      projectRoot: temporaryRoot,
+      pluginRoot,
+    });
+
+    expect(install.destinationRoot).toBe(pluginRoot);
+    expect(install.ownership).toBe('planned-files');
+    expect(install.plan.outputs.map(({ destination }) => destination)).toEqual([
+      'agents/vault-reader.md',
+      'assets/prompt.txt',
+      'references/bases.md',
+      'references/obsidian-cli-gotchas.md',
+      'references/vault-conventions.md',
+      'scripts/read-vault.sh',
+    ]);
+    expect(install.plan.diagnostics.map(({ code }) => code)).not.toContain(
+      'construct-unresolved-at-install-scope',
+    );
+
+    materializeInstallPlan(install);
+
+    expect(readFileSync(join(pluginRoot, 'plugin.json'), 'utf8')).toBe('{"name":"keep"}\n');
+    expect(readFileSync(join(pluginRoot, 'agents/sibling.md'), 'utf8')).toBe('# sibling\n');
+    expect(readFileSync(join(pluginRoot, 'references/sibling.md'), 'utf8')).toBe(
+      '# sibling reference\n',
+    );
+    expect(readFileSync(join(pluginRoot, 'references/vault-conventions.md'), 'utf8')).toBe(
+      '# Vault conventions\n',
+    );
+    if (process.platform !== 'win32') {
+      expect(statSync(join(pluginRoot, 'scripts/read-vault.sh')).mode & 0o777).toBe(0o755);
+    }
+    expect(checkInstallPlan(install).issues).toEqual([]);
+
+    writeFileSync(join(pluginRoot, 'references/vault-conventions.md'), '# Drifted\n');
+    expect(checkInstallPlan(install).issues.map(({ code, path }) => `${code}:${path}`)).toEqual([
+      'changed-output:references/vault-conventions.md',
+    ]);
+  });
+
+  test('keeps Claude user and project agents one-file and reports plugin-root references', () => {
+    const source = fixtureAgentWithResources();
+    const projectRoot = join(temporaryRoot, 'project-agent-with-resources');
+    const install = buildInstallPlan({
+      sourceDir: source,
+      target: 'claude',
+      artifact: 'agent',
+      scope: 'project',
+      projectRoot,
+    });
+
+    expect(install.plan.outputs.map(({ destination }) => destination)).toEqual(['vault-reader.md']);
+    expect(install.plan.diagnostics.map(({ code }) => code)).toContain(
+      'construct-unresolved-at-install-scope',
+    );
+
+    materializeInstallPlan(install);
+
+    expect(existsSync(join(install.destinationRoot, 'references'))).toBe(false);
+  });
 
   test('file-layout installation refuses an irregular destination without touching siblings', () => {
     const projectRoot = join(temporaryRoot, 'irregular');
@@ -636,6 +714,39 @@ function fixtureAgent(name: string): string {
     join(root, 'AGENT.md'),
     `---\nname: ${name}\ndescription: Read the vault.\n---\n\n# Reader\n\nRead safely.\n`,
   );
+  return root;
+}
+
+function fixtureAgentWithResources(): string {
+  const root = join(temporaryRoot, 'source-agent-with-resources');
+  mkdirSync(join(root, 'references'), { recursive: true });
+  mkdirSync(join(root, 'scripts'), { recursive: true });
+  mkdirSync(join(root, 'assets'), { recursive: true });
+  writeFileSync(
+    join(root, 'AGENT.md'),
+    [
+      '---',
+      'name: vault-reader',
+      'description: Read the vault.',
+      '---',
+      '',
+      '# Reader',
+      '',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Claude variable under test
+      'Read ${CLAUDE_PLUGIN_ROOT}/references/vault-conventions.md.',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Claude variable under test
+      'Read ${CLAUDE_PLUGIN_ROOT}/references/bases.md.',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Claude variable under test
+      'Read ${CLAUDE_PLUGIN_ROOT}/references/obsidian-cli-gotchas.md.',
+      '',
+    ].join('\n'),
+  );
+  writeFileSync(join(root, 'references/vault-conventions.md'), '# Vault conventions\n');
+  writeFileSync(join(root, 'references/bases.md'), '# Bases\n');
+  writeFileSync(join(root, 'references/obsidian-cli-gotchas.md'), '# Gotchas\n');
+  writeFileSync(join(root, 'scripts/read-vault.sh'), '#!/bin/sh\n');
+  writeFileSync(join(root, 'assets/prompt.txt'), 'prompt\n');
+  chmodSync(join(root, 'scripts/read-vault.sh'), 0o755);
   return root;
 }
 

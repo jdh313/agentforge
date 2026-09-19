@@ -4,11 +4,12 @@ This record characterizes the Librarian `vault-reader` role without treating
 generated files as runtime proof. It separates package and leaf-agent surfaces
 because Claude and Codex do not expose equivalent package semantics.
 
-Last exercised: 2026-09-16
+Last exercised: 2026-09-19 for the Claude plugin-scope leaf install; the wider
+cross-runtime matrix below was last exercised 2026-09-16.
 
 Harnesses:
 
-- Claude Code 2.1.273
+- Claude Code 2.1.273 (wider matrix) and 2.1.278 (plugin-scope leaf install)
 - Codex CLI 0.154.0
 - AgentForge revision parent: `4052a7bd`
 - Representative package: `jdh-agents/plugins/librarian` 0.19.0
@@ -77,6 +78,12 @@ pruning siblings. Its generated TOML contains identity, instructions, and
 `model_reasoning_effort`; Claude's `model: sonnet`, `maxTurns`, and `tools` are
 stripped with a diagnostic.
 
+A Claude plugin-scope leaf install now plans the named agent and its declared
+resources together under one package-root boundary. The agent lands at
+`agents/vault-reader.md`; `references/`, `scripts/`, and `assets/` remain rooted
+at the package directory addressed by `${CLAUDE_PLUGIN_ROOT}`. User/project
+leaf installs remain one-file and retain the scope-gated diagnostic.
+
 ## Fresh runtime observations
 
 All probes used an isolated directory under `/private/tmp`; no user-level
@@ -139,6 +146,33 @@ by exposing only `Bash` and `Read`, but the observed release did not enforce the
 declared Bash subcommand pattern. The role is therefore not runtime-enforced as
 read-only against arbitrary shell commands; its prompt remains part of that
 boundary.
+
+### Claude plugin-scope leaf install (2026-09-19)
+
+The real `jdh-agents/plugins/librarian/agents/vault-reader.md` was presented as
+a canonical `AGENT.md` alongside its three first-step references, then installed
+into an isolated copy of the Librarian package with:
+
+```sh
+agentforge install <source> --target claude --scope plugin --plugin-root <package>
+agentforge check-install <source> --target claude --scope plugin --plugin-root <package>
+```
+
+Install and check both passed with four managed files, and `claude plugin
+validate --strict` accepted the result. Claude Code 2.1.278 loaded the isolated
+directory as an inline plugin and registered the role as `plugin:vault-reader`.
+A settings-isolated, restricted run exposed only `Read`; its stream trace showed
+three successful calls to the absolute installed paths under
+`<package>/references/` and returned these headings:
+
+- `vault-conventions.md` — `# Vault conventions (pointer)`
+- `bases.md` — `# Bases registry (pointer)`
+- `obsidian-cli-gotchas.md` — `# Obsidian CLI Gotchas (Wiki Operations)`
+
+This is observed runtime evidence that the plugin-scope leaf install closes the
+resource-resolution failure. It does not change the existing negative finding
+for Claude user/project leaf agents, whose loader still receives the token
+literally.
 
 ### Codex leaf agent
 

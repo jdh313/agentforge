@@ -32,10 +32,14 @@ shell, OS, and global preferences; only narrows or extends here.
   agent-role TOML. Codex plugin packages cannot register agent roles as of
   codex-cli 0.154.0 (`docs/limitations.md` L-010), so marketplace agent
   translation keeps the Markdown-procedure fallback for Codex. Leaf agents
-  install with planned-file ownership at Claude user and project scope, and at
-  Codex **user scope only** — codex-cli 0.154.0 scans `$CODEX_HOME/agents` and
-  never a repository's `.codex/agents`, so that scope is omitted and a
-  `--scope project` agent install refuses (`docs/limitations.md` L-012).
+  install with planned-file ownership at Claude user, project, and plugin
+  scope, and at Codex **user scope only**. Claude plugin-scope installation
+  anchors one planned-file operation at the package root: the agent lands in
+  `agents/`, while declared `references/`, `scripts/`, and `assets/` land where
+  `${CLAUDE_PLUGIN_ROOT}` addresses them; user/project installs remain one-file.
+  Codex-cli 0.154.0 scans `$CODEX_HOME/agents` and never a repository's
+  `.codex/agents`, so that scope is omitted and a `--scope project` agent
+  install refuses (`docs/limitations.md` L-012).
   Remaining target projections stay gated on verified native semantics. See
   [docs/roadmap.md](docs/roadmap.md).
 - Releases are automated (semantic-release + per-platform binaries; see
@@ -463,9 +467,9 @@ unrecognized key keeps the category-2 behavior above.
 
 ## Out of scope today
 
-- Plugin-scope `agent` installation, remaining non-Claude/Codex projections,
-  and marketplace reuse of the Codex leaf projection (blocked upstream —
-  `docs/limitations.md` L-010) remain in the 0.8 work in
+- Remaining non-Claude/Codex projections and marketplace reuse of the Codex
+  leaf projection (blocked upstream — `docs/limitations.md` L-010) remain in
+  the 0.8 work in
   [docs/roadmap.md](docs/roadmap.md). MCP artifacts remain later work.
 - Watch mode.
 - Multi-artifact source directory rendering (each source dir contains

@@ -19,7 +19,14 @@ import { acceptedFrontmatterKeys } from './frontmatter.ts';
 import { materializeCompilation } from './materializer.ts';
 import { ARTIFACT_DEFS } from './schema.ts';
 import { getArtifactConfig } from './targets/registry.ts';
-import type { ArtifactType, ConstructSurface, RenderResult, TargetName, Warning } from './types.ts';
+import type {
+  ArtifactType,
+  ConstructSurface,
+  InstallScope,
+  RenderResult,
+  TargetName,
+  Warning,
+} from './types.ts';
 
 export interface RenderOptions {
   sourceDir: string;
@@ -34,6 +41,7 @@ export interface ArtifactProjectionOptions {
   target: TargetName;
   artifact: ArtifactType;
   resourcePaths?: readonly string[];
+  installScope?: InstallScope;
   // Frontmatter keys the package declared authoring-layer. They belong to the
   // source repo, not to any runtime, so they are removed before projection
   // begins — every downstream step then sees frontmatter that never carried
@@ -47,6 +55,7 @@ export interface LoadArtifactProjectionOptions {
   sourceDir: string;
   target: TargetName;
   artifact: ArtifactType;
+  installScope?: InstallScope;
 }
 
 export interface ProjectedResource {
@@ -192,6 +201,7 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
     target,
     artifact,
     resourcePaths = [],
+    installScope,
     authoringKeys = new Set<string>(),
   } = opts;
   const artifactDef = ARTIFACT_DEFS[artifact];
@@ -313,6 +323,7 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
   if (overrideBody === undefined) {
     const gated = detectScopeGatedBodyConstructs(canonicalBody, target, artifactConfig.surface);
     for (const { literals, gating } of gated) {
+      if (installScope !== undefined && gating.resolvedAt.includes(installScope)) continue;
       warnings.push({
         kind: 'construct-unresolved-at-install-scope',
         target,
@@ -358,6 +369,10 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
           },
         ];
   const sourceDir = dirname(sourcePath);
+  const installIncludesResources =
+    installScope === undefined ||
+    artifactConfig.resourceInstallScopes === undefined ||
+    artifactConfig.resourceInstallScopes.has(installScope);
   const resources = resourcePaths
     .map((resourcePath) => ({
       sourcePath: resourcePath,
@@ -365,7 +380,11 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
     }))
     .filter(({ relativePath }) => {
       const [subdir] = relativePath.split('/');
-      return subdir !== undefined && artifactConfig.resourceSubdirs.has(subdir);
+      return (
+        installIncludesResources &&
+        subdir !== undefined &&
+        artifactConfig.resourceSubdirs.has(subdir)
+      );
     })
     .toSorted((left, right) => {
       if (left.relativePath < right.relativePath) return -1;
@@ -411,7 +430,7 @@ function toCanonicalAgentBehavior(
 }
 
 export function loadArtifactProjection(opts: LoadArtifactProjectionOptions): ArtifactProjection {
-  const { sourceDir, target, artifact } = opts;
+  const { sourceDir, target, artifact, installScope } = opts;
   const artifactDef = ARTIFACT_DEFS[artifact];
   const canonicalFile = join(sourceDir, artifactDef.canonicalFilename);
   if (!existsSync(canonicalFile)) {
@@ -433,6 +452,7 @@ export function loadArtifactProjection(opts: LoadArtifactProjectionOptions): Art
     target,
     artifact,
     resourcePaths,
+    ...(installScope === undefined ? {} : { installScope }),
   });
 }
 

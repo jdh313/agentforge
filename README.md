@@ -489,11 +489,11 @@ agentforge compile <MARKETPLACE.yaml> --out <out-dir> --publication <id>
 agentforge check <MARKETPLACE.yaml> --out <out-dir>
 agentforge check <MARKETPLACE.yaml> --out <out-dir> --publication <id>
 agentforge check <MARKETPLACE.yaml> --out <out-dir> --claude-native
-agentforge install <skill-source-dir> --target <name> --scope <user|project|plugin>
-agentforge check-install <skill-source-dir> --target <name> --scope <user|project|plugin>
-agentforge render <skill-source-dir> --target <name> --out <out-dir>
-agentforge render <skill-source-dir> --all-targets --out-base <out-base>
-agentforge validate <skill-source-dir>
+agentforge install <artifact-source-dir> --target <name> --scope <user|project|plugin>
+agentforge check-install <artifact-source-dir> --target <name> --scope <user|project|plugin>
+agentforge render <artifact-source-dir> --target <name> --out <out-dir>
+agentforge render <artifact-source-dir> --all-targets --out-base <out-base>
+agentforge validate <artifact-source-dir>
 agentforge list-targets
 ```
 
@@ -513,6 +513,11 @@ agentforge list-targets
   archive from those exact bytes.
 - Notes and warnings are printed in deterministic plan order and do not make a
   successful compile exit nonzero.
+- Claude agents support `user`, `project`, and `plugin` installation. A plugin
+  install requires `--plugin-root <package-dir>` and owns only its planned
+  files: `<package-dir>/agents/<name>.md` plus declared `references/`,
+  `scripts/`, and `assets/` at the package root. User/project agent installs
+  remain one-file and warn when their body relies on `${CLAUDE_PLUGIN_ROOT}`.
 - `check` derives the same expected publication plans in memory, validates
   registries, plugin manifests, local plugin references, package identity and
   version parity, and projected skill frontmatter, then reports missing,
