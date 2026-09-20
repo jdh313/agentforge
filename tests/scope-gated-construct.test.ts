@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { scopeGatingFor } from '../src/capabilities.ts';
+import { supportFor } from '../src/capabilities.ts';
+import { detectClaudeOnlyConstructs } from '../src/compatibility.ts';
 import { projectArtifact } from '../src/render.ts';
 
 // F-4: a leaf-installed Claude agent's `${CLAUDE_PLUGIN_ROOT}` never expands.
@@ -39,7 +40,7 @@ describe('install-scope gated constructs', () => {
     // Silence here was the defect: every other body warning is gated on
     // `target !== 'claude'`, so the leaf render said nothing about the only
     // target that actually loads this file.
-    expect(kinds(projection)).toContain('construct-unresolved-at-install-scope');
+    expect(kinds(projection)).toContain('construct-support-gated');
   });
 
   test('suppresses the condition for a plugin-scope install only', () => {
@@ -65,9 +66,9 @@ describe('install-scope gated constructs', () => {
       source: agentSource(PLUGIN_ROOT_BODY),
     });
 
-    expect(kinds(pluginProjection)).not.toContain('construct-unresolved-at-install-scope');
-    expect(kinds(projectProjection)).toContain('construct-unresolved-at-install-scope');
-    expect(kinds(userProjection)).toContain('construct-unresolved-at-install-scope');
+    expect(kinds(pluginProjection)).not.toContain('construct-support-gated');
+    expect(kinds(projectProjection)).toContain('construct-support-gated');
+    expect(kinds(userProjection)).toContain('construct-support-gated');
   });
 
   test('states the condition, and never that the target refuses the construct', () => {
@@ -77,9 +78,7 @@ describe('install-scope gated constructs', () => {
       sourcePath: '/virtual/scope-probe/AGENT.md',
       source: agentSource(PLUGIN_ROOT_BODY),
     });
-    const warning = projection.warnings.find(
-      ({ kind }) => kind === 'construct-unresolved-at-install-scope',
-    );
+    const warning = projection.warnings.find(({ kind }) => kind === 'construct-support-gated');
 
     expect(warning?.detail).toContain('${CLAUDE_PLUGIN_ROOT}');
     expect(warning?.detail).toContain('plugin-scope');
@@ -103,9 +102,7 @@ describe('install-scope gated constructs', () => {
       source: agentSource(PLUGIN_ROOT_BODY),
     });
 
-    expect(
-      kinds(projection).filter((kind) => kind === 'construct-unresolved-at-install-scope'),
-    ).toHaveLength(1);
+    expect(kinds(projection).filter((kind) => kind === 'construct-support-gated')).toHaveLength(1);
   });
 
   test('stays silent when the body carries no gated construct', () => {
@@ -116,7 +113,7 @@ describe('install-scope gated constructs', () => {
       source: agentSource('Plain instructions with no constructs at all.'),
     });
 
-    expect(kinds(projection)).not.toContain('construct-unresolved-at-install-scope');
+    expect(kinds(projection)).not.toContain('construct-support-gated');
   });
 
   test('a targets.claude.body override suppresses it, like every other body warning', () => {
@@ -127,7 +124,7 @@ describe('install-scope gated constructs', () => {
       source: `---\nname: scope-probe\ndescription: Exercises install-scope gating.\ntargets:\n  claude:\n    body: |\n      Instructions with no plugin-root reference.\n---\n\n${PLUGIN_ROOT_BODY}\n`,
     });
 
-    expect(kinds(projection)).not.toContain('construct-unresolved-at-install-scope');
+    expect(kinds(projection)).not.toContain('construct-support-gated');
   });
 
   test('does not fire for Codex, where F-3 already reports the construct', () => {
@@ -142,16 +139,35 @@ describe('install-scope gated constructs', () => {
     });
 
     expect(kinds(projection)).toContain('claude-only-body-feature');
-    expect(kinds(projection)).not.toContain('construct-unresolved-at-install-scope');
+    expect(kinds(projection)).not.toContain('construct-support-gated');
   });
 
-  test('gating is recorded for claude/agent only, never for claude/skill', () => {
+  test('gating is a typed claude/agent capability result, never a parallel skill fact', () => {
     // claude/skill would be wrong even though the same substitution gating
     // applies: marketplace skills DO reach plugin scope through
     // `projectArtifact`, so listing them would warn on output that resolves.
-    expect(scopeGatingFor('claude', 'agent', '${CLAUDE_*}')?.resolvedAt).toEqual(['plugin']);
-    expect(scopeGatingFor('claude', 'skill', '${CLAUDE_*}')).toBeUndefined();
-    expect(scopeGatingFor('codex', 'agent', '${CLAUDE_*}')).toBeUndefined();
+    expect(supportFor('claude', 'agent', '${CLAUDE_*}')).toEqual({
+      state: 'gated',
+      condition: { kind: 'install-scope', resolvedAt: ['plugin'] },
+    });
+    expect(supportFor('claude', 'skill', '${CLAUDE_*}')).toBe('supported');
+    expect(supportFor('codex', 'agent', '${CLAUDE_*}')).toBe('unsupported');
+  });
+
+  test('keeps a gated construct outside the declared-loss detector', () => {
+    const detection = detectClaudeOnlyConstructs({
+      artifacts: new Map([
+        [
+          'agent',
+          [{ path: '/virtual/scope-probe/AGENT.md', content: agentSource(PLUGIN_ROOT_BODY) }],
+        ],
+      ]),
+      target: 'claude',
+      surface: 'agent',
+    });
+
+    expect(detection.detected).toEqual([]);
+    expect(detection.unknown).toEqual([]);
   });
 
   test('leaves frontmatter reporting untouched', () => {

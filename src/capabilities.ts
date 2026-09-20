@@ -1,4 +1,4 @@
-import type { ConstructSurface, TargetName } from './types.ts';
+import type { ConstructSurface, InstallScope, TargetName } from './types.ts';
 
 // A target may expose more than one surface with different capabilities. Codex
 // documents `$ARGUMENTS` / `$1`-`$9` on custom prompts and documents no
@@ -35,7 +35,16 @@ export interface ConstructShape {
   line: number;
 }
 
-export type Support = 'supported' | 'translated' | 'unsupported' | 'unknown';
+export type SupportGate =
+  | { kind: 'configuration'; option: string }
+  | { kind: 'install-scope'; resolvedAt: readonly InstallScope[] };
+
+export interface GatedSupport {
+  state: 'gated';
+  condition: SupportGate;
+}
+
+export type Support = 'supported' | 'translated' | 'unsupported' | 'unknown' | GatedSupport;
 
 interface CapabilityRow {
   supported: readonly string[];
@@ -46,6 +55,10 @@ interface CapabilityRow {
   // This map is the single home for that fact: nothing else may encode it as an
   // inline exemption.
   translated?: Readonly<Record<string, string>>;
+  // Conditional support is data on the capability row, not a parallel
+  // exception table. Each result carries the condition a diagnostic needs to
+  // state or a context-aware caller needs to evaluate (ndr:k58f71).
+  gated?: Readonly<Record<string, SupportGate>>;
   unsupported: readonly string[];
   source: string;
 }
@@ -124,9 +137,12 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
     'claude/agent',
     {
       supported: ['agent-reference'],
+      gated: {
+        '${CLAUDE_*}': { kind: 'install-scope', resolvedAt: ['plugin'] },
+      },
       unsupported: [],
       source:
-        "https://code.claude.com/docs/en/subagents — the Markdown body is the subagent system prompt; no command-style interpolation contract is claimed here. Verified 2026-09-15. Neither list names `${CLAUDE_*}` on purpose: its support is gated on install scope rather than being a property of the target, which this row's two-list shape cannot express — see SCOPE_GATED below. Re-verified 2026-09-17 against Claude Code 2.1.274. `agent-reference` is listed supported because Claude registers a package's agents by name and dispatches them from body prose; it is the one construct this surface can claim without the scope gate above, since registration is a property of the package rather than the install scope.",
+        "https://code.claude.com/docs/en/subagents — the Markdown body is the subagent system prompt; no command-style interpolation contract is claimed here. Verified 2026-09-15. `${CLAUDE_*}` is gated on install scope: Claude Code 2.1.274's substitution function has seven plugin-scoped call sites, while the non-plugin agent loader leaves the body unchanged. Confirmed live on 2026-09-17 with a project-scope agent echoing `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PROJECT_DIR}` literally, then positively on 2026-09-19 with Claude Code 2.1.278 resolving `${CLAUDE_PLUGIN_ROOT}` for a plugin-scope Librarian agent. `agent-reference` is listed supported because Claude registers a package's agents by name and dispatches them from body prose; registration is a property of the package rather than the install scope.",
     },
   ],
   [
@@ -136,7 +152,7 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
       translated: CODEX_SKILL_TRANSLATIONS,
       unsupported: CLAUDE_TOKENS,
       source:
-        'https://learn.chatgpt.com/docs/build-skills.md — documents no body templating, so `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` in SKILL.md body prose are inert text on this surface (see the `codex/hook` row for where those two are actually translated); agents/openai.yaml carries the invocation policy. On allow_implicit_invocation the published page says only that Codex "won\'t implicitly invoke the skill", which reads as auto-trigger gating; the codex 0.146.0 binary\'s embedded skill-creator doc is the complete statement — "the skill is not injected into the model context by default, but can still be invoked explicitly via $skill". Verified 2026-08-02: a policy-gated skill is absent from the model\'s catalog and still runs from the $-picker, so the translation is faithful. Body-templating scope re-verified 2026-09-17 against https://developers.openai.com/codex/plugins/build. `agent-reference` is unsupported on a separate basis: codex-cli 0.154.0 registers no agent role from a plugin package (docs/limitations.md L-010), so a body naming a collaborator addresses nothing the runtime can resolve. The shortfall is unconditional rather than enabled by a configuration option, which is what places it inside the declared-loss gate (ndr:5ymhmg) rather than beside it.',
+        'https://learn.chatgpt.com/docs/build-skills.md — documents no body templating, so `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` in SKILL.md body prose are inert text on this surface (see the `codex/hook` row for where those two are actually translated); agents/openai.yaml carries the invocation policy. On allow_implicit_invocation the published page says only that Codex "won\'t implicitly invoke the skill", which reads as auto-trigger gating; the codex 0.146.0 binary\'s embedded skill-creator doc is the complete statement — "the skill is not injected into the model context by default, but can still be invoked explicitly via $skill". Verified 2026-08-02: a policy-gated skill is absent from the model\'s catalog and still runs from the $-picker, so the translation is faithful. Body-templating scope re-verified 2026-09-17 against https://developers.openai.com/codex/plugins/build. `agent-reference` is unsupported on a separate basis: codex-cli 0.154.0 registers no agent role from a plugin package (docs/limitations.md L-010), so a body naming a collaborator addresses nothing the runtime can resolve. The shortfall is unconditional rather than enabled by a typed gate condition, which is what places it inside the declared-loss gate (ndr:k58f71) rather than beside it.',
     },
   ],
   [
@@ -225,54 +241,6 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
   ],
 ]);
 
-// Constructs a target expands only at some install scopes, keyed on
-// (target, surface) like the capability rows themselves.
-//
-// This is deliberately a separate map rather than a fifth `Support` state.
-// ndr:5ymhmg decided that config-gated support gets its own state carrying the
-// option that enables it, and ndr:hv9kbf gave it its own disposition — but
-// neither is implemented (`Support` is still four states), and both carry a
-// revisit trigger this case fires: 5ymhmg gates on *consumer configuration*,
-// and install scope is not that, while hv9kbf assumes the outcome is unknowable
-// at compile time, which is false at `install --scope user`. Widening those two
-// decisions is a `/capture-decision` question, so this records the narrow fact
-// beside the table it belongs to and claims nothing more.
-//
-// `claude/skill` is deliberately absent even though the same gating applies to
-// skill bodies: marketplace skills DO go through `projectArtifact` and land at
-// plugin scope, where the substitution runs, so listing it here would warn on
-// output that resolves correctly. Agents also reach `projectArtifact` through
-// the leaf path, where an unscoped render or a user/project install must expose
-// the condition. A plugin install passes its known scope and suppresses it.
-export interface ScopeGating {
-  tokens: readonly string[];
-  /** Install scopes where the construct IS expanded. */
-  resolvedAt: readonly string[];
-  source: string;
-}
-
-const SCOPE_GATED: ReadonlyMap<string, ScopeGating> = new Map([
-  [
-    'claude/agent',
-    {
-      tokens: ['${CLAUDE_*}'],
-      resolvedAt: ['plugin'],
-      source:
-        'Claude Code 2.1.274 bundle. One function performs the substitution — `EJ` at offset 175078369, `e.replace(/\\$\\{CLAUDE_PLUGIN_ROOT\\}/g, …)` plus `${CLAUDE_PROJECT_DIR}` and `${CLAUDE_PLUGIN_DATA}` — and it has exactly seven call sites, every one plugin-scoped: MCP server config (3), the plugin agent loader `Yvn`, the plugin skill/command body, and the plugin monitor command. The non-plugin agent loader `PUo` assigns `Tn = s.trim()` once and returns it unchanged apart from appending a memory block, so no substitution reaches a user- or project-scope agent. Confirmed live on 2026-09-17, not inferred from strings: a project-scope agent whose body carried `NONCE7Q4<<<${CLAUDE_PLUGIN_ROOT}|${CLAUDE_PROJECT_DIR}>>>NONCE7Q4` was dispatched for real and echoed the span back character-for-character, unexpanded. `${CLAUDE_PROJECT_DIR}` is the load-bearing half of that control: it is scope-relative and needs no plugin, and it still does not expand, which establishes that the gate is the loader rather than the token. Reconfirmed positively on 2026-09-19 with Claude Code 2.1.278: a plugin-scoped leaf-installed Librarian vault-reader resolved `${CLAUDE_PLUGIN_ROOT}` and read all three package-root reference files.',
-    },
-  ],
-]);
-
-/** Constructs this (target, surface) expands only at some install scopes. */
-export function scopeGatingFor(
-  target: TargetName,
-  surface: ConstructSurface,
-  token: string,
-): ScopeGating | undefined {
-  const gating = SCOPE_GATED.get(`${target}/${surface}`);
-  return gating?.tokens.includes(token) ? gating : undefined;
-}
-
 export function capabilitySource(
   target: TargetName,
   surface: ConstructSurface,
@@ -287,6 +255,8 @@ export function supportFor(target: TargetName, surface: ConstructSurface, token:
   // translated variable wins over the normalized family token that would
   // otherwise mark it unsupported.
   if (row.translated && Object.hasOwn(row.translated, token)) return 'translated';
+  const condition = row.gated?.[token];
+  if (condition !== undefined) return { state: 'gated', condition };
   if (row.supported.includes(token)) return 'supported';
   if (row.unsupported.includes(token)) return 'unsupported';
   return 'unknown';

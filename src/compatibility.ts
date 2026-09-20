@@ -228,6 +228,11 @@ function scanBody(
     const support = supportFor(target, surface, shape.token);
     if (support === 'supported') continue;
 
+    // Conditional support is neither an unconditional loss nor an unknown.
+    // Its typed condition is reported by the context-aware projection path,
+    // and it never enters the declared-loss gate (ndr:k58f71).
+    if (typeof support === 'object' && support.state === 'gated') continue;
+
     if (support === 'unknown') {
       unknown.push({
         family: shape.family,

@@ -140,7 +140,7 @@ describe('install commands', () => {
 
     expect(installed.exitCode).toBe(0);
     expect(installed.stdout).toContain(`installed 2 files at ${pluginRoot}`);
-    expect(installed.stdout).not.toContain('construct-unresolved-at-install-scope');
+    expect(installed.stdout).not.toContain('construct-support-gated');
     expect(readFileSync(join(pluginRoot, 'agents/vault-reader.md'), 'utf8')).toContain(
       // biome-ignore lint/suspicious/noTemplateCurlyInString: literal Claude variable under test
       '${CLAUDE_PLUGIN_ROOT}/references/vault-conventions.md',

@@ -42,13 +42,11 @@ export type DiagnosticCode =
   // and an unrecognized key supports neither half of that claim. Whether it was
   // retained or dropped is in the detail — the kind names what we do not know.
   | 'unrecognized-frontmatter-key'
-  // A construct the target DOES support, expanded only at some install scopes.
-  // Distinct from every kind above, which report what a target will not accept:
-  // here the target accepts the construct and the loss belongs to where the
-  // artifact was installed. Naming a target as refusing it would be false, and
-  // ndr:728mf7 forbids a diagnostic asserting ownership besides — so this is the
-  // one warning that fires for `claude` as well.
-  | 'construct-unresolved-at-install-scope'
+  // A construct the target supports only when a typed condition holds.
+  // Distinct from every kind above, which reports an unconditional target
+  // outcome: this warning carries the gate rather than averaging over it, and
+  // therefore never enters the declared-loss path (ndr:k58f71).
+  | 'construct-support-gated'
   // Compiler-only codes below: never assigned from a leaf `Warning.kind`, so
   // they are outside `WarningKind`'s `Extract` even though they share this
   // union.
@@ -73,7 +71,7 @@ export type WarningKind = Extract<
   | 'claude-only-body-feature'
   | 'unclassified-body-construct'
   | 'unrecognized-frontmatter-key'
-  | 'construct-unresolved-at-install-scope'
+  | 'construct-support-gated'
 >;
 
 export interface Warning {

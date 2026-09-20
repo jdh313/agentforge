@@ -1,7 +1,7 @@
 ---
 id: "hv9kbf"
 title: Classify config-gated support as its own disposition
-status: current
+status: superseded
 decision_date: 2026-09-04
 author: Jacob Hoehler
 conviction: tentative
@@ -13,7 +13,8 @@ binds:
   - src/report.ts
   - src/capabilities.ts
 supersedes: []
-superseded_by: []
+superseded_by:
+  - 7r7n44
 derived_from:
   - https://junglelan.fibery.io/Charting/Ticket/4
 informed_by:

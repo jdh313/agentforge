@@ -2,7 +2,7 @@
 id: "5ymhmg"
 title: Model config-gated construct support as a distinct state outside the
   declared-loss gate
-status: current
+status: superseded
 decision_date: 2026-09-03
 author: Jacob Hoehler
 conviction: strong
@@ -16,7 +16,8 @@ binds:
   - src/definitions.ts
 supersedes:
   - 4nshwv
-superseded_by: []
+superseded_by:
+  - k58f71
 derived_from:
   - https://junglelan.fibery.io/Charting/Ticket/2
   - https://hermes-agent.nousresearch.com/docs/developer-guide/creating-skills

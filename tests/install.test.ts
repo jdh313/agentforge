@@ -214,7 +214,7 @@ describe('scoped artifact installation', () => {
       'scripts/read-vault.sh',
     ]);
     expect(install.plan.diagnostics.map(({ code }) => code)).not.toContain(
-      'construct-unresolved-at-install-scope',
+      'construct-support-gated',
     );
 
     materializeInstallPlan(install);
@@ -250,9 +250,7 @@ describe('scoped artifact installation', () => {
     });
 
     expect(install.plan.outputs.map(({ destination }) => destination)).toEqual(['vault-reader.md']);
-    expect(install.plan.diagnostics.map(({ code }) => code)).toContain(
-      'construct-unresolved-at-install-scope',
-    );
+    expect(install.plan.diagnostics.map(({ code }) => code)).toContain('construct-support-gated');
 
     materializeInstallPlan(install);
 

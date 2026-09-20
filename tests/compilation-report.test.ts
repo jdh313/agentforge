@@ -109,7 +109,7 @@ describe('compile --report', () => {
 
     const report = JSON.parse(readFileSync(reportPath, 'utf8'));
 
-    expect(report.schemaVersion).toBe(1);
+    expect(report.schemaVersion).toBe(2);
     expect(report.marketplaceId).toBe('codex-hook-projection');
     expect(report.counts.bySeverity).toEqual(EXPECTED_COUNTS_BY_SEVERITY);
     expect(report.counts.byCode).toEqual(EXPECTED_COUNTS_BY_CODE);
@@ -263,21 +263,20 @@ describe('compile --report', () => {
     }
   });
 
-  // Protects the `nothing-to-carry` disposition added in c68e8e60 against
-  // accidental removal or reordering. The fixture does not emit
-  // `empty-hook-configuration` diagnostics, so the compact report built from
-  // it would never include this disposition — `countOf` (src/report.ts:306-314)
-  // builds `byDisposition` sparsely, only for dispositions actually present.
-  // This test runs outside the fixture to verify the code path directly.
-  test('nothing-to-carry disposition exists and sits correctly in order', () => {
+  // The fixture emits neither structural no-ops nor gated conditions, so its
+  // sparse counts cannot protect this stretch of the scale. Verify it directly.
+  test('settled non-losses precede gated conditions, which precede unknowns', () => {
     expect(dispositionOf('empty-hook-configuration')).toBe('nothing-to-carry');
+    expect(dispositionOf('construct-support-gated')).toBe('gated');
 
     const nothingToCarryIdx = DISPOSITION_ORDER.indexOf('nothing-to-carry');
     const carriedUnenforcedIdx = DISPOSITION_ORDER.indexOf('carried-unenforced');
+    const gatedIdx = DISPOSITION_ORDER.indexOf('gated');
     const notEstablishedIdx = DISPOSITION_ORDER.indexOf('not-established');
 
     expect(nothingToCarryIdx).toBeGreaterThan(carriedUnenforcedIdx);
-    expect(nothingToCarryIdx).toBeLessThan(notEstablishedIdx);
+    expect(gatedIdx).toBeGreaterThan(nothingToCarryIdx);
+    expect(gatedIdx).toBeLessThan(notEstablishedIdx);
   });
 });
 

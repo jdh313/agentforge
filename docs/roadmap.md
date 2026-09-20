@@ -30,7 +30,9 @@ user scope only. Every file-layout install owns only its planned paths
 so the agent lands under `agents/` and its declared resources land under
 `references/`, `scripts/`, and `assets/`, where `${CLAUDE_PLUGIN_ROOT}` resolves
 them. User/project installs remain one-file and report plugin-root references
-as scope-gated. Other target projections and marketplace reuse of the Codex
+as scope-gated through the typed capability result (`ndr:k58f71`); reports
+classify that condition after settled non-losses and before unknowns
+(`ndr:7r7n44`). Other target projections and marketplace reuse of the Codex
 leaf projection remain. The filename, required identity, and default layout are
 recorded in `ndr:2t36rb`.
 

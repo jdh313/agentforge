@@ -69,8 +69,9 @@ src/
                       the single authority for retained output frontmatter
   capabilities.ts   — construct-shape families + the checked-in capability
                       table keyed by (target, surface); one doc citation per
-                      row. `supportFor` returns supported/unsupported/unknown,
-                      so an unlisted construct is reported, never passed.
+                      row. `supportFor` returns an unconditional state or a
+                      typed gated condition, so an unlisted construct is
+                      reported, never passed.
   compatibility.ts  — the single construct detector: frontmatter tool filters
                       plus body shapes, over every artifact type and text
                       resource file. Returns occurrences carrying `path:line`.
@@ -422,7 +423,7 @@ construct family, declarable as `body-agent-reference` (ndr:c5haze). Codex
 registers no agent role from a plugin package (`docs/limitations.md` L-010), so
 a Codex body saying `@vault-reader` instructs a dispatch that cannot resolve —
 the model confabulates rather than degrades. That loss is unconditional, which
-is what puts it inside the declared-loss gate rather than beside it (ndr:5ymhmg).
+is what puts it inside the declared-loss gate rather than beside it (ndr:k58f71).
 
 **Matched against data, not shape.** Every other family is a regex over body
 text. This one resolves each `@token` against the agents the *same package*

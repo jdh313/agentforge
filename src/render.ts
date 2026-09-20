@@ -7,8 +7,7 @@ import { agentExecutionFrom, type CanonicalAgentBehavior } from './agent-command
 import { buildArtifactPlan } from './artifact-plan.ts';
 import {
   findConstructShapes,
-  type ScopeGating,
-  scopeGatingFor,
+  type GatedSupport,
   supportFor,
   translationFor,
 } from './capabilities.ts';
@@ -140,26 +139,26 @@ const detectClaudeOnlyBodyFeatures = (
   };
 };
 
-// Body constructs this (target, surface) expands only at some install scopes.
-// Grouped per gating entry rather than per literal, so one warning states one
-// condition — a reader needs the condition once, not once per token.
-const detectScopeGatedBodyConstructs = (
+// Body constructs this (target, surface) supports only under a typed condition.
+// Grouped per condition rather than per literal, so one warning states one
+// actionable gate once rather than repeating it for every token (ndr:k58f71).
+const detectGatedBodyConstructs = (
   body: string,
   target: TargetName,
   surface: ConstructSurface,
-): { literals: string[]; gating: ScopeGating }[] => {
-  const byCondition = new Map<string, { literals: Set<string>; gating: ScopeGating }>();
+): { literals: string[]; support: GatedSupport }[] => {
+  const byCondition = new Map<string, { literals: Set<string>; support: GatedSupport }>();
   for (const shape of findConstructShapes(body)) {
-    const gating = scopeGatingFor(target, surface, shape.token);
-    if (!gating) continue;
-    const key = gating.resolvedAt.join('/');
-    const entry = byCondition.get(key) ?? { literals: new Set<string>(), gating };
+    const support = supportFor(target, surface, shape.token);
+    if (typeof support !== 'object' || support.state !== 'gated') continue;
+    const key = JSON.stringify(support.condition);
+    const entry = byCondition.get(key) ?? { literals: new Set<string>(), support };
     entry.literals.add(shape.literal);
     byCondition.set(key, entry);
   }
-  return [...byCondition.values()].map(({ literals, gating }) => ({
+  return [...byCondition.values()].map(({ literals, support }) => ({
     literals: [...literals].toSorted(),
-    gating,
+    support,
   }));
 };
 
@@ -308,26 +307,34 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
     }
   }
 
-  // Outside the `target !== 'claude'` gate on purpose, and it is the only
-  // warning that is. What this reports is not the target refusing a construct —
-  // Claude accepts `${CLAUDE_PLUGIN_ROOT}` and expands it — but the expansion
-  // running on one install scope's loader and not another's. Naming Claude as
-  // not accepting it would be false, and `claude-only-body-feature` would
-  // assert ownership besides, which ndr:728mf7 forbids outright. So the loss is
-  // the install scope, not the target, and the code and wording say so.
+  // Outside the `target !== 'claude'` gate on purpose. What this reports is a
+  // typed capability condition, not the target refusing a construct. The first
+  // real row is Claude's `${CLAUDE_PLUGIN_ROOT}` install-scope gate, so it must
+  // fire for the source dialect without turning into `claude-only-body-feature`
+  // or asserting ownership (ndr:728mf7).
   //
-  // Phrased as a condition rather than an outcome, per ndr:5ymhmg's commitment
-  // for gated constructs: the renderer cannot know where this output will be
-  // installed, so asserting that it WAS lost would claim a fact the compile
-  // does not have.
+  // Phrased as a condition rather than an unconditional target outcome. A
+  // context-aware install may suppress a satisfied condition, but the
+  // capability itself remains gated and outside the declared-loss path
+  // (ndr:k58f71).
   if (overrideBody === undefined) {
-    const gated = detectScopeGatedBodyConstructs(canonicalBody, target, artifactConfig.surface);
-    for (const { literals, gating } of gated) {
-      if (installScope !== undefined && gating.resolvedAt.includes(installScope)) continue;
+    const gated = detectGatedBodyConstructs(canonicalBody, target, artifactConfig.surface);
+    for (const { literals, support } of gated) {
+      const { condition } = support;
+      if (
+        condition.kind === 'install-scope' &&
+        installScope !== undefined &&
+        condition.resolvedAt.includes(installScope)
+      ) {
+        continue;
+      }
       warnings.push({
-        kind: 'construct-unresolved-at-install-scope',
+        kind: 'construct-support-gated',
         target,
-        detail: `body uses ${literals.join(', ')}, substituted only for ${gating.resolvedAt.join('/')}-scope ${artifact}s; installed at any other scope it reaches the model as literal text`,
+        detail:
+          condition.kind === 'install-scope'
+            ? `body uses ${literals.join(', ')}, substituted only for ${condition.resolvedAt.join('/')}-scope ${artifact}s; installed at any other scope it reaches the model as literal text`
+            : `body uses ${literals.join(', ')}, supported only when consumer configuration option ${condition.option} is enabled`,
       });
     }
   }

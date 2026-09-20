@@ -87,6 +87,7 @@ and is a real loss, while `translated-construct` is also a note and is not one.
 | `carried-form-changed` | survives as a native equivalent |
 | `carried-unenforced` | survives in the output, unenforced by the target |
 | `nothing-to-carry` | there was nothing to translate, and nothing was lost |
+| `gated` | outcome depends on a known, actionable condition |
 | `not-established` | construct-shaped, and never ruled on |
 
 Disposition is derived from the diagnostic code rather than stored on the
@@ -96,7 +97,7 @@ the build rather than resolving to `not-established` — and `not-established`
 means the construct was genuinely never ruled on, never that a loss went
 unasserted. Asserting otherwise is the error the severity axis made.
 
-The JSON carries `schemaVersion`, marketplace-wide `counts`, and diagnostics
+The JSON carries `schemaVersion` (currently `2`), marketplace-wide `counts`, and diagnostics
 nested by target, then package (with a sibling `publication` key for any that
 are not package-scoped). Markdown adds a third level, grouping by source file so
 a reader can ask "what did this file lose, to this target?". Each entry keeps
