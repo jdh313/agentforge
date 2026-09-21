@@ -690,11 +690,13 @@ asked for, and the correct answer had to be recovered from a vendor binary.
 the leaf (`src/targets/codex.ts`, `NativeAgentDocument`), but that native form
 has nowhere to land inside a compiled Codex marketplace package. Codex agent-
 role discovery is keyed entirely to `ConfigLayerSource` — the same layer system
-that resolves `config.toml` — and that enum has no `Plugin` variant. The plugin
-manifest schema (`RawPluginManifest`: `mcpServers`, `apps`, `hooks`, `commands`,
-`interface`) has no `agents`/`agentRoles`/`roles` field or path either. This is
-not a gap in AgentForge's mapping; it is an absence in Codex itself, as of
-codex-cli 0.154.0.
+that resolves `config.toml` — and no plugin config layer contributes an agent
+directory. The current plugin manifest's path-bearing component set is
+`skills`, `onboarding_skill`, `mcp_servers`, `apps`, and `hooks`; it has no
+`agents`/`agentRoles`/`roles` field or path. A plugin may retain an `agents/`
+directory as package content, but Codex does not feed it to the TOML role
+loader. This is not a gap in AgentForge's mapping; it is an absence in Codex
+itself, as of codex-cli 0.155.1.
 
 **Manifests as.** `translateAgentProcedure`
 (`src/targets/codex-marketplace.ts`) still emits a package agent as a plain
@@ -723,22 +725,19 @@ than only here. Two bounds on that coverage, both deliberate:
   `inferred-artifact-projection`, which is what names this limitation for the
   agent file itself.
 
-**Evidence.** Verified 2026-09-15 against the installed `codex-cli 0.154.0`
-binary (`strings` plus targeted byte-offset dumps; no `codex exec` session was
-started). The agent-role loader's demangled symbol table contains exactly three
-functions in `codex_agent_roles::loader`
-(`agents_toml_from_layer`, `push_agent_role_warning`, `merge_missing_role_fields`);
-`agents_toml_from_layer` reads roles per `ConfigLayerSource`, whose reflected
-variant list is exhaustively `Project`, `PackagedDefaults`, `Mdm`,
-`LegacyManagedConfigTomlFromFile`, `User`, `EnterpriseManaged`, `System` — no
-`Plugin` member. Independently, the plugin manifest deserializer's reflected
-field set (`core-plugins/src/manifest.rs`) enumerates `mcpServers`, `apps`,
-`hooks`, `commands`, `interface` and their untagged-enum variants, with no
-agents-shaped field anywhere. Third-party documentation
-(`codex.danielvaughan.com`, "Codex CLI Plugin System", queried 2026-09-15)
-independently states a Codex plugin bundles "Skills ... MCP Servers ... App
-Connectors" — agent roles are absent from that list too. Two independent
-sources agree with no contradiction.
+**Evidence.** Re-verified 2026-09-21 against installed `codex-cli 0.155.1` and
+current OpenAI source at `openai/codex` commit
+`142360dac8ea59234262c10bfd9a73df3f39b45c`. The installed binary contains the
+agent-role loader and the plugin loader as separate subsystems. In source,
+`codex-rs/plugin/src/manifest.rs` defines `PluginManifestPaths` with only
+`skills`, `onboarding_skill`, `mcp_servers`, `apps`, and `hooks`.
+`codex-rs/agent-roles/src/loader.rs` discovers `<config layer>/agents`, but no
+plugin root is introduced as such a layer. The published plugin architecture
+likewise lists skills, MCP servers, and lifecycle hooks, while the published
+subagent guide assigns roles to `~/.codex/agents/` or `.codex/agents/`. The
+live L-011/L-012 probe below positively selected a project role, establishing
+that role selection works when the file reaches a real config layer; it did
+not create a plugin registration path.
 
 **Status.** open, upstream. `translateAgentProcedure`'s Markdown-procedure
 mapping remains the intended fallback per `ndr:msdg46`, not a placeholder for
@@ -764,94 +763,54 @@ the concrete case of it not being.
 
 ---
 
-## L-011 — Codex does not apply custom agent roles to spawned children
+## L-011 — Resolved: Codex applies explicitly selected custom agent roles
 
-**Gap.** A canonical leaf `AGENT.md` projects to native Codex agent-role TOML
-via the native `NativeAgentDocument` form in `src/targets/codex.ts`, which
-installs correctly at `.codex/agents/<name>.toml` and parses without error when
-registered via `.codex/config.toml` `[agents.<role>]` with `config_file`. No
-observed registration path (standalone TOML, config_file + relative path, or
-any feature-flag combination) results in a spawned child applying the custom
-role's `name`, `developer_instructions`, or `model_reasoning_effort`. On codex-cli
-0.154.0 the child always inherits the parent's generic model and effort,
-regardless of what roles are loaded; the spawn tool apparently offers no
-role-selection parameter (inferred, see Evidence). This is distinct from L-010: the role file exists and parses; it is
-simply not selected at spawn time.
+**Correction.** The earlier entry scoped its conclusion too broadly. Its
+0.154.0 probes asked the parent to delegate but did not require the spawn call
+to pass the loaded role as `agent_type`. A generic spawn correctly produced a
+generic child; it did not establish that selected roles were inert.
 
-**Manifests as.** A generated agent TOML file that installs correctly and
-produces zero errors or warnings, while spawned children continue to use the
-parent's model and effort instead of the configured override. The custom
-`developer_instructions` marker never reaches the child's transcript, so custom
-behavior is silently replaced with generic defaults. The file is inert at
-runtime.
+**Current behavior.** On codex-cli 0.155.1, a parent can explicitly select a
+custom role. The spawned child applies that role's `developer_instructions` and
+role-specific configuration. This is distinct from L-010: leaf roles are
+selectable, while plugin packages still provide no config layer from which the
+role loader can discover a packaged role.
 
-**Affects.** Codex leaf `agent` projection (`src/targets/codex.ts`,
-`NativeAgentDocument`). Generated TOML installs correctly but is not applied to
-spawned children on codex-cli 0.154.0.
+**Evidence.** Re-tested 2026-09-21 in a fresh Git repository with
+`.codex/agents/fibery_131_probe.toml`. The role's instructions required the
+otherwise absent marker `PROJECT_AGENT_ROLE_APPLIED`. A non-ephemeral
+`codex exec --json` parent was instructed to spawn the explicit custom agent
+type, wait, and return its exact result. The run completed with exactly
+`PROJECT_AGENT_ROLE_APPLIED`. Current OpenAI source corroborates the live run:
+the multi-agent spawn path accepts a role name and
+`core/src/agent/child_config.rs` applies it before creating the child.
 
-**Evidence.** Tested on codex-cli 0.154.0, 2026-09-16. Three `codex exec --json`
-delegation runs used a role with a nonce-bearing `developer_instructions` that
-would appear in the child's transcript if applied:
-1. Standalone `.codex/agents/probe_role.toml` with `--enable multi_agent_v2`
-2. The same file with `--enable multi_agent --disable multi_agent_v2`
-3. Project `.codex/config.toml` with `[agents.probe_role]` and
-   `config_file = "./roles/probe_role.toml"`, under default flags
+An initial `--ephemeral` run hit `collab spawn failed: no thread with id` and
+then returned an untrusted parent-authored success sentence. It is retained as
+a negative control, not counted as role acceptance. The non-ephemeral rerun is
+the acceptance result.
 
-In all cases, the child's rollout trace carried `agent_role: null`,
-`developer_instructions: null`, and inherited the parent's `model` and
-`reasoning_effort`. The `config_file` form loads without error (confirmed by
-`codex -C <dir> debug prompt-input` running cleanly), so registration succeeds
-up to parse time; selection at spawn does not happen. Every run, under
-either feature-flag combination, reported `multi_agent_version: "v2"`. The spawn tool schema was not inspected directly
-(inferred from model-visible system prompt prose and observed child metadata
-only), so absence is evidenced by three runs all producing `agent_role: null`
-rather than a structurally confirmed empty parameter set.
+**Status.** resolved upstream and in this repo. Leaf role rendering remains a
+supported projection; the stale installation-only qualification has been
+removed from the acceptance docs and capability citations.
 
-**Status.** open, upstream. codex-cli issues
-[#26363](https://github.com/openai/codex/issues/26363) and
-[#31097](https://github.com/openai/codex/issues/31097) describe the same
-inherited-model and ignored-instructions behavior. The role loader exists in
-the source and accepts the load paths; the linked issues place the gap in the
-active spawn tool, which does not select a loaded role.
-
-**Revisit trigger.** Re-run the nonce probe on a Codex CLI release where either
-issue is resolved or the spawn tool exposes a role-selection parameter.
-
-**Where to look.** `src/targets/codex.ts` — the leaf `NativeAgentDocument`
-that generates the now-inert TOML. `docs/librarian-agent-acceptance.md` "Codex
-leaf agent" section — the complete test matrix and probe details.
+**Where to look.** `src/targets/codex.ts` for the native TOML projection and
+`docs/librarian-agent-acceptance.md` for the historical and current probes.
 
 ---
 
-## L-012 — Codex never scans a repository's `.codex/agents`
+## L-012 — Resolved: Codex scans a repository's `.codex/agents`
 
-**Gap.** Codex's agent-role loader discovers standalone role files by scanning
-`$CODEX_HOME/agents` (default `~/.codex/agents`). It does not scan a
-repository's `.codex/agents`, at any trust level, on codex-cli 0.154.0. The
-adapter previously declared a `project` install location at
-`join(projectRoot, '.codex/agents')` for the `agent` artifact, so
-`agentforge install AGENT.md --target codex --scope project` wrote a role file
-that codex never reads and exited zero.
-
-This is distinct from both neighbouring entries. L-010 is a Codex *plugin
-package* being unable to register roles at all; L-011 is a role that loads
-correctly and is then not selected at spawn. L-012 is narrower and earlier than
-either: at this one scope, the file is never loaded, so no later stage runs.
-
-**Manifests as.** A successful-looking `install --scope project` whose output
-is absent from every subsequent Codex run, with no warning at install time and
-nothing in `codex doctor`. `check-install` agrees the file is present and
-unchanged, because it compares bytes on disk against the plan — a question
-that has nothing to do with whether the harness reads the path.
+**Correction.** Codex 0.154.0 did not discover project-local role files, so
+AgentForge correctly removed the project install scope at that time. Current
+Codex does scan `.codex/agents` as part of the project config layer.
 
 **Affects.** Codex leaf `agent` installation at project scope
-(`src/targets/codex.ts`, `artifacts.agent.installLocations`). Resolved in this
-repo by removing the scope, per ndr:d17fnt's requirement that a target omit
-every scope it does not support and that each declared path be verified against
-the target's own loader. A `--scope project` agent install for Codex now
-refuses, naming `user` as the supported scope.
+(`src/targets/codex.ts`, `artifacts.agent.installLocations`). AgentForge once
+again declares `join(projectRoot, '.codex/agents')`; project installs and
+checks use planned-file ownership and preserve sibling roles.
 
-**Evidence.** Tested on codex-cli 0.154.0, 2026-09-17, with an isolated
+**Historical evidence (0.154.0).** Tested 2026-09-17 with an isolated
 `CODEX_HOME` and a dead `OPENAI_BASE_URL` so role loading runs to completion
 before the network call fails.
 
@@ -879,20 +838,19 @@ generated TOML loads there with no warning of any kind. `name`, `description`,
 `model_reasoning_effort`, and `developer_instructions` are accepted as written
 by `codexAgentDocument.serialize`.
 
-**Status.** closed in this repo by scope removal; open upstream. Whether Codex
-should scan a project-local role directory is an upstream product question, not
-an AgentForge mapping gap.
+**Current evidence.** The same codex-cli 0.155.1 probe used for L-011 placed the
+role only at `<repo>/.codex/agents/fibery_131_probe.toml`; no user role or
+`[agents.<name>] config_file` declaration existed. Explicit selection returned
+the role-only marker, proving both project discovery and role application.
+OpenAI's current subagent guide documents `.codex/agents/` for project-scoped
+agents, and `codex-rs/agent-roles/src/loader.rs` discovers an `agents`
+directory beside every config layer.
 
-**Revisit trigger.** A codex-cli release whose agent-role discovery reads a
-repository-local directory. Re-run both positive controls in
-`<repo>/.codex/agents`; a warning naming that path means the scope can be
-declared again.
+**Status.** resolved upstream and in this repo on 2026-09-21. Project scope is
+restored with unit and CLI coverage.
 
-**Where to look.** `src/targets/codex.ts` — `artifacts.agent.installLocations`,
-now user-only, with the reason recorded beside it. `src/install.ts` — the
-refusal path, which names the scopes a target does declare. `tests/install.test.ts`
-and `tests/install-cli.test.ts` — the refusal is asserted to write nothing at
-all, not merely to warn.
+**Where to look.** `src/targets/codex.ts`, `tests/install.test.ts`, and
+`tests/install-cli.test.ts`.
 
 ---
 
@@ -965,11 +923,9 @@ each role as `spawn_agent`'s `agent_type`. Only that path was run, not a role
 declared under `[agents.<name>]` `config_file` in `config.toml`, though the same
 parser reads both.
 
-This does not square with L-011, which saw no child apply a custom role and
-inferred that the spawn tool has no role-selection parameter. Here `agent_type`
-was accepted (an unknown name fails with `unknown agent_type`) and each child's
-rollout names its role, so that inference does not hold for a prompt that passes
-`agent_type` explicitly. L-011 is left as written; it needs its own retest.
+This evidence supplied the missing variable in the original L-011 probe:
+`agent_type` must be passed explicitly. L-011 now records the corrected claim
+and a fresh 0.155.1 project-role acceptance run.
 
 | Role `skills` | Observed in the child |
 | --- | --- |

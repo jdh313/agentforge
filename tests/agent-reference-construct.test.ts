@@ -163,7 +163,7 @@ describe('agent-reference capability rows', () => {
     expect(supportFor('claude', 'agent', 'agent-reference')).toBe('supported');
   });
 
-  // L-010: codex-cli 0.154.0 registers no agent role from a plugin package, so
+  // L-010: codex-cli 0.155.1 registers no agent role from a plugin package, so
   // the loss is unconditional and therefore inside the declared-loss gate.
   test('Codex accepts it on no surface', () => {
     expect(supportFor('codex', 'skill', 'agent-reference')).toBe('unsupported');

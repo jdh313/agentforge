@@ -4,13 +4,14 @@ This record characterizes the Librarian `vault-reader` role without treating
 generated files as runtime proof. It separates package and leaf-agent surfaces
 because Claude and Codex do not expose equivalent package semantics.
 
-Last exercised: 2026-09-19 for the Claude plugin-scope leaf install; the wider
-cross-runtime matrix below was last exercised 2026-09-16.
+Last exercised: 2026-09-21 for Codex project-role discovery and explicit
+selection; 2026-09-19 for the Claude plugin-scope leaf install. Librarian's
+full Codex behavior matrix was not rerun on the newer CLI.
 
 Harnesses:
 
 - Claude Code 2.1.273 (wider matrix) and 2.1.278 (plugin-scope leaf install)
-- Codex CLI 0.154.0
+- Codex CLI 0.154.0 (historical matrix) and 0.155.1 (current role probe)
 - AgentForge revision parent: `4052a7bd`
 - Representative package: `jdh-agents/plugins/librarian` 0.19.0
 
@@ -27,12 +28,12 @@ No row is supported solely because its native file compiled or validated.
 | Capability | Claude package | Codex package | Codex leaf agent |
 |---|---|---|---|
 | Package discovery | Observed in the fresh runtime init event | Plugin loads skills and other supported components | Not applicable |
-| Named agent registration | Observed by direct selection and parent delegation | Unsupported: package `agents/*.md` is inert procedure text | Installed at `.codex/agents/<name>.toml` and via `.codex/config.toml` `config_file=` on 0.154.0; not applied to spawned children |
-| Model | Observed Sonnet selection in runtime usage metadata | Unsupported | Installed but spawned child inherits parent's model; no role selector observed on 0.154.0 |
-| Effort | Declared as `medium`; effective value was not exposed by the Claude result | Unsupported | Installed but spawned child inherits parent's effort; no role selector observed on 0.154.0 |
+| Named agent registration | Observed by direct selection and parent delegation | Unsupported: package `agents/*.md` is inert procedure text | Observed for a synthetic project role in `.codex/agents` on 0.155.1; the real Librarian role was not rerun |
+| Model | Observed Sonnet selection in runtime usage metadata | Unsupported | Documented and emitted; not re-observed in the 0.155.1 marker probe |
+| Effort | Declared as `medium`; effective value was not exposed by the Claude result | Unsupported | Documented and emitted; not re-observed in the 0.155.1 marker probe |
 | Turn limit | Observed in a spawned synthetic agent stopped after its configured two turns | Unsupported | Unsupported by the current Codex projection |
 | Tool/read-only enforcement | Top-level tools were scoped, but `Bash(obsidian-cli *)` did not prevent a delegated child from executing `pwd` | Unsupported and declared as stripped | Unsupported by the current projection; parent sandbox still applies |
-| Delegation and isolation | Observed in a distinct `librarian:vault-reader` child with one `Read` call | Impossible through the package role | A separate child thread was observed, but it was a generic named task rather than the configured custom agent |
+| Delegation and isolation | Observed in a distinct `librarian:vault-reader` child with one `Read` call | Impossible through the package role | Explicit custom-role behavior observed through a unique instruction marker; Librarian's file-read workflow was not rerun |
 | Same-agent follow-up | Observed only for a background child; foreground completion discarded the resumable transcript | Impossible through the package role | Harness follow-up exists, but generated Librarian workflow parity is unproven |
 | Plugin references | Observed expansion and successful read from the absolute plugin path | Copied but the variable remains literal and unresolved | Out of scope for a standalone leaf agent |
 
@@ -174,7 +175,7 @@ resource-resolution failure. It does not change the existing negative finding
 for Claude user/project leaf agents, whose loader still receives the token
 literally.
 
-### Codex leaf agent
+### Historical Codex leaf agent probe (0.154.0)
 
 AgentForge installed and checked the synthetic leaf successfully. A persistent
 `codex exec --json` session then delegated a file-read task. The persisted
@@ -219,7 +220,28 @@ In every run, a spawned child's `agent_role` resolved to `null`,
 and `model`/`reasoning_effort` inherited the parent's `gpt-5.6-sol`/`medium`
 rather than the probe's declared `high`. Every run reported
 `multi_agent_version: "v2"`, so no tested flag combination reached a different
-spawn surface. See `docs/limitations.md` L-011 for the narrowed scope.
+spawn surface. See `docs/limitations.md` L-011 for why that evidence did not
+support the original broad conclusion.
+
+### Current Codex project-role acceptance (0.155.1)
+
+Fibery #131 isolated the missing variable from the historical matrix: explicit
+agent-type selection. A fresh Git repository contained a single role at
+`.codex/agents/fibery_131_probe.toml`; there was no user-level copy and no
+`[agents.<name>] config_file` declaration. Its `developer_instructions`
+required the unique response `PROJECT_AGENT_ROLE_APPLIED` and prohibited tools.
+
+A non-ephemeral `codex exec --json` parent was required to select that exact
+custom agent type, wait, and return the child's exact response without
+simulating a result. The run returned exactly `PROJECT_AGENT_ROLE_APPLIED`.
+This positively establishes project discovery, explicit selection, and custom
+instruction application on 0.155.1. It does not establish Librarian's model,
+effort, tools, continuity, or resource behavior because those were not varied
+in this probe.
+
+An earlier ephemeral attempt logged `collab spawn failed: no thread with id`
+and returned a parent-authored success sentence rather than the nonce. That run
+is a negative control and is not counted as acceptance.
 
 ## Disposition
 
@@ -232,20 +254,19 @@ The ticket cannot honestly pass as one cross-runtime parity claim.
 - Claude follow-up parity is conditional: the caller must spawn the persistent
   reader in the background. A foreground child cannot be resumed on the tested
   release despite returning an agent ID.
-- Codex package agent semantics remain explicitly unsupported.
-- Codex leaf agents have no runtime effect on codex-cli 0.154.0: an installed
-  custom role is not applied to spawned children by any tested registration
-  path or feature-flag combination, and every run used the `v2` spawn surface.
-  The model-visible spawn tool prose names no role selector (the schema itself
-  was not inspected). Installation is supported, so the leaf projection's
-  runtime claim is narrowed to installation only (L-011).
+- Codex leaf roles are discovered at user and project scope and can be applied
+  to spawned children when the caller selects the role explicitly. The 0.154.0
+  negative matrix exercised generic delegation, not explicit role selection;
+  its broader conclusion is superseded by L-011's correction.
+- Codex package agent semantics remain unsupported. A selectable project role
+  does not create a plugin registration path (L-010).
 - `@vault-reader`, `SendMessage`, and `${CLAUDE_PLUGIN_ROOT}` must be replaced,
   translated, or rejected for a Codex-specific workflow; copied prose is not
   compatibility.
 
 ## Revisit trigger
 
-Re-run the nonce probe on a Codex CLI release where the spawn tool exposes a
-role selector or upstream issue `openai/codex#26363` or `#31097` is resolved.
-Only then test same-thread follow-up using a retained nonce and stable child
-thread ID.
+Run the full Librarian role on current Codex before claiming its model, effort,
+tool, resource, or same-thread follow-up parity. Keep the small explicit-role
+nonce probe as a release smoke test; project discovery and selection are now
+accepted behavior rather than open questions.

@@ -142,15 +142,13 @@ export const codexTarget = {
   artifacts: {
     ...codexAgentSkills.artifacts,
     agent: {
-      // User scope only. `$CODEX_HOME/agents` is scanned by the agent-role
-      // loader; a repository's `.codex/agents` is not, on codex-cli 0.154.0
-      // (docs/limitations.md L-012). ndr:d17fnt requires a target to omit
-      // every scope it does not support and each declared path to be verified
-      // against the target's own loader, so the scope is absent rather than
-      // declared-and-warned: a declared location agentforge writes to is a
-      // claim the harness reads it.
+      // codex-cli 0.155.1 discovers standalone roles from both the user and
+      // project config layers. Project roles live beside `.codex/config.toml`
+      // in `.codex/agents`; explicit `agent_type` selection was verified live
+      // on 2026-09-21 (docs/limitations.md L-011 and L-012).
       installLocations: {
         user: ({ homeDirectory }) => join(homeDirectory, '.codex/agents'),
+        project: ({ projectRoot }) => join(projectRoot, '.codex/agents'),
       },
       surface: 'agent' as const,
       resourceSubdirs: new Set<string>(),

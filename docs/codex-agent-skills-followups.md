@@ -10,7 +10,7 @@ Found 2026-09-21 against codex-cli 0.154.0. Upstream source is openai/codex tag
 `rust-v0.154.0`, commit `6b9826e3aa83b1a5947db50f4332cb9c65f1b340`; paths below
 are relative to its `codex-rs/`.
 
-## 1. L-011 conflicts with L-013's evidence
+## 1. Resolved: L-011 conflicted with L-013's evidence
 
 L-011 says no spawned child ever applies a custom agent role, and infers that
 the spawn tool has no role-selection parameter. L-013's live runs, on the same
@@ -22,19 +22,11 @@ showed the role's effect on its skills catalog. Source agrees with the runs:
 tool, and `core/src/agent/role.rs` defaults it to the role named `default` when a
 caller omits it.
 
-The likely reading is that L-011's "never applies" is a property of prompts that
-did not pass `agent_type`, not of the product. That is a hypothesis: neither
-entry ran a probe that varies only that one input.
-
-- **What is unchanged:** L-013 states the tension and leaves L-011 as written.
-- **Action:** retest L-011 with `agent_type` passed explicitly and roles in
-  `$CODEX_HOME/agents`, then amend L-011 in place under its own ID, leading with
-  a dated note on what the earlier framing got wrong (the register's rule for a
-  scoped-too-narrowly entry). The Fibery task that retests L-010 and L-011 is
-  the natural owner.
-- **Cost of leaving it:** the field-parity `agent` row on the Skill table cites
-  L-011 as "0.154.0 never applies a custom role to a spawned child", so a wrong
-  L-011 makes that row wrong too.
+Resolved under Fibery #131 on 2026-09-21. A codex-cli 0.155.1 run explicitly
+selected a role stored only in the project's `.codex/agents` directory and
+returned its unique `developer_instructions` marker. L-011 now records the
+corrected behavior, L-012 is closed by the same project-discovery probe, and
+the stale field-parity and acceptance claims were updated with them.
 
 ## 2. "Eight override fields" is nine, and `sandbox_mode` is not one of them
 

@@ -21,11 +21,11 @@ marketplace compilation.
 Current progress: `AGENT.md` is registered as a file-layout leaf artifact and
 renders to Claude's native named Markdown format and Codex's native agent-role
 TOML, both using the package parser's canonical agent schema. Codex plugin
-packages cannot register agent roles as of codex-cli 0.154.0
+packages cannot register agent roles as of codex-cli 0.155.1
 (`docs/limitations.md` L-010), so marketplace agent translation keeps the
 Markdown-procedure fallback for Codex until that changes upstream. Claude leaf
 agents install at user, project, and plugin scope; Codex leaf agents install at
-user scope only. Every file-layout install owns only its planned paths
+user and project scope. Every file-layout install owns only its planned paths
 (`ndr:hjnabw`). At Claude plugin scope, the plan is anchored at the package root
 so the agent lands under `agents/` and its declared resources land under
 `references/`, `scripts/`, and `assets/`, where `${CLAUDE_PLUGIN_ROOT}` resolves
@@ -129,8 +129,9 @@ same-agent follow-up, and shared references. Each claim must be recorded as a
 documentation claim, generated-artifact finding, or observed runtime result.
 The current evidence and target-specific disposition are recorded in
 [`librarian-agent-acceptance.md`](librarian-agent-acceptance.md); package and
-leaf-agent results must remain separate. The Codex leaf agent runtime claim is
-narrowed to installation only on 0.154.0; see `docs/limitations.md` L-011.
+leaf-agent results must remain separate. Explicit project-role selection is
+accepted on codex-cli 0.155.1; plugin registration remains unsupported. See
+`docs/limitations.md` L-010 through L-012.
 
 ## 0.9 — hooks
 

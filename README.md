@@ -32,7 +32,7 @@ The canonical-agent roadmap slice is underway. The leaf renderer accepts an
 `AGENT.md` artifact and projects it to Claude's native named Markdown format and
 Codex's native agent-role TOML. Both install at user or project scope with
 sibling-preserving ownership. Codex plugin packages cannot register agent roles
-as of codex-cli 0.154.0, so marketplace packages retain an explicitly inert
+as of codex-cli 0.155.1, so marketplace packages retain an explicitly inert
 Markdown procedure rather than claiming native registration. See
 [the roadmap](docs/roadmap.md) for the implementation boundary and acceptance
 sequence through 1.0.

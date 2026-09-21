@@ -510,10 +510,10 @@ function parseHookDocument(
   return parseDocument(ClaudeHookDocument, document, `hook configuration ${sourcePath}`);
 }
 
-// Codex plugin packages cannot register agent roles: codex-cli 0.154.0's
-// `ConfigLayerSource` enum (which gates all agent-role discovery) has no
-// `Plugin` variant, and its `RawPluginManifest` field set (mcpServers, apps,
-// hooks, commands, interface) has no agents/roles field or path. There is no
+// Codex plugin packages cannot register agent roles: codex-cli 0.155.1's
+// plugin manifest path set (skills, onboarding skill, MCP servers, apps, hooks)
+// has no agents/roles field, and no plugin config layer contributes an agents
+// directory to the native role loader. There is no
 // native registration this translator could target instead, so a package
 // agent still becomes a plain Markdown procedure file — the fallback
 // `ndr:msdg46` names, not a placeholder for one. Revisit if a future Codex

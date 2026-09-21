@@ -30,16 +30,16 @@ shell, OS, and global preferences; only narrows or extends here.
 - The 0.8 slice is underway: `agent` is a first-class leaf artifact with a
   shared canonical schema, projecting to Claude Markdown and native Codex
   agent-role TOML. Codex plugin packages cannot register agent roles as of
-  codex-cli 0.154.0 (`docs/limitations.md` L-010), so marketplace agent
+  codex-cli 0.155.1 (`docs/limitations.md` L-010), so marketplace agent
   translation keeps the Markdown-procedure fallback for Codex. Leaf agents
   install with planned-file ownership at Claude user, project, and plugin
-  scope, and at Codex **user scope only**. Claude plugin-scope installation
+  scope, and at Codex user and project scope. Claude plugin-scope installation
   anchors one planned-file operation at the package root: the agent lands in
   `agents/`, while declared `references/`, `scripts/`, and `assets/` land where
   `${CLAUDE_PLUGIN_ROOT}` addresses them; user/project installs remain one-file.
-  Codex-cli 0.154.0 scans `$CODEX_HOME/agents` and never a repository's
-  `.codex/agents`, so that scope is omitted and a `--scope project` agent
-  install refuses (`docs/limitations.md` L-012).
+  Codex-cli 0.155.1 discovers roles in both `$CODEX_HOME/agents` and a
+  repository's `.codex/agents`; explicit project-role selection has fresh
+  runtime acceptance (`docs/limitations.md` L-011 and L-012).
   Remaining target projections stay gated on verified native semantics. See
   [docs/roadmap.md](docs/roadmap.md).
 - Releases are automated (semantic-release + per-platform binaries; see

@@ -11,9 +11,10 @@ table reads the other way: harness fields no canonical key can set.
 schemas and the native TOML serializer), `src/capabilities.ts` (translations),
 and `src/targets/codex-marketplace.ts` (the `agents/openai.yaml` sidecar). Those
 are authoritative; this file is a reading of them at one moment and goes stale
-the way any table does. Verified against **codex-cli 0.154.0** and **Claude Code
-2.1.274**, 2026-09-20; the Agent `skills` row was re-verified against codex-cli
-0.154.0 on 2026-09-21 (L-013).
+the way any table does. Verified against **codex-cli 0.155.1** and **Claude Code
+2.1.274**, 2026-09-21; the Agent `skills` row retains its codex-cli 0.154.0
+live A/B evidence (L-013), while role selection and project discovery were
+re-verified on 0.155.1 (L-011 and L-012).
 
 **Not in scope here:** why a row is the way it is (NDR ledger, cited as
 `ndr:<id>` from the source files themselves), what is unbuildable (
@@ -69,7 +70,7 @@ mapping could land.
 | `model` | **Native** — `model` | **Blocked.** Nothing at skill level — Codex pins a model per *agent role* (`model`), not per skill. Reachable only by authoring the same behavior as an agent. |
 | `effort` <br> low \| medium \| high \| xhigh \| max | **Native** — `effort` | **Blocked.** Nothing at skill level; `model_reasoning_effort` exists on the agent role, where agentforge already translates this same key. |
 | `context` <br> fork | **Native** — `context` | **No analogue.** Context forking is a Claude Code execution mode with no Codex declarative form. |
-| `agent` | **Native** — `agent` | **No analogue**, and blocked upstream twice over: a plugin registers no Codex agent role (L-010) and 0.154.0 never applies a custom role to a spawned child (L-011). |
+| `agent` | **Native** — `agent` | **No analogue** on the skill/plugin surface: a plugin registers no Codex agent role (L-010). Standalone Codex roles are selectable, but a skill cannot name one declaratively through this field. |
 | `hooks` | **Native** — `hooks` | **Blocked** → `.codex/hooks`. Codex has the event vocabulary and honors Claude-style matchers, but it is a separate package-level surface, not a field a skill carries. Event parity is tracked in [hook-event-parity.md](hook-event-parity.md) (L-009). |
 | `paths` | **Native** — `paths` | **No analogue.** No path-scoping key on any Codex skill surface. |
 | `shell` <br> bash \| powershell | **Native** — `shell` | **No analogue**, and moot on Codex: hooks are unavailable on Windows there, so the PowerShell half has no runtime. |
@@ -161,9 +162,8 @@ on the same struct), or a Codex surface outside the role document (`mcpServers`,
   silently instead.
 - **Install scope.** Skills reach user, project and plugin scope on both
   harnesses. Claude agents reach all three (resources ride along at plugin scope
-  only); Codex agents install to **user scope only** — `$CODEX_HOME/agents` — and
-  `--scope project` refuses, because 0.154.0 never scans a repository's
-  `.codex/agents` (L-012). Plugin packages register no Codex agent role at all
+  only); Codex agents install at user (`$CODEX_HOME/agents`) and project
+  (`.codex/agents`) scope. Plugin packages register no Codex agent role at all
   (L-010), so marketplace agent translation falls back to a Markdown procedure.
 - **Other artifacts.** `output-style` is the third leaf artifact and projects to
   Claude only; `mcp` is unimplemented.

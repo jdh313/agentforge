@@ -442,12 +442,7 @@ describe('leaf agent commands', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('claude       agent          install: user, project, plugin');
-    // Codex agents are user-scope only: codex-cli 0.154.0 scans
-    // `$CODEX_HOME/agents` and never a repository's `.codex/agents`
-    // (docs/limitations.md L-012), and ndr:d17fnt requires an unsupported scope
-    // to be omitted rather than declared.
-    expect(result.stdout).toContain('codex        agent          install: user');
-    expect(result.stdout).not.toContain('codex        agent          install: user, project');
+    expect(result.stdout).toContain('codex        agent          install: user, project');
   });
 });
 
