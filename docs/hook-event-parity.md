@@ -21,6 +21,25 @@ installed on this machine. The 11-event shared core was first established
 then. See § Evidence for how each column was established and where the
 confidence tiers differ.
 
+## Artifact-scoped hooks widen to package scope
+
+Canonical skill and agent `hooks:` declarations compile into separate Codex
+package hook files and manifest entries (ndr:pz1x3e). The handler and event
+translation below still applies, but activation scope does not survive:
+
+- a Claude skill hook activates only after that skill is invoked; the projected
+  Codex hook is active for the whole enabled package;
+- a Claude agent hook runs only while that agent is active; the projected Codex
+  hook can also fire in the main thread and other agents;
+- Claude's agent `Stop` behavior is preserved structurally by projecting it as
+  `SubagentStop`; skill-only `once` has no Codex package-hook equivalent and is
+  stripped.
+
+The compiler emits a warning for each scope widening. Standalone leaf rendering
+still drops artifact hooks because it has no package manifest or honest package
+destination. Separate output files preserve source ownership; they do not make
+the activation boundary equivalent.
+
 ## Shared core — 11 events, identity translation
 
 | Lifecycle moment | Claude Code | Codex | Compiler |

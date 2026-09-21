@@ -57,6 +57,8 @@ const DISPOSITION_BY_CODE: Readonly<Record<DiagnosticCode, Disposition>> = {
   'translated-construct': 'carried-form-changed',
   'translated-hook-handler-args': 'carried-form-changed',
   'hook-timeout-capped-by-runtime': 'carried-form-changed',
+  'artifact-hook-scope-widened': 'carried-unenforced',
+  'unsupported-artifact-hook-once': 'lost-undeclared',
   // A supplied payload winning a producer collision (`supplied-output-override`,
   // src/compiler.ts) carries the destination through in changed form: content
   // still lands there, just from the supplied producer instead of the

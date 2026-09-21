@@ -56,6 +56,8 @@ export type DiagnosticCode =
   | 'unclassified-hook-event'
   | 'translated-hook-handler-args'
   | 'hook-timeout-capped-by-runtime'
+  | 'artifact-hook-scope-widened'
+  | 'unsupported-artifact-hook-once'
   | 'empty-hook-configuration'
   | 'inferred-artifact-projection'
   | 'unclassified-construct'

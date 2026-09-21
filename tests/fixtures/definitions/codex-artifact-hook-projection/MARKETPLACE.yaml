@@ -1,0 +1,14 @@
+schema: agentforge.marketplace/v1
+id: codex-artifact-hook-projection
+defaults:
+  name: codex-artifact-hook-projection
+  description: Fixture marketplace for canonical artifact hook projection.
+packages:
+  - packages/*/PACKAGE.yaml
+publications:
+  - id: codex
+    target: codex
+    destination: marketplace.json
+    enrollment:
+      mode: include
+      packages: [artifact-hooks]

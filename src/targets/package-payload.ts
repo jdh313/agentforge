@@ -26,6 +26,8 @@ import type { TargetName } from '../types.ts';
 export interface PackagePayloadResult {
   outputs: ProposedOutput[];
   diagnostics: ProposedCompilationDiagnostic[];
+  hookPaths?: string[];
+  externallyProjectedFrontmatterKeys?: ReadonlySet<string>;
 }
 
 export interface ArtifactTranslatorInput {
@@ -39,6 +41,7 @@ export type ArtifactTranslator = (input: ArtifactTranslatorInput) => PackagePayl
 export interface PackagePayloadPolicy {
   passthroughArtifactTypes: ReadonlySet<string>;
   translators: ReadonlyMap<string, ArtifactTranslator>;
+  augmenters?: ReadonlyMap<string, ArtifactTranslator>;
   // When set, a Claude-only construct that would be silently lost must carry a
   // declared loss for this target or compilation fails.
   requireDeclaredLosses?: boolean;
@@ -51,6 +54,7 @@ export function compilePackagePayload(
 ): PackagePayloadResult {
   const outputs: ProposedOutput[] = [];
   const diagnostics: ProposedCompilationDiagnostic[] = [];
+  const hookPaths: string[] = [];
   const packageDirectory = relativePackageDirectory(input.marketplace.path, packageInput.path);
   const packageRoot = dirname(packageInput.path);
   // Which generated content each source produced. A declared loss's state is a
@@ -72,6 +76,28 @@ export function compilePackagePayload(
     ([left], [right]) => compareStrings(left, right),
   )) {
     for (const artifact of artifacts) {
+      const augmentation = policy.augmenters?.get(artifactType)?.({
+        artifact,
+        packageDirectory,
+        packageInput,
+      });
+      if (augmentation) {
+        outputs.push(
+          ...augmentation.outputs.map((output) => ({
+            ...output,
+            producer: 'translated' as const,
+          })),
+        );
+        diagnostics.push(...augmentation.diagnostics);
+        hookPaths.push(...(augmentation.hookPaths ?? []));
+        attribute(
+          artifact.path,
+          augmentation.outputs.flatMap((output) =>
+            output.kind === 'generated' ? [output.content] : [],
+          ),
+        );
+      }
+
       if (artifactType === 'skill') {
         const projection = projectArtifact({
           artifact: 'skill',
@@ -80,6 +106,7 @@ export function compilePackagePayload(
           source: artifact.content,
           resourcePaths: packageInput.files,
           authoringKeys: packageInput.authoringKeys,
+          externallyProjectedFrontmatterKeys: augmentation?.externallyProjectedFrontmatterKeys,
         });
         const skillDirectory = `${packageDirectory}/skills/${projection.artifactName}`;
         outputs.push(
@@ -123,6 +150,7 @@ export function compilePackagePayload(
           ),
         );
         diagnostics.push(...translated.diagnostics);
+        hookPaths.push(...(translated.hookPaths ?? []));
         continue;
       }
 
@@ -170,7 +198,7 @@ export function compilePackagePayload(
     );
   }
 
-  return { outputs, diagnostics };
+  return { outputs, diagnostics, hookPaths };
 }
 
 // What the compiler actually emitted, indexed by the source each output came

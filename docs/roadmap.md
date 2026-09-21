@@ -141,6 +141,12 @@ semantics separately for each harness. Langfuse follows once lifecycle events
 and trust requirements are established. A harness without the required
 blocking behavior is explicitly unsupported.
 
+Canonical skill and agent hooks now project during Codex marketplace compilation
+as separate package hook files, with mandatory activation-scope-loss diagnostics
+(ndr:pz1x3e). Standalone leaf projection remains unsupported. Runtime payload and
+blocking acceptance, including tool-name matcher gaps, remains part of this
+milestone rather than being implied by successful compilation.
+
 ## 1.0 — corpus acceptance and publication
 
 - Use Compass for discovery and explicit-only invocation.

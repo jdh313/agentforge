@@ -29,6 +29,14 @@ const FIXTURE = join(
   'MARKETPLACE.yaml',
 );
 
+const ARTIFACT_HOOK_FIXTURE = join(
+  import.meta.dir,
+  'fixtures',
+  'definitions',
+  'codex-artifact-hook-projection',
+  'MARKETPLACE.yaml',
+);
+
 describe('Codex hook projection', () => {
   test('translates a PreToolUse guard hook into Codex handler schema with the guard script executable', async () => {
     const loaded = await loadMarketplaceDefinition(FIXTURE);
@@ -127,6 +135,76 @@ describe('Codex hook projection', () => {
     expect(hookOutput).toBeDefined();
     const translated = JSON.parse(hookOutput?.content ?? '{}');
     expect(Object.keys(translated.hooks)).toEqual(['PostToolUse']);
+  });
+});
+
+describe('Codex canonical artifact hook projection', () => {
+  test('projects skill and agent hooks as separate package hook files with explicit scope loss', async () => {
+    const loaded = await loadMarketplaceDefinition(ARTIFACT_HOOK_FIXTURE);
+    const plan = compileMarketplace(loaded, [
+      { target: 'claude', compilePublication: () => ({ outputs: [] }) },
+      codexMarketplaceAdapter,
+    ]);
+
+    const manifestOutput = findGenerated(plan.outputs, (destination) =>
+      destination.endsWith('/artifact-hooks/.codex-plugin/plugin.json'),
+    );
+    expect(manifestOutput).toBeDefined();
+    const manifest = JSON.parse(manifestOutput?.content ?? '{}');
+    expect(manifest.hooks).toEqual([
+      './hooks/agents/hooked-agent.json',
+      './hooks/skills/hooked-skill.json',
+    ]);
+
+    const skillOutput = findGenerated(plan.outputs, (destination) =>
+      destination.endsWith('/artifact-hooks/hooks/skills/hooked-skill.json'),
+    );
+    expect(skillOutput).toBeDefined();
+    const skillHooks = JSON.parse(skillOutput?.content ?? '{}');
+    expect(skillHooks.hooks.PreToolUse[0].matcher).toBe('Bash');
+    expect(skillHooks.hooks.PreToolUse[0].hooks[0].command).toContain(`\${PLUGIN_ROOT}`);
+    expect(skillHooks.hooks.PreToolUse[0].hooks[0]).not.toHaveProperty('once');
+
+    const agentOutput = findGenerated(plan.outputs, (destination) =>
+      destination.endsWith('/artifact-hooks/hooks/agents/hooked-agent.json'),
+    );
+    expect(agentOutput).toBeDefined();
+    const agentHooks = JSON.parse(agentOutput?.content ?? '{}');
+    expect(agentHooks.hooks.Stop).toBeUndefined();
+    expect(agentHooks.hooks.SubagentStop).toBeDefined();
+
+    const scopeWarnings = plan.diagnostics.filter(
+      (diagnostic) => diagnostic.code === 'artifact-hook-scope-widened',
+    );
+    expect(scopeWarnings).toHaveLength(2);
+    expect(
+      scopeWarnings.map(({ retainedSource }) => retainedSource?.artifactType).toSorted(),
+    ).toEqual(['agent', 'skill']);
+    expect(scopeWarnings.every(({ severity }) => severity === 'warning')).toBe(true);
+
+    expect(plan.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'unsupported-artifact-hook-once',
+          severity: 'warning',
+          retainedSource: expect.objectContaining({ artifactType: 'skill' }),
+        }),
+        expect.objectContaining({
+          code: 'translated-construct',
+          severity: 'note',
+          message: expect.stringContaining('Stop'),
+          retainedSource: expect.objectContaining({ artifactType: 'agent' }),
+        }),
+      ]),
+    );
+    expect(
+      plan.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === 'claude-only-frontmatter-stripped' &&
+          diagnostic.provenance.packageId === 'artifact-hooks' &&
+          diagnostic.message.includes('hooks'),
+      ),
+    ).toBe(false);
   });
 });
 

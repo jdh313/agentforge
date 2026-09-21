@@ -1,3 +1,4 @@
+import { basename, dirname } from 'node:path';
 import matter from 'gray-matter';
 import { z } from 'zod';
 import { parseAgentBehavior, parseCommandBehavior } from '../agent-command.ts';
@@ -28,9 +29,17 @@ const INFERRED_TRANSLATORS = new Map<string, ArtifactTranslator>([
   ['hook', translateHookConfiguration],
 ]);
 
+// ndr:pz1x3e: artifact hooks may leave the leaf only when the package compiler
+// also gives them a native package destination and reports the widened scope.
+const ARTIFACT_AUGMENTERS = new Map<string, ArtifactTranslator>([
+  ['skill', (input) => translateArtifactHooks(input, 'skill')],
+  ['agent', (input) => translateArtifactHooks(input, 'agent')],
+]);
+
 const PAYLOAD_POLICY = {
   passthroughArtifactTypes: new Set<string>(),
   translators: INFERRED_TRANSLATORS,
+  augmenters: ARTIFACT_AUGMENTERS,
   requireDeclaredLosses: true,
 };
 
@@ -68,6 +77,7 @@ const ClaudeHookHandler = z.looseObject({
   command: z.string().min(1),
   args: z.array(z.string()).optional(),
   timeout: z.number().finite().positive().optional(),
+  once: z.boolean().optional(),
 });
 
 const ClaudeHookGroup = z.looseObject({
@@ -214,11 +224,7 @@ export function compileCodexPublication(input: PublicationCompilation): TargetCo
     compilePackagePayload(input, packageInput, PAYLOAD_POLICY),
   );
   const packages = input.packages.map((packageInput, index) =>
-    compilePackage(
-      input,
-      packageInput,
-      materializedHookPaths(input, packageInput, payloads[index]),
-    ),
+    compilePackage(input, packageInput, materializedHookPaths(payloads[index])),
   );
   const marketplace = parseDocument(
     CodexMarketplace,
@@ -273,27 +279,63 @@ function translateHookConfiguration({
 }: ArtifactTranslatorInput): PackagePayloadResult {
   const source = parseHookDocument(artifact.path, artifact.content);
   const relativePath = relativePackageArtifactPath(packageInput.path, artifact.path);
+  return translateHookDocument({
+    artifact,
+    artifactType: 'hook',
+    destinationRelativePath: relativePath,
+    locateEvents: true,
+    packageDirectory,
+    packageInput,
+    relativePath,
+    source,
+  });
+}
+
+interface HookDocumentTranslationInput {
+  artifact: ArtifactTranslatorInput['artifact'];
+  artifactType: string;
+  destinationRelativePath: string;
+  locateEvents: boolean;
+  packageDirectory: string;
+  packageInput: ArtifactTranslatorInput['packageInput'];
+  relativePath: string;
+  source: z.infer<typeof ClaudeHookDocument>;
+}
+
+function translateHookDocument({
+  artifact,
+  artifactType,
+  destinationRelativePath,
+  locateEvents,
+  packageDirectory,
+  packageInput,
+  relativePath,
+  source,
+}: HookDocumentTranslationInput): PackagePayloadResult {
   const diagnostics: ProposedCompilationDiagnostic[] = [];
   const hooks: Record<string, unknown[]> = {};
   const translatedEvents: string[] = [];
+  const sourceText = JSON.stringify(source);
 
   // A structured artifact reports its own constructs: the prose detector does
   // not scan hook configs, so without this the rewrite below would be invisible
   // in the compile report (ndr:4nshwv rules out declaring it, not reporting it).
   for (const [token, becomes] of HOOK_ENV_TRANSLATIONS) {
-    if (!artifact.content.includes(token)) continue;
+    if (!sourceText.includes(token)) continue;
     diagnostics.push({
       code: 'translated-construct',
       severity: 'note',
       packageId: packageInput.id,
       message: `Claude-only construct "${token}" in ${relativePath} is translated to ${becomes} for target "codex"; nothing is lost, so no declared loss is required.`,
-      retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
+      retainedSource: { artifactType, sourcePath: artifact.path },
     });
   }
 
   for (const [event, groups] of Object.entries(source.hooks)) {
     const support = supportFor('codex', 'hook', event);
-    const eventLocation = locateHookEventKey(artifact.path, artifact.content, event);
+    const eventLocation = locateEvents
+      ? locateHookEventKey(artifact.path, artifact.content, event)
+      : undefined;
     if (support !== 'supported') {
       // Two different claims, kept apart for the reason ndr:szdn5s keeps
       // `unclassified-body-construct` apart from `claude-only-body-feature`:
@@ -309,7 +351,7 @@ function translateHookConfiguration({
               severity: 'warning',
               packageId: packageInput.id,
               message: `Hook event "${event}" in ${relativePath} has no Codex analog and is absent from Codex output.`,
-              retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
+              retainedSource: { artifactType, sourcePath: artifact.path },
               ...(eventLocation === undefined ? {} : { locations: [eventLocation] }),
             }
           : {
@@ -317,7 +359,7 @@ function translateHookConfiguration({
               severity: 'warning',
               packageId: packageInput.id,
               message: `Hook event "${event}" in ${relativePath} is not classified by the "codex/hook" capability table row, so whether Codex fires it is unestablished; the event is absent from Codex output. Add a table row entry once confirmed.`,
-              retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
+              retainedSource: { artifactType, sourcePath: artifact.path },
               ...(eventLocation === undefined ? {} : { locations: [eventLocation] }),
             },
       );
@@ -333,7 +375,7 @@ function translateHookConfiguration({
             severity: 'warning',
             packageId: packageInput.id,
             message: `Hook handler for "${event}" in ${relativePath} declares "args", which Codex has no field for; folded into the "command" string.`,
-            retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
+            retainedSource: { artifactType, sourcePath: artifact.path },
             ...(eventLocation === undefined ? {} : { locations: [eventLocation] }),
           });
         }
@@ -347,11 +389,21 @@ function translateHookConfiguration({
             severity: 'warning',
             packageId: packageInput.id,
             message: `Hook handler for "SessionEnd" in ${relativePath} declares a ${handler.timeout}s timeout; Codex caps SessionEnd at ${SESSION_END_TIMEOUT_CAP_SECONDS}s, so the declared value is not honored in full.`,
-            retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
+            retainedSource: { artifactType, sourcePath: artifact.path },
             ...(eventLocation === undefined ? {} : { locations: [eventLocation] }),
           });
         }
-        const { args, ...rest } = handler;
+        if (artifactType === 'skill' && handler.once !== undefined) {
+          diagnostics.push({
+            code: 'unsupported-artifact-hook-once',
+            severity: 'warning',
+            packageId: packageInput.id,
+            message: `Skill hook handler for "${event}" in ${relativePath} declares "once", which Codex package hooks cannot preserve; the field is absent from Codex output.`,
+            retainedSource: { artifactType, sourcePath: artifact.path },
+            ...(eventLocation === undefined ? {} : { locations: [eventLocation] }),
+          });
+        }
+        const { args, once: _once, ...rest } = handler;
         return {
           ...rest,
           type: 'command' as const,
@@ -374,10 +426,10 @@ function translateHookConfiguration({
         severity: 'note',
         packageId: packageInput.id,
         message: `Hook configuration ${relativePath} declares no events; nothing was projected for Codex.`,
-        retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
+        retainedSource: { artifactType, sourcePath: artifact.path },
       });
     }
-    return { outputs: [], diagnostics };
+    return { outputs: [], diagnostics, hookPaths: [] };
   }
 
   const translated = parseDocument(
@@ -394,7 +446,7 @@ function translateHookConfiguration({
       {
         kind: 'generated',
         packageId: packageInput.id,
-        destination: `${packageDirectory}/${relativePath}`,
+        destination: `${packageDirectory}/${destinationRelativePath}`,
         content: serialize(translated),
       },
     ],
@@ -404,11 +456,99 @@ function translateHookConfiguration({
         severity: 'note',
         packageId: packageInput.id,
         message: `Hook configuration ${relativePath} translated into Codex's handler schema for ${translatedEvents.join(', ')}; Codex skips plugin-bundled hooks until the user reviews and trusts the definition.`,
-        retainedSource: { artifactType: 'hook', sourcePath: artifact.path },
+        retainedSource: { artifactType, sourcePath: artifact.path },
       },
       ...diagnostics,
     ],
+    hookPaths: [`./${destinationRelativePath}`],
   };
+}
+
+function translateArtifactHooks(
+  input: ArtifactTranslatorInput,
+  artifactType: 'skill' | 'agent',
+): PackagePayloadResult {
+  const { artifact, packageDirectory, packageInput } = input;
+  const frontmatter = matter(artifact.content).data as Record<string, unknown>;
+  if (frontmatter.hooks === undefined) return { outputs: [], diagnostics: [] };
+
+  const artifactName =
+    artifactType === 'agent'
+      ? parseAgentBehavior(artifact.path, artifact.content).name
+      : typeof frontmatter.name === 'string' && frontmatter.name.length > 0
+        ? frontmatter.name
+        : basename(dirname(artifact.path));
+  const relativePath = relativePackageArtifactPath(packageInput.path, artifact.path);
+  const destinationRelativePath = `hooks/${artifactType}s/${artifactName}.json`;
+  const rawHooks = frontmatter.hooks;
+  const hooks =
+    artifactType === 'agent' && isRecord(rawHooks) && Array.isArray(rawHooks.Stop)
+      ? convertAgentStopEvent(rawHooks)
+      : rawHooks;
+  const source = parseDocument(
+    ClaudeHookDocument,
+    { hooks },
+    `inline ${artifactType} hook configuration ${artifact.path}`,
+  );
+  const translated = translateHookDocument({
+    artifact,
+    artifactType,
+    destinationRelativePath,
+    locateEvents: false,
+    packageDirectory,
+    packageInput,
+    relativePath,
+    source,
+  });
+  const diagnostics: ProposedCompilationDiagnostic[] = [
+    {
+      code: 'translated-construct',
+      severity: 'note',
+      packageId: packageInput.id,
+      message: `Canonical ${artifactType} frontmatter "hooks" in ${relativePath} is projected to package hook ./${destinationRelativePath}; handler form is translated, while activation-scope loss is reported separately.`,
+      retainedSource: { artifactType, sourcePath: artifact.path },
+    },
+    {
+      code: 'artifact-hook-scope-widened',
+      severity: 'warning',
+      packageId: packageInput.id,
+      message:
+        artifactType === 'skill'
+          ? `Skill hooks in ${relativePath} activate only after that skill is invoked on Claude, but Codex loads ./${destinationRelativePath} for the whole enabled package; the hook can fire before or without skill invocation. Tool-name matcher gaps remain documented in docs/hook-event-parity.md (L-009).`
+          : `Agent hooks in ${relativePath} run only while that agent is active on Claude, but Codex loads ./${destinationRelativePath} for the whole enabled package; the hook can fire in the main thread and other agents. Tool-name matcher gaps remain documented in docs/hook-event-parity.md (L-009).`,
+      retainedSource: { artifactType, sourcePath: artifact.path },
+    },
+  ];
+  if (artifactType === 'agent' && isRecord(rawHooks) && Array.isArray(rawHooks.Stop)) {
+    diagnostics.push({
+      code: 'translated-construct',
+      severity: 'note',
+      packageId: packageInput.id,
+      message: `Agent hook event "Stop" in ${relativePath} is translated to "SubagentStop", matching Claude's runtime conversion before the package-level scope widening is applied.`,
+      retainedSource: { artifactType, sourcePath: artifact.path },
+    });
+  }
+
+  return {
+    ...translated,
+    diagnostics: [...diagnostics, ...translated.diagnostics],
+    externallyProjectedFrontmatterKeys: new Set(['hooks']),
+  };
+}
+
+function convertAgentStopEvent(hooks: Record<string, unknown>): Record<string, unknown> {
+  const { Stop, SubagentStop, ...rest } = hooks;
+  return {
+    ...rest,
+    SubagentStop: [
+      ...(Array.isArray(SubagentStop) ? SubagentStop : []),
+      ...(Array.isArray(Stop) ? Stop : []),
+    ],
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 // Codex's `command` is a single "script path and arguments" string, so Claude's
@@ -633,23 +773,9 @@ function declaredHooks(hookPaths: readonly string[]): { hooks?: string | string[
 
 // A declared hook artifact whose every event was untranslatable produces no
 // output; declaring its path anyway would name a file that does not exist.
-function materializedHookPaths(
-  input: PublicationCompilation,
-  packageInput: CompilationPackage,
-  payload: PackagePayloadResult | undefined,
-): string[] {
+function materializedHookPaths(payload: PackagePayloadResult | undefined): string[] {
   if (!payload) return [];
-  const packageDirectory = relativePackageDirectory(input.marketplace.path, packageInput.path);
-  const materialized = new Set(
-    payload.outputs
-      .filter((output) => output.kind === 'generated')
-      .map(({ destination }) => destination),
-  );
-  return (packageInput.artifacts.get('hook') ?? [])
-    .map(({ path }) => relativePackageArtifactPath(packageInput.path, path))
-    .filter((relativePath) => materialized.has(`${packageDirectory}/${relativePath}`))
-    .map((relativePath) => `./${relativePath}`)
-    .toSorted(compareStrings);
+  return [...new Set(payload.hookPaths ?? [])].toSorted(compareStrings);
 }
 
 function compareStrings(left: string, right: string): number {

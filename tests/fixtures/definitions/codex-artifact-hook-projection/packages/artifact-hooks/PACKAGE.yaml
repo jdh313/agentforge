@@ -1,0 +1,17 @@
+schema: agentforge.package/v1
+id: artifact-hooks
+defaults:
+  name: artifact-hooks
+  version: 1.0.0
+  description: Fixture package with canonical skill and agent hooks.
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+  - type: agent
+    pattern: agents/*.md
+targets:
+  codex:
+    native:
+      interface:
+        displayName: Artifact Hooks
+        category: Developer Tools

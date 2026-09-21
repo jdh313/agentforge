@@ -71,7 +71,7 @@ mapping could land.
 | `effort` <br> low \| medium \| high \| xhigh \| max | **Native** — `effort` | **Blocked.** Nothing at skill level; `model_reasoning_effort` exists on the agent role, where agentforge already translates this same key. |
 | `context` <br> fork | **Native** — `context` | **No analogue.** Context forking is a Claude Code execution mode with no Codex declarative form. |
 | `agent` | **Native** — `agent` | **No analogue** on the skill/plugin surface: a plugin registers no Codex agent role (L-010). Standalone Codex roles are selectable, but a skill cannot name one declaratively through this field. |
-| `hooks` | **Native** — `hooks` | **Blocked** → `.codex/hooks`. Codex has the event vocabulary and honors Claude-style matchers, but it is a separate package-level surface, not a field a skill carries. Event parity is tracked in [hook-event-parity.md](hook-event-parity.md) (L-009). |
+| `hooks` | **Native** — `hooks` | **Translated with scope loss** → a separate package hook file and manifest entry during marketplace compilation. Codex loads it for the whole enabled package, including before the skill is invoked; standalone leaf rendering still drops it. `once` is stripped with a warning. Event and matcher parity are tracked in [hook-event-parity.md](hook-event-parity.md) (L-009; ndr:pz1x3e). |
 | `paths` | **Native** — `paths` | **No analogue.** No path-scoping key on any Codex skill surface. |
 | `shell` <br> bash \| powershell | **Native** — `shell` | **No analogue**, and moot on Codex: hooks are unavailable on Windows there, so the PowerShell half has no runtime. |
 
@@ -128,7 +128,7 @@ on the same struct), or a Codex surface outside the role document (`mcpServers`,
 | `initialPrompt` | **Native** — `initialPrompt` | **Blocked** → `developer_instructions` by appending it — but that field already holds the body, and folding a first user turn into instructions changes what the text is, not just where it sits. |
 | `color` | **Native** — `color` | **No analogue.** A Claude Code display affordance; Codex's unused `personality` is behavioral tone, not presentation. |
 | `mcpServers` <br> array | **Native** — `mcpServers`. Ignored by the plugin loader, same as `permissionMode`. | **Blocked** → Codex's session-wide MCP configuration — never a per-role field, so carrying it would change a per-agent declaration into a global one. |
-| `hooks` | **Native** — `hooks` | **Blocked** → `.codex/hooks`, which has a comparable event set and honors Claude-style matchers — but it is package-level, so per-agent scoping is the part that does not survive. |
+| `hooks` | **Native** — `hooks`; Claude converts an agent `Stop` hook to `SubagentStop` while the agent runs. | **Translated with scope loss** → a separate package hook file and manifest entry during marketplace compilation. Agent `Stop` becomes `SubagentStop`, but Codex loads the hook for the whole enabled package, so it can fire outside that agent. Standalone leaf rendering still drops it (ndr:pz1x3e). |
 | `experimental` | **Native** — `experimental` | **No analogue.** Experimental by name, so no cross-target equivalent can be claimed for its contents. |
 
 ### No canonical field — the harness reads it, agentforge cannot set it

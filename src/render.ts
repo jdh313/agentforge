@@ -48,6 +48,11 @@ export interface ArtifactProjectionOptions {
   // point: the tooling that reads and rewrites these keys works against the
   // repo, not against published output.
   authoringKeys?: ReadonlySet<string>;
+  // Frontmatter keys a package compiler projects onto a package-level native
+  // surface rather than the leaf document. They are still absent from the
+  // rendered leaf, but must not also be reported as wholly stripped there.
+  // Standalone rendering never supplies this set.
+  externallyProjectedFrontmatterKeys?: ReadonlySet<string>;
 }
 
 export interface LoadArtifactProjectionOptions {
@@ -202,6 +207,7 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
     resourcePaths = [],
     installScope,
     authoringKeys = new Set<string>(),
+    externallyProjectedFrontmatterKeys = new Set<string>(),
   } = opts;
   const artifactDef = ARTIFACT_DEFS[artifact];
   const artifactConfig = getArtifactConfig(target, artifact);
@@ -271,6 +277,7 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
       (key) =>
         artifactDef.canonicalKeys.has(key) &&
         !acceptedKeys.has(key) &&
+        !externallyProjectedFrontmatterKeys.has(key) &&
         supportFor(target, artifactConfig.surface, key) !== 'translated',
     );
     if (claudeOnlyPresent.length > 0) {
