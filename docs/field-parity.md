@@ -93,14 +93,14 @@ mapping could land.
 `AGENT.md` · file layout · Claude `.md` / Codex `.toml`
 
 Claude emits Markdown frontmatter under the same key names its own loader reads.
-Codex emits a native agent-role TOML whose entire override set is eight fields —
-`developer_instructions`, `model`, `model_reasoning_effort`,
-`model_reasoning_summary`, `model_verbosity`, `personality`, `service_tier`,
-`skills`. That last one shares a name with a canonical key but not its meaning,
-so it is No analogue: a role can use it only to remove skills from the child
-(L-013). A Blocked answer here names one of the other seven (or `sandbox_mode`
-on the same struct), or a Codex surface outside the role document (`mcpServers`,
-`hooks`); anything else is No analogue.
+Codex's `AgentRoleOverrides` set has nine fields: `developer_instructions`,
+`model`, `model_reasoning_effort`, `model_reasoning_summary`, `model_verbosity`,
+`personality`, `service_tier`, `skills`, and `features`. `skills` shares a name
+with a canonical key but not its meaning: a role can use it only to remove
+skills from the child (L-013). A role file is a flattened Codex configuration
+layer and can therefore carry fields such as `sandbox_mode`, but sharing a
+document does not make their operations equivalent to source agent policy
+(ndr:bqyqfd).
 
 ### Shared by both harnesses
 
@@ -117,9 +117,9 @@ on the same struct), or a Codex surface outside the role document (`mcpServers`,
 | Canonical field | Claude (.md) | Codex (.toml) |
 | --- | --- | --- |
 | `skills` <br> string \| string[] | **Native** — `skills` | **No analogue**, though Codex has a same-named field: a role's `skills` is the `config.toml` `[skills]` table, which can only remove skills from the child, never preload them. A Claude-style list is worse than lost: Codex drops the whole role file (L-013). |
-| `tools` <br> string \| string[] | **Native** — `tools` | **Blocked** → `sandbox_mode`, the nearest adjacent field on the native struct — deliberately never set from a tool list, because a sandbox mode cannot back the per-tool enforcement guarantee an allowlist claims. |
-| `disallowedTools` | **Native** — `disallowedTools` | **Blocked** → `sandbox_mode` only, with the same objection — and a denylist is the harder half to approximate, since a sandbox tightens broadly rather than naming tools. |
-| `permissionMode` <br> default \| acceptEdits \| auto \| dontAsk \| bypassPermissions \| plan \| manual | **Native** — `permissionMode`. Honored at user and project scope; Claude's *plugin* agent loader ignores it with a warning. | **Blocked** → `sandbox_mode` as the nearest posture field — but no agent-role field carries permission *policy*, and the two vocabularies do not line up value for value. |
+| `tools` <br> string \| string[] | **Native** — `tools` | **No analogue.** A named allowlist filters the inherited tool catalog; `sandbox_mode` controls filesystem and network access during command execution and cannot preserve that operation (ndr:bqyqfd). |
+| `disallowedTools` | **Native** — `disallowedTools` | **No analogue.** Codex has no role-scoped named-tool denylist. A sandbox cannot remove one tool while preserving unrelated tools (ndr:bqyqfd). |
+| `permissionMode` <br> default \| acceptEdits \| auto \| dontAsk \| bypassPermissions \| plan \| manual | **Native** — `permissionMode`. Honored at user and project scope; Claude's *plugin* agent loader ignores it with a warning. | **No analogue.** Codex separates sandbox capability from approval behavior, and no documented total mapping preserves these source-specific modes (ndr:bqyqfd). |
 | `maxTurns` <br> positive int | **Native** — `maxTurns` | **No analogue.** No per-role turn limit anywhere in the 0.154.0 field set. |
 | `isolation` <br> worktree \| remote | **Native** — `isolation` | **No analogue.** No execution-isolation field on an agent role. |
 | `memory` <br> user \| project \| local | **Native** — `memory` | **No analogue.** The `memory` literal in the binary belongs to its Claude Code importer's path list, not to the agent-role document. |
@@ -140,7 +140,8 @@ on the same struct), or a Codex surface outside the role document (`mcpServers`,
 | *none* | n/a | **Unmapped** — `model_verbosity`. In the override set, never emitted. |
 | *none* | n/a — Claude's `color` is presentation, not tone; not the same field. | **Unmapped** — `personality`. In the override set, never emitted. |
 | *none* | n/a | **Unmapped** — `service_tier`. In the override set, never emitted. An account-level billing/latency pin with no Claude counterpart in frontmatter. |
-| *none* | n/a | **Unmapped** — `sandbox_mode`. On the native struct and deliberately unset — it is the standing candidate for `tools`, `disallowedTools` and `permissionMode`, so a canonical key of its own would be the Codex-first way to reach it honestly. |
+| *none* | n/a | **Unmapped** — `features`. A role may disable selected Codex runtime features; no canonical field expresses this subtractive feature map. |
+| *none* | n/a | **Unmapped** — `sandbox_mode`. Available in a role's flattened Codex configuration layer and deliberately unset by source-policy projection. An explicit Codex-native authoring surface can expose it honestly as a separate future feature (ndr:bqyqfd). |
 
 ### Authoring layer — never emitted anywhere
 
@@ -153,8 +154,9 @@ on the same struct), or a Codex surface outside the role document (`mcpServers`,
 - **Unmapped rows read in the other direction.** Every other row starts from a
   canonical key and asks what each harness does with it. The Unmapped rows start
   from the harness and ask what agentforge can express — a gap closed by adding a
-  canonical key, not by changing a projection. Half of Codex's eight agent-role
-  overrides sit there.
+  canonical key, not by changing a projection. Four of Codex's nine explicit
+  agent-role overrides sit there; `features` is also unmapped because its
+  subtractive runtime-feature switches have no canonical field.
 - **Unknown keys.** Canonical schemas are `z.looseObject`, so a key neither
   schema enumerates survives parse long enough to report
   `unrecognized-frontmatter-key`, then is stripped on every target including

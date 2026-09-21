@@ -80,20 +80,20 @@ const ACCEPTANCE: Readonly<
 
     // Everything below is read and validated by Claude Code 2.1.274's shipped
     // `.claude/agents/*.md` loader. Each is claude-only because codex-cli
-    // 0.154.0's agent-role document has exactly eight override fields —
+    // 0.154.0's AgentRoleOverrides has exactly nine fields —
     // developer_instructions, model, model_reasoning_effort,
     // model_reasoning_summary, model_verbosity, personality, service_tier,
-    // skills — and `codexAgentDocument.serialize` emits three of them
+    // skills, features — and `codexAgentDocument.serialize` emits three of them
     // (developer_instructions, plus model and model_reasoning_effort when set),
     // alongside name and description. A key with no field to land in is a
     // confirmed loss on Codex, which is what `claude-only-frontmatter-stripped`
     // states; that is a stronger and more useful claim than reporting a key
     // Claude itself enforces as one nobody has heard of.
     disallowedTools: claudeOnly(
-      'Claude Code native subagent frontmatter, parsed by the same tool-list splitter as `tools`. codex-cli 0.154.0 has no tool denylist on any agent-role field set, so the restriction is unenforceable there.',
+      'Claude Code native subagent frontmatter, parsed by the same tool-list splitter as `tools`. Codex has no role-scoped named-tool denylist; sandbox policy is filesystem/network policy during command execution, not an equivalent operation (ndr:bqyqfd).',
     ),
     permissionMode: claudeOnly(
-      'Claude Code native subagent frontmatter, validated against a fixed allow-list. Ignored with a warning by Claude Code\'s *plugin* agent loader ("which is ignored for plugin agents. Use .claude/agents/ for this level of control"), so it is honored only at the user and project scopes this artifact installs to. No codex-cli 0.154.0 agent-role field carries permission policy.',
+      'Claude Code native subagent frontmatter, validated against a fixed allow-list. Ignored with a warning by Claude Code\'s *plugin* agent loader ("which is ignored for plugin agents. Use .claude/agents/ for this level of control"), so it is honored only at the user and project scopes this artifact installs to. Codex separates sandbox capability from approval behavior and has no total semantics-preserving mapping for this vocabulary (ndr:bqyqfd).',
     ),
     isolation: claudeOnly(
       'Claude Code native subagent frontmatter, validated against worktree/remote. Codex agent roles have no execution-isolation field.',

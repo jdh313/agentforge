@@ -95,9 +95,10 @@ function tomlString(value: string, sourcePath: string, field: string): string {
 // manifest field sets, so `maxTurns` and `tools` are never emitted here; the
 // shared leaf pipeline already reports both as `claude-only-frontmatter-stripped`
 // once `src/frontmatter.ts` withholds them from Codex's accepted-key set.
-// `sandbox_mode` exists on the native struct but is deliberately never set from
-// a tool list — that would assert an enforcement guarantee this mapping cannot
-// back.
+// `sandbox_mode` is available through the flattened role config layer but is
+// deliberately never set from `tools`, `disallowedTools`, or `permissionMode`:
+// filesystem/network sandboxing cannot preserve named-tool or source approval
+// policy. Those fields are permanent losses on this projection (ndr:bqyqfd).
 const codexAgentDocument: NativeAgentDocument = {
   extension: '.toml',
   serialize(behavior: CanonicalAgentBehavior, { sourcePath }: NativeAgentDocumentContext) {

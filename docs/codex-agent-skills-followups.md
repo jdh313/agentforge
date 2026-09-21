@@ -28,7 +28,7 @@ returned its unique `developer_instructions` marker. L-011 now records the
 corrected behavior, L-012 is closed by the same project-discovery probe, and
 the stale field-parity and acceptance claims were updated with them.
 
-## 2. "Eight override fields" is nine, and `sandbox_mode` is not one of them
+## 2. Resolved: "Eight override fields" is nine, and policy is not sandboxing
 
 `docs/field-parity.md` (intro to the Agent section, and the sentence at "Half of
 Codex's eight agent-role ..."), `src/capabilities.ts` (the `AgentRoleOverrides`
@@ -38,19 +38,17 @@ agent-role override set is exactly eight fields. At the pinned commit
 `features`, a map that a role can only use to switch off six named features
 (shell tool, apps, personality, plugins, memory tool, request-permissions tool).
 
-The same text places `sandbox_mode` "on the same struct". It is not on
-`AgentRoleOverrides`. A role file is a flattened `ConfigToml`, so `sandbox_mode`
-can be written in one, but whether a role's value reaches the spawned child is
-not established by anything in this repo.
+The same text placed `sandbox_mode` "on the same struct". It is not on
+`AgentRoleOverrides`; a role file is a flattened `ConfigToml`, so the field can
+still be authored there. That placement does not preserve a source agent tool
+filter or permission mode: Codex defines the sandbox as filesystem and network
+policy during command execution.
 
-- **Why it matters:** the `tools`, `disallowedTools`, and `permissionMode` rows
-  are all `Blocked -> sandbox_mode` on the strength of that placement. If a
-  role's `sandbox_mode` is never applied, those rows are closer to No analogue.
-- **Action:** correct the count and the struct claim in the three files when
-  field-parity is next refreshed. Probe whether a role's `sandbox_mode` reaches
-  the child before the task that decides the `sandbox_mode` mapping relies on it.
-- **Not changed by L-013:** its edit reworded the sentence but kept the count,
-  because the count is shared with rows it did not own.
+Resolved under Fibery #130 on 2026-09-21. The field count and struct claim are
+corrected, all three source-policy rows are No analogue, and ndr:bqyqfd records
+why no runtime probe can turn a different operation into a valid translation.
+An explicit Codex-native sandbox or approval surface remains a separate future
+feature rather than a projection from those source fields.
 
 ## 3. Stale `skills` wording in the field-parity skill and the published map
 
