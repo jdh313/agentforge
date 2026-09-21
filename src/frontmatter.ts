@@ -83,11 +83,12 @@ const ACCEPTANCE: Readonly<
     // 0.154.0's agent-role document has exactly eight override fields —
     // developer_instructions, model, model_reasoning_effort,
     // model_reasoning_summary, model_verbosity, personality, service_tier,
-    // skills — and `codexAgentDocument.serialize` emits five of them. A key
-    // with no field to land in is a confirmed loss on Codex, which is what
-    // `claude-only-frontmatter-stripped` states; that is a stronger and more
-    // useful claim than reporting a key Claude itself enforces as one nobody
-    // has heard of.
+    // skills — and `codexAgentDocument.serialize` emits three of them
+    // (developer_instructions, plus model and model_reasoning_effort when set),
+    // alongside name and description. A key with no field to land in is a
+    // confirmed loss on Codex, which is what `claude-only-frontmatter-stripped`
+    // states; that is a stronger and more useful claim than reporting a key
+    // Claude itself enforces as one nobody has heard of.
     disallowedTools: claudeOnly(
       'Claude Code native subagent frontmatter, parsed by the same tool-list splitter as `tools`. codex-cli 0.154.0 has no tool denylist on any agent-role field set, so the restriction is unenforceable there.',
     ),
@@ -106,15 +107,18 @@ const ACCEPTANCE: Readonly<
     omitClaudeMd: claudeOnly(
       'Claude Code native subagent frontmatter. Names CLAUDE.md, a Claude Code file, so no other target can have an equivalent.',
     ),
-    // codex-cli 0.154.0's `AgentRoleOverrides` does carry a same-named `skills`
-    // field, which is why this row is not simply "no analogue". Its semantics
-    // and value shape were not recoverable from the binary, and the agent-role
-    // serializer emits no `skills` key, so nothing the author wrote reaches
-    // Codex either way. The loss is therefore confirmed on the evidence
-    // agentforge has; mapping the two on a shared field name would assert an
-    // equivalence nothing backs.
+    // codex-cli 0.154.0's `AgentRoleOverrides` carries a same-named `skills`
+    // field, so the loss needed evidence before it could be called confirmed.
+    // It is the config.toml `[skills]` table, not a string list, and a role's
+    // copy can only remove skills from the child's catalog; no role field
+    // injects skill content (docs/limitations.md L-013, verified live
+    // 2026-09-21).
+    // Claude's `skills:` preloads, so the two are not equivalent, and a
+    // Claude-style list on that name makes Codex reject the whole role file.
+    // `codexAgentDocument.serialize` emits no `skills`, and the canonical value
+    // is a confirmed loss on Codex.
     skills: claudeOnly(
-      'Claude Code native subagent frontmatter: skills preloaded into the subagent at startup. codex-cli 0.154.0 has a same-named agent-role field whose semantics are unverified and which agentforge never emits, so the canonical value is lost on Codex rather than translated.',
+      'Claude Code native subagent frontmatter: skills preloaded into the subagent at startup. codex-cli 0.154.0 has a same-named agent-role field, but it is the config.toml `[skills]` table that can only remove skills from the child, and a Claude-style list makes Codex drop the whole role file (docs/limitations.md L-013), so the canonical value is lost on Codex rather than translated.',
     ),
     initialPrompt: claudeOnly(
       'Claude Code native subagent frontmatter, auto-submitted as the first user turn when the agent runs as the main session agent. Codex agent roles have no first-turn field.',

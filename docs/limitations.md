@@ -893,3 +893,123 @@ now user-only, with the reason recorded beside it. `src/install.ts` — the
 refusal path, which names the scopes a target does declare. `tests/install.test.ts`
 and `tests/install-cli.test.ts` — the refusal is asserted to write nothing at
 all, not merely to warn.
+
+---
+
+## L-013 — A canonical agent's `skills:` has no Codex form: Codex's same-named role field can only remove skills
+
+**Gap.** A canonical `AGENT.md` `skills:` (on Claude Code, skills preloaded
+into the subagent at startup) has no Codex projection, and no value of any Codex
+field can carry it. `AgentRoleOverrides` in codex-cli 0.154.0 does have a field
+named `skills`, which is why this looks mappable, but it is the `config.toml`
+`[skills]` table (`bundled`, `include_instructions`, `max_context_tokens`, and
+`[[skills.config]]` entries of `{name | path, enabled}`), not a list, and a
+role's copy is applied subtractively: only `enabled = false` entries,
+`bundled.enabled = false` and `include_instructions = false` reach the child.
+Preloading adds a skill's content to the child's context; that needs a writer
+that injects it, and a role file has none. The field can only remove entries
+from the child's skill catalog. `codexAgentDocument.serialize` therefore emits
+no `skills`, and `src/frontmatter.ts` keeps the key claude-only.
+
+Mapping on the shared name would not merely lose the field, it would break the
+agent. A Claude-style list (`skills = ["a", "b"]`) fails to deserialize as a
+struct, and Codex drops the *whole* role file, not just the key.
+
+**Manifests as.** An agent declaring `skills: [x, y]` renders to a Codex TOML
+with no `skills` key, and `claude-only-frontmatter-stripped` names `skills`
+among the other Claude-only keys. The spawned child receives no skill content
+from the role. Whatever skills it can see are the ones any Codex session lists
+in its catalog, so an agent written to start with `x`'s procedure already in
+context starts without it. The reverse mistake is louder but worse: a
+hand-written Claude-style `skills` list in a Codex role file prints
+`Ignoring malformed agent role definition` at startup, and the role is then
+unknown to `spawn_agent`.
+
+**Affects.** Codex leaf `agent` projection (`src/targets/codex.ts`,
+`codexAgentDocument`), for every canonical agent that declares `skills:` — in
+this repo the `agent-claude-fields` fixture; in a marketplace, any package
+whose agents preload skills. The marketplace Markdown-procedure fallback (L-010)
+registers no role at all, so the field has nowhere to land there regardless.
+
+**Evidence.** Verified 2026-09-21 against codex-cli 0.154.0, from source and
+from live runs, which agree. Source is openai/codex tag `rust-v0.154.0`, commit
+`6b9826e3aa83b1a5947db50f4332cb9c65f1b340`, fetched read-only (it is not proven
+that the installed binary was built from that exact commit, which is why every
+source claim below was also checked live). Paths are relative to `codex-rs/`.
+
+- `agent-roles/src/agent_role_config.rs:20-28`: a role file is a flattened
+  `ConfigToml`, so `skills` is `Option<SkillsConfig>`
+  (`config/src/skills_config.rs:18-60`; `SkillConfig.enabled` has no default).
+  A deserialize failure is worded by `agent-roles/src/loader.rs:119-123` as
+  `Ignoring malformed agent role definition: ...`, and its callers
+  (`loader.rs:49-54`, `loader.rs:302-308`) then skip the whole role.
+- `core/src/agent/role.rs:107-118` is the entire consumption of a role's
+  `skills`. It keeps only the `[[skills.config]]` entries whose `enabled` is
+  false, `bundled` only when its `enabled` is false, and `include_instructions`
+  only when it is false, and it sets `max_context_tokens` to none. The result
+  becomes an override only if something survived. `enabled = true` entries and
+  `max_context_tokens` are therefore discarded before the child's config is
+  built. The module doc (`role.rs:1-4`) says roles "may
+  customize the child or reduce its capabilities, but never replace the parent
+  session's authority". No code path reads a role's `skills` to inject a skill
+  body, and the upstream tests that exercise a role's `skills`
+  (`core/src/agent/role_tests.rs:555-619`, `core/src/session/tests.rs:5754-5841`)
+  both assert disabling.
+
+Live A/B, 2026-09-21: `codex exec` with an isolated `CODEX_HOME`, two skills
+installed under it, and each role spawned through the parent's `spawn_agent`.
+The child's rollout JSONL records its skills catalog, which was counted per
+role. Four invocations, model `gpt-5.6-luna`, low effort. Roles sat in
+`$CODEX_HOME/agents/*.toml` with no feature flag, and the parent's prompt named
+each role as `spawn_agent`'s `agent_type`. Only that path was run, not a role
+declared under `[agents.<name>]` `config_file` in `config.toml`, though the same
+parser reads both.
+
+This does not square with L-011, which saw no child apply a custom role and
+inferred that the spawn tool has no role-selection parameter. Here `agent_type`
+was accepted (an unknown name fails with `unknown agent_type`) and each child's
+rollout names its role, so that inference does not hold for a prompt that passes
+`agent_type` explicitly. L-011 is left as written; it needs its own retest.
+
+| Role `skills` | Observed in the child |
+| --- | --- |
+| none (control) | both skills in catalog, `<skills_instructions>` block present |
+| `[[skills.config]]` `name = "t129-alpha"`, `enabled = false` | alpha absent, beta present |
+| `enabled = true` for alpha and beta | catalog identical to the control |
+| `[skills.bundled]` `enabled = false` | bundled `skill-creator` absent, alpha present |
+| `[skills]` `include_instructions = false` | `<skills_instructions>` block absent |
+| `skills = ["t129-alpha", "t129-beta"]` | role rejected at startup: `failed to deserialize agent role file at .../probe_bad.toml: invalid type: string "t129-alpha", expected struct BundledSkillsConfig`; the spawn then fails with `unknown agent_type 'probe_bad'` |
+
+The `enabled = false` row is the positive control: it proves the rollout
+catalog reflects the role, so the unchanged `enabled = true` row is a real
+negative and not a blind probe. The sentence that occurs only in a skill's
+`SKILL.md` body (`The alpha marker string is ...`; the description carries the
+marker token but not that sentence) appeared in no child rollout in any run,
+including the `enabled = true` role. A role also cannot re-enable a skill the
+parent's own `config.toml` disabled. `skills = "t129-alpha"` fails the same way
+(`expected struct SkillsConfig`), as does a `[[skills.config]]` entry with no
+`enabled` (`missing field`).
+
+A `name` selector matches a loaded skill's name exactly; a name matching nothing
+is a silent no-op (observed), and a plugin's skills are named
+`<plugin>:<skill>` (source only, `ext/skills/src/loader/namespace.rs:176-181`;
+no plugin was installed). There is no allowlist form: hiding everything but the
+named skills would mean disabling every other installed skill, a set no compile
+step holds.
+
+**Status.** open, upstream. The mapping is withheld deliberately, not deferred:
+the canonical value is a confirmed loss on Codex and is reported as one. It
+moves only if Codex grows an additive form (see the revisit trigger).
+
+**Revisit trigger.** A codex-cli release whose `core/src/agent/role.rs` stops
+discarding `enabled = true` entries, or adds a role field that injects named
+skills into a spawned child. Re-run the A/B above: a role naming an installed
+skill must put that skill's `SKILL.md` body marker into the child's rollout,
+which no run does today.
+
+**Where to look.** `src/frontmatter.ts` — the agent `skills` row and its
+`claudeOnly` citation. `src/targets/codex.ts` — `codexAgentDocument.serialize`,
+which emits `name`, `description`, `model`, `model_reasoning_effort` and
+`developer_instructions` and never `skills`. `tests/render.test.ts` — "reports
+the Claude agent fields as a confirmed loss on Codex" asserts `skills` is among
+the stripped keys. `docs/field-parity.md` — the Agent `skills` row.

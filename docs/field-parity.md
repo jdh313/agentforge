@@ -12,7 +12,8 @@ schemas and the native TOML serializer), `src/capabilities.ts` (translations),
 and `src/targets/codex-marketplace.ts` (the `agents/openai.yaml` sidecar). Those
 are authoritative; this file is a reading of them at one moment and goes stale
 the way any table does. Verified against **codex-cli 0.154.0** and **Claude Code
-2.1.274**, 2026-09-20.
+2.1.274**, 2026-09-20; the Agent `skills` row was re-verified against codex-cli
+0.154.0 on 2026-09-21 (L-013).
 
 **Not in scope here:** why a row is the way it is (NDR ledger, cited as
 `ndr:<id>` from the source files themselves), what is unbuildable (
@@ -94,8 +95,11 @@ Claude emits Markdown frontmatter under the same key names its own loader reads.
 Codex emits a native agent-role TOML whose entire override set is eight fields —
 `developer_instructions`, `model`, `model_reasoning_effort`,
 `model_reasoning_summary`, `model_verbosity`, `personality`, `service_tier`,
-`skills` — so a Blocked answer here means one of those eight (or `sandbox_mode`
-on the same struct), and anything else is No analogue.
+`skills`. That last one shares a name with a canonical key but not its meaning,
+so it is No analogue: a role can use it only to remove skills from the child
+(L-013). A Blocked answer here names one of the other seven (or `sandbox_mode`
+on the same struct), or a Codex surface outside the role document (`mcpServers`,
+`hooks`); anything else is No analogue.
 
 ### Shared by both harnesses
 
@@ -111,7 +115,7 @@ on the same struct), and anything else is No analogue.
 
 | Canonical field | Claude (.md) | Codex (.toml) |
 | --- | --- | --- |
-| `skills` <br> string \| string[] | **Native** — `skills` | **Blocked** → `skills`, the one same-named field in the Codex override set, and the strongest candidate on this page. Blocked on evidence, not plumbing: its semantics and value shape were not recoverable from the binary, so mapping on the shared name would assert an equivalence nothing backs. |
+| `skills` <br> string \| string[] | **Native** — `skills` | **No analogue**, though Codex has a same-named field: a role's `skills` is the `config.toml` `[skills]` table, which can only remove skills from the child, never preload them. A Claude-style list is worse than lost: Codex drops the whole role file (L-013). |
 | `tools` <br> string \| string[] | **Native** — `tools` | **Blocked** → `sandbox_mode`, the nearest adjacent field on the native struct — deliberately never set from a tool list, because a sandbox mode cannot back the per-tool enforcement guarantee an allowlist claims. |
 | `disallowedTools` | **Native** — `disallowedTools` | **Blocked** → `sandbox_mode` only, with the same objection — and a denylist is the harder half to approximate, since a sandbox tightens broadly rather than naming tools. |
 | `permissionMode` <br> default \| acceptEdits \| auto \| dontAsk \| bypassPermissions \| plan \| manual | **Native** — `permissionMode`. Honored at user and project scope; Claude's *plugin* agent loader ignores it with a warning. | **Blocked** → `sandbox_mode` as the nearest posture field — but no agent-role field carries permission *policy*, and the two vocabularies do not line up value for value. |
