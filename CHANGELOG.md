@@ -1,3 +1,17 @@
+# [1.1.0](https://github.com/jdh313/agentforge/compare/v1.0.0...v1.1.0) (2026-09-23)
+
+
+### Bug Fixes
+
+* **codex:** restore project agent roles ([0e603b6](https://github.com/jdh313/agentforge/commit/0e603b6a1531d7fcc5cea4f257214b8140c16ff6))
+
+
+### Features
+
+* **claude:** support plugin-scoped agent installs ([2085f0b](https://github.com/jdh313/agentforge/commit/2085f0b392061872cfb2e60b69d58be813e2d8d8))
+* **codex:** project artifact-scoped hooks ([59f88b1](https://github.com/jdh313/agentforge/commit/59f88b15ce85f5f494d0f90f0d20d2af1e755779))
+* **compatibility:** model gated support explicitly ([5cb1b1b](https://github.com/jdh313/agentforge/commit/5cb1b1b5e2d2ef5b1ed8158742a24b103c287eda))
+
 # [1.0.0](https://github.com/jdh313/agentforge/compare/v0.5.0...v1.0.0) (2026-09-18)
 
 
