@@ -391,7 +391,7 @@ const resolveCodexBundleInstall = (bundleRoot: string, opts: CodexBundleInstallO
 
 program
   .command('compile-codex-agent <source-dir>')
-  .description('Compile one canonical agent into a portable Codex agent bundle')
+  .description('Compile one canonical agent into a legacy-compatible Codex agent bundle')
   .requiredOption('--package-id <id>', 'stable package identity used to namespace the role')
   .requiredOption('-o, --out <dir>', 'bundle output directory')
   .action((sourceDir: string, opts: { packageId: string; out: string }) => {
@@ -418,8 +418,10 @@ program
     try {
       const install = resolveCodexBundleInstall(bundleDir, opts);
       validateCodexAgentBundleInstallPlan(install);
-      console.log(`ready: ${install.agentName}`);
-      console.log(`definition: ${join(install.destinationRoot, install.definitionPath)}`);
+      console.log(`ready: ${install.agentNames.join(', ')}`);
+      for (const definition of install.definitionPaths) {
+        console.log(`definition: ${join(install.destinationRoot, definition)}`);
+      }
       console.log(`receipt: ${join(install.destinationRoot, install.receiptPath)}`);
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
@@ -436,9 +438,7 @@ program
     try {
       const install = resolveCodexBundleInstall(bundleDir, opts);
       materializeCodexAgentBundleInstallPlan(install);
-      console.log(
-        `installed ${install.agentName} at ${join(install.destinationRoot, install.definitionPath)}`,
-      );
+      console.log(`installed ${install.agentNames.join(', ')} at ${install.destinationRoot}`);
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;

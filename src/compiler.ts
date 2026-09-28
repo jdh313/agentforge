@@ -39,6 +39,10 @@ interface NativeDocumentHandleBase {
   schema: z.ZodType;
 }
 
+export interface GeneratedDocumentHandle extends NativeDocumentHandleBase {
+  role: 'generated-document';
+}
+
 export interface NativePluginReference {
   name: string;
   source: string | undefined;
@@ -57,7 +61,10 @@ export interface PackageManifestHandle extends NativeDocumentHandleBase {
   identity(document: unknown): { name: string | undefined; version: string | undefined };
 }
 
-export type NativeDocumentHandle = MarketplaceRegistryHandle | PackageManifestHandle;
+export type NativeDocumentHandle =
+  | MarketplaceRegistryHandle
+  | PackageManifestHandle
+  | GeneratedDocumentHandle;
 
 export interface ProposedGeneratedOutput extends ProposedOutputBase {
   kind: 'generated';
@@ -151,6 +158,7 @@ export interface CompilationPackage {
   authoringKeys: ReadonlySet<string>;
   payloads: readonly PackagePayload[];
   losses: readonly DeclaredLossDefinition[];
+  codexAgentBundle?: boolean;
 }
 
 export interface PublicationCompilation {
@@ -387,6 +395,7 @@ function resolvePackages(
       authoringKeys: new Set(loadedPackage.definition['authoring-keys'] ?? []),
       payloads: loadedPackage.payloads[publication.target] ?? [],
       losses: target.losses ?? [],
+      codexAgentBundle: target['codex-agent-bundle'] === true,
     };
   });
 }

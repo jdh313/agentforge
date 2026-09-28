@@ -1,0 +1,20 @@
+schema: agentforge.package/v1
+id: demo-roles
+defaults:
+  name: Demo roles
+  version: 2.3.4
+  description: Demonstrates a bundled pair of Codex roles.
+artifacts:
+  - type: agent
+    pattern: agents/*.md
+targets:
+  codex:
+    codex-agent-bundle: true
+    native:
+      interface:
+        displayName: Demo roles
+        category: Productivity
+    losses:
+      - construct: agent-tools-filter
+        state: stripped
+        note: Codex has no role tool allowlist.

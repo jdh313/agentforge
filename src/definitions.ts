@@ -85,6 +85,10 @@ const PackageTarget = z
     overrides: PackageDefaults.partial().optional(),
     native: JsonObject.optional(),
     payloads: PayloadDeclaration.optional(),
+    // A marketplace package still ships its reusable Markdown procedures.
+    // This separately opts it into a portable bundle of registered Codex roles
+    // for the user/project role loader.
+    'codex-agent-bundle': z.literal(true).optional(),
     losses: z.array(DeclaredLoss).min(1).optional(),
   })
   .superRefine((target, context) => {

@@ -3,6 +3,7 @@ import matter from 'gray-matter';
 import { z } from 'zod';
 import { parseAgentBehavior, parseCommandBehavior } from '../agent-command.ts';
 import { supportFor, translationsFor } from '../capabilities.ts';
+import { compileCodexAgentBundleOutputs } from '../codex-agent-bundle.ts';
 import {
   CompilationError,
   type CompilationPackage,
@@ -226,6 +227,14 @@ export function compileCodexPublication(input: PublicationCompilation): TargetCo
   const packages = input.packages.map((packageInput, index) =>
     compilePackage(input, packageInput, materializedHookPaths(payloads[index])),
   );
+  const bundles = input.packages
+    .filter((packageInput) => packageInput.codexAgentBundle)
+    .map((packageInput) =>
+      compileCodexAgentBundleOutputs(
+        packageInput,
+        relativePackageDirectory(input.marketplace.path, packageInput.path),
+      ),
+    );
   const marketplace = parseDocument(
     CodexMarketplace,
     deepMerge(
@@ -267,8 +276,12 @@ export function compileCodexPublication(input: PublicationCompilation): TargetCo
         nativeDocument: CodexPluginDocument,
       })),
       ...payloads.flatMap(({ outputs }) => outputs),
+      ...bundles.flatMap(({ outputs }) => outputs),
     ],
-    diagnostics: payloads.flatMap(({ diagnostics }) => diagnostics),
+    diagnostics: [
+      ...payloads.flatMap(({ diagnostics }) => diagnostics),
+      ...bundles.flatMap(({ diagnostics }) => diagnostics),
+    ],
   };
 }
 

@@ -1,0 +1,15 @@
+schema: agentforge.marketplace/v1
+id: codex-agent-bundle
+defaults:
+  name: Codex agent bundle
+  description: Focused multi-agent bundle fixture.
+  owner:
+    name: Test
+packages: [packages/*/PACKAGE.yaml]
+publications:
+  - id: codex
+    target: codex
+    destination: .agents/plugins/marketplace.json
+    enrollment:
+      mode: include
+      packages: [demo-roles]
