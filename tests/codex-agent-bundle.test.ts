@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
+  chmodSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -31,6 +33,7 @@ import {
   materializeCompilation,
   materializeCompilationOutputChanges,
 } from 'agentforge/materializer';
+import matter from 'gray-matter';
 import { allTargets } from '../src/targets/index.ts';
 
 const FIXTURE = join(import.meta.dir, 'fixtures', 'definitions', 'codex-agent-bundle');
@@ -98,9 +101,161 @@ describe('compiled Codex package agent bundle', () => {
     expect(one.outputs.some(({ destination }) => destination.endsWith('/agents/alpha.md'))).toBe(
       true,
     );
+    const setupSkill = one.outputs.find(
+      ({ destination }) => destination === 'packages/demo/skills/setup-codex-agents/SKILL.md',
+    );
+    expect(setupSkill?.kind).toBe('generated');
+    if (!setupSkill || setupSkill.kind !== 'generated') throw new Error('missing setup skill');
+    const setup = matter(setupSkill.content);
+    expect(setup.data).toEqual({
+      name: 'setup-codex-agents',
+      description: 'Register this plugin’s optional Codex agent roles for one scope.',
+    });
+    expect(setup.content).toContain('this active `SKILL.md`');
+    expect(setup.content).toContain('sh "$script" install user');
+    expect(setup.content).toContain('sh "$script" update project \'<project-root>\'');
+    expect(setup.content).toContain('sh "$script" check project \'<project-root>\'');
+    expect(setup.content).toContain('sh "$script" remove project \'<project-root>\'');
+    expect(setup.content).toContain('A version number alone is not compatibility evidence.');
+    expect(setup.content).not.toContain('.codex/plugins/cache/');
+    expect(setup.content).toContain('`demo-roles:alpha`');
+    expect(setup.content).toContain('`demo-roles:beta`');
+    expect(setup.content).toContain('pass its emitted identity unchanged as\n`agent_type`');
+    expect(
+      one.outputs.some(
+        ({ destination }) =>
+          destination === 'packages/demo/skills/setup-codex-agents/agents/openai.yaml',
+      ),
+    ).toBe(true);
+    const setupScript = one.outputs.find(
+      ({ destination }) =>
+        destination ===
+        'packages/demo/skills/setup-codex-agents/scripts/manage-codex-agent-bundle.sh',
+    );
+    expect(setupScript).toMatchObject({ kind: 'generated' });
+    expect(setupScript?.kind === 'generated' && setupScript.content).toContain(
+      'plugin_root=$(CDPATH= cd "$script_dir/../../.." && pwd -P)',
+    );
+    expect(setupScript?.kind === 'generated' && setupScript.content).toContain(
+      'package_id="demo-roles"',
+    );
+    expect(setupScript?.kind === 'generated' && setupScript.content).toContain(
+      'preview_subcommand=preview-codex-agent-update',
+    );
+    expect(setupScript?.kind === 'generated' && setupScript.content).toContain(
+      'preview_subcommand=preview-codex-agent-remove',
+    );
     expect(one.diagnostics.map(({ message }) => message).join('\n')).toContain(
       'stripped tools, disallowedTools, permissionMode',
     );
+  });
+
+  test('runs the compiled setup script from a fresh plugin copy for both scopes', async () => {
+    const loaded = await loadMarketplaceDefinition(join(FIXTURE, 'MARKETPLACE.yaml'));
+    const out = join(temporaryRoot, 'compiled');
+    materializeCompilation(compileMarketplace(loaded, allTargets(), { outputRoot: out }), out);
+    const installedPlugin = join(temporaryRoot, 'fresh-installed-plugin');
+    cpSync(join(out, 'packages/demo'), installedPlugin, { recursive: true });
+    const script = join(
+      installedPlugin,
+      'skills/setup-codex-agents/scripts/manage-codex-agent-bundle.sh',
+    );
+    const wrapper = join(temporaryRoot, 'agentforge-current');
+    const trace = join(temporaryRoot, 'agentforge-trace');
+    writeFileSync(
+      wrapper,
+      `#!/bin/sh\nif [ -n "$AGENTFORGE_TRACE" ]; then printf '%s\\n' "$1" >> "$AGENTFORGE_TRACE"; fi\nexec ${JSON.stringify(process.execPath)} run ${JSON.stringify(CLI)} "$@"\n`,
+    );
+    chmodSync(wrapper, 0o755);
+
+    const missing = runSetupScript(
+      script,
+      { AGENTFORGE_BIN: join(temporaryRoot, 'missing') },
+      'install',
+      'user',
+    );
+    expect(missing.exitCode).toBe(69);
+    expect(missing.stderr).toContain('AgentForge is missing or incompatible');
+    expect(missing.stderr).toContain('https://github.com/jdh313/agentforge/releases');
+
+    const incompatible = join(temporaryRoot, 'agentforge-incompatible');
+    writeFileSync(incompatible, '#!/bin/sh\nexit 1\n');
+    chmodSync(incompatible, 0o755);
+    const rejected = runSetupScript(script, { AGENTFORGE_BIN: incompatible }, 'install', 'user');
+    expect(rejected.exitCode).toBe(69);
+    expect(rejected.stderr).toContain('install-codex-agent --help');
+
+    const project = join(temporaryRoot, 'project');
+    const codexHome = join(temporaryRoot, 'codex-home');
+    const previewFailure = join(temporaryRoot, 'agentforge-preview-failure');
+    const previewFailureTrace = join(temporaryRoot, 'agentforge-preview-failure-trace');
+    writeFileSync(
+      previewFailure,
+      `#!/bin/sh\nif [ "$2" = "--help" ]; then exit 0; fi\nprintf '%s\\n' "$1" >> "$AGENTFORGE_TRACE"\nif [ "$1" = "preview-codex-agent-update" ]; then exit 87; fi\nexit 0\n`,
+    );
+    chmodSync(previewFailure, 0o755);
+    const stopped = runSetupScript(
+      script,
+      { AGENTFORGE_BIN: previewFailure, AGENTFORGE_TRACE: previewFailureTrace },
+      'update',
+      'user',
+    );
+    expect(stopped.exitCode).toBe(87);
+    expect(readFileSync(previewFailureTrace, 'utf8')).toBe('preview-codex-agent-update\n');
+
+    for (const scope of ['user', 'project'] as const) {
+      const scopeArgs = scope === 'user' ? [scope] : [scope, project];
+      const env = { AGENTFORGE_BIN: wrapper, AGENTFORGE_TRACE: trace, CODEX_HOME: codexHome };
+      expect(runSetupScript(script, env, 'install', ...scopeArgs).exitCode).toBe(0);
+      expect(runSetupScript(script, env, 'check', ...scopeArgs).exitCode).toBe(0);
+      expect(runSetupScript(script, env, 'update', ...scopeArgs).exitCode).toBe(0);
+    }
+    expect(readFileSync(trace, 'utf8')).toContain(
+      'preview-codex-agent-update\nupdate-codex-agent\n',
+    );
+
+    rmSync(join(installedPlugin, '.agentforge/codex-agent-bundle'), {
+      recursive: true,
+      force: true,
+    });
+    for (const scope of ['user', 'project'] as const) {
+      const scopeArgs = scope === 'user' ? [scope] : [scope, project];
+      expect(
+        runSetupScript(
+          script,
+          { AGENTFORGE_BIN: wrapper, AGENTFORGE_TRACE: trace, CODEX_HOME: codexHome },
+          'remove',
+          ...scopeArgs,
+        ).exitCode,
+      ).toBe(0);
+      const root = scope === 'user' ? codexHome : join(project, '.codex');
+      expect(existsSync(join(root, 'agents/.agentforge/demo-roles.json'))).toBe(false);
+    }
+    expect(readFileSync(trace, 'utf8')).toContain(
+      'preview-codex-agent-remove\nremove-codex-agent\n',
+    );
+  });
+
+  test('reserves the generated setup skill name from package commands and skills', async () => {
+    const loaded = await loadMarketplaceDefinition(join(FIXTURE, 'MARKETPLACE.yaml'));
+    const demo = loaded.packages.get('demo-roles');
+    if (!demo) throw new Error('missing demo package');
+    for (const artifactType of ['command', 'skill']) {
+      const artifacts = new Map(demo.artifacts);
+      artifacts.set(artifactType, [
+        {
+          path: join(FIXTURE, `packages/demo/${artifactType}s/setup-codex-agents.md`),
+          content:
+            '---\nname: setup-codex-agents\ndescription: Conflicts with generated setup.\n---\n\nConflict.\n',
+        },
+      ]);
+      const packages = new Map(loaded.packages);
+      packages.set('demo-roles', { ...demo, artifacts });
+
+      expect(() => compileMarketplace({ ...loaded, packages }, allTargets())).toThrow(
+        'reserves skill name "setup-codex-agents"',
+      );
+    }
   });
 
   test('installs every validated role and preserves siblings', async () => {
@@ -1048,6 +1203,21 @@ describe('compiled Codex package agent bundle', () => {
 function runCli(env: Record<string, string>, ...args: string[]) {
   const result = Bun.spawnSync({
     cmd: [process.execPath, 'run', CLI, ...args],
+    cwd: REPO_ROOT,
+    env: { ...process.env, ...env },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  return {
+    exitCode: result.exitCode,
+    stdout: result.stdout.toString(),
+    stderr: result.stderr.toString(),
+  };
+}
+
+function runSetupScript(script: string, env: Record<string, string>, ...args: string[]) {
+  const result = Bun.spawnSync({
+    cmd: ['sh', script, ...args],
     cwd: REPO_ROOT,
     env: { ...process.env, ...env },
     stdout: 'pipe',

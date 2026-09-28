@@ -10,6 +10,7 @@ import {
   type MarketplaceRegistryHandle,
   type PackageManifestHandle,
   type ProposedCompilationDiagnostic,
+  type ProposedOutput,
   type PublicationCompilation,
   type SourceLocation,
   type TargetCompilationResult,
@@ -229,12 +230,13 @@ export function compileCodexPublication(input: PublicationCompilation): TargetCo
   );
   const bundles = input.packages
     .filter((packageInput) => packageInput.codexAgentBundle)
-    .map((packageInput) =>
-      compileCodexAgentBundleOutputs(
-        packageInput,
-        relativePackageDirectory(input.marketplace.path, packageInput.path),
-      ),
-    );
+    .map((packageInput) => {
+      const packageDirectory = relativePackageDirectory(input.marketplace.path, packageInput.path);
+      return {
+        ...compileCodexAgentBundleOutputs(packageInput, packageDirectory),
+        setupOutputs: compileCodexAgentBundleSetupSkill(packageInput, packageDirectory),
+      };
+    });
   const marketplace = parseDocument(
     CodexMarketplace,
     deepMerge(
@@ -276,13 +278,237 @@ export function compileCodexPublication(input: PublicationCompilation): TargetCo
         nativeDocument: CodexPluginDocument,
       })),
       ...payloads.flatMap(({ outputs }) => outputs),
-      ...bundles.flatMap(({ outputs }) => outputs),
+      ...bundles.flatMap(({ outputs, setupOutputs }) => [...outputs, ...setupOutputs]),
     ],
     diagnostics: [
       ...payloads.flatMap(({ diagnostics }) => diagnostics),
       ...bundles.flatMap(({ diagnostics }) => diagnostics),
     ],
   };
+}
+
+const CODEX_AGENT_BUNDLE_SETUP_SKILL = 'setup-codex-agents';
+
+// A marketplace plugin can expose a skill, but it cannot add a package-local
+// directory to Codex's native agent-role loader. The generated skill makes the
+// companion's opt-in registration procedure visible without pretending that
+// installing the plugin completed it. It derives the bundle from its own
+// loaded SKILL.md path rather than from a cache layout or an undocumented
+// interpolation variable.
+function compileCodexAgentBundleSetupSkill(
+  packageInput: CompilationPackage,
+  packageDirectory: string,
+): ProposedOutput[] {
+  assertNoCodexAgentBundleSetupSkillCollision(packageInput);
+  const agents = (packageInput.artifacts.get('agent') ?? []).map((artifact) => {
+    const agent = parseAgentBehavior(artifact.path, artifact.content);
+    return { identity: `${packageInput.id}:${agent.name}` };
+  });
+  const skillDirectory = `${packageDirectory}/skills/${CODEX_AGENT_BUNDLE_SETUP_SKILL}`;
+  const description = 'Register this plugin’s optional Codex agent roles for one scope.';
+  return [
+    {
+      kind: 'generated',
+      packageId: packageInput.id,
+      destination: `${skillDirectory}/SKILL.md`,
+      content: matter.stringify(codexAgentBundleSetupInstructions(agents), {
+        name: CODEX_AGENT_BUNDLE_SETUP_SKILL,
+        description,
+      }),
+    },
+    {
+      kind: 'generated',
+      packageId: packageInput.id,
+      destination: `${skillDirectory}/agents/openai.yaml`,
+      content: codexSkillPolicy(CODEX_AGENT_BUNDLE_SETUP_SKILL, description),
+    },
+    {
+      kind: 'generated',
+      packageId: packageInput.id,
+      destination: `${skillDirectory}/scripts/manage-codex-agent-bundle.sh`,
+      content: codexAgentBundleSetupScript(packageInput.id),
+    },
+  ];
+}
+
+function codexAgentBundleSetupInstructions(agents: readonly { identity: string }[]): string {
+  const knownRoles = agents.map(({ identity }) => `- \`${identity}\``).join('\n');
+  return `# Set up Codex agent roles
+
+This plugin installation makes this setup skill available. It does not register
+native Codex agent roles. Registration is an optional companion operation that
+writes the selected scope's Codex role files, configuration, and ownership
+receipt through the installed AgentForge CLI.
+
+## Locate this plugin's companion bundle
+
+Use the absolute path of this active \`SKILL.md\` supplied by the skill context.
+Set \`skill_file\` to that path, then derive the plugin root from this skill's
+directory layout and validate the result before any change:
+
+\`\`\`sh
+skill_file='<absolute path of this active SKILL.md>'
+plugin_root="$(dirname "$(dirname "$(dirname "$skill_file")")")"
+bundle_root="$plugin_root/.agentforge/codex-agent-bundle"
+test -f "$bundle_root/agentforge-codex-agent-bundle.json"
+\`\`\`
+
+If the active skill path is unavailable, ask the user for the installed plugin
+root and set \`plugin_root\` to that exact absolute path. Do not guess a cache
+path, plugin version, or another installed plugin.
+
+## Register, check, update, or remove one scope
+
+Ask whether the user wants \`user\` or \`project\` scope. For project scope,
+ask for the project root and use it literally as \`<project-root>\`:
+
+\`\`\`sh
+script="$plugin_root/skills/setup-codex-agents/scripts/manage-codex-agent-bundle.sh"
+
+# user scope: choose one operation
+sh "$script" install user
+sh "$script" check user
+sh "$script" update user
+sh "$script" remove user
+
+# project scope: choose one operation
+sh "$script" install project '<project-root>'
+sh "$script" check project '<project-root>'
+sh "$script" update project '<project-root>'
+sh "$script" remove project '<project-root>'
+\`\`\`
+
+Run an action only when the user selected it. The script resolves its own
+plugin root and invokes the installed \`agentforge\` command. It checks the
+required subcommand first, including the matching preview before update or
+removal. If a command is missing or incompatible, stop before modifying Codex files and install a release binary from
+\`https://github.com/jdh313/agentforge/releases\` whose \`--help\` lists that
+subcommand. A version number alone is not compatibility evidence.
+
+Treat a nonzero script result as a failure: report its output and do not
+continue to a later lifecycle action. Check is read-only. A role edited by the
+user is preserved and remains recorded for review. Plugin removal does not
+remove these registered roles. Remove each scope independently with the
+receipt-based script action; do not clean up roles automatically.
+
+## Use a registered role
+
+Before claiming that a role is registered or dispatching it, run the selected
+scope's \`check\` action. A nonzero result means setup is missing, edited, or
+otherwise not current; report that setup gap and do not dispatch. After a
+successful check, start a fresh Codex session before dispatch.
+This bundle emits only these exact role identities:
+
+${knownRoles}
+
+For one of those roles, pass its emitted identity unchanged as
+\`agent_type\` to \`spawn_agent\`. If the user names any other role, say that
+this companion bundle has no setup for that role. Do not rewrite the requested
+name into a different identity or claim that the retained Markdown procedure
+registered it.`;
+}
+
+function codexAgentBundleSetupScript(packageId: string): string {
+  const quotedPackageId = JSON.stringify(packageId);
+  return `#!/bin/sh
+set -eu
+
+usage() {
+  echo "usage: $0 <install|check|update|remove> <user|project> [project-root]" >&2
+  exit 64
+}
+
+operation=\${1:-}
+scope=\${2:-}
+project_root=\${3:-}
+
+case "$operation" in
+  install) subcommand=install-codex-agent ;;
+  check) subcommand=check-codex-agent ;;
+  update)
+    preview_subcommand=preview-codex-agent-update
+    subcommand=update-codex-agent
+    ;;
+  remove)
+    preview_subcommand=preview-codex-agent-remove
+    subcommand=remove-codex-agent
+    ;;
+  *) usage ;;
+esac
+
+case "$scope" in
+  user)
+    [ "$#" -eq 2 ] || usage
+    ;;
+  project)
+    [ "$#" -eq 3 ] && [ -n "$project_root" ] || usage
+    ;;
+  *) usage ;;
+esac
+
+agentforge_bin=\${AGENTFORGE_BIN:-agentforge}
+incompatible() {
+  echo "AgentForge is missing or incompatible: expected \\"$agentforge_bin $1 --help\\" to succeed." >&2
+  echo "Install a released AgentForge binary from https://github.com/jdh313/agentforge/releases whose --help lists $1, put it on PATH, then retry." >&2
+  exit 69
+}
+if ! command -v "$agentforge_bin" >/dev/null 2>&1; then
+  incompatible "$subcommand"
+fi
+if ! "$agentforge_bin" "$subcommand" --help >/dev/null 2>&1; then
+  incompatible "$subcommand"
+fi
+if [ -n "\${preview_subcommand:-}" ] && ! "$agentforge_bin" "$preview_subcommand" --help >/dev/null 2>&1; then
+  incompatible "$preview_subcommand"
+fi
+
+script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
+plugin_root=$(CDPATH= cd "$script_dir/../../.." && pwd -P)
+bundle_root="$plugin_root/.agentforge/codex-agent-bundle"
+package_id=${quotedPackageId}
+
+if [ "$operation" = remove ]; then
+  if [ "$scope" = user ]; then
+    "$agentforge_bin" "$preview_subcommand" "$package_id" --scope user
+    exec "$agentforge_bin" "$subcommand" "$package_id" --scope user
+  fi
+  "$agentforge_bin" "$preview_subcommand" "$package_id" --scope project --project-root "$project_root"
+  exec "$agentforge_bin" "$subcommand" "$package_id" --scope project --project-root "$project_root"
+fi
+
+if [ ! -f "$bundle_root/agentforge-codex-agent-bundle.json" ]; then
+  echo "Codex agent bundle is missing: $bundle_root/agentforge-codex-agent-bundle.json" >&2
+  exit 66
+fi
+
+if [ "$scope" = user ]; then
+  if [ "$operation" = update ]; then
+    "$agentforge_bin" "$preview_subcommand" "$bundle_root" --scope user
+  fi
+  exec "$agentforge_bin" "$subcommand" "$bundle_root" --scope user
+fi
+if [ "$operation" = update ]; then
+  "$agentforge_bin" "$preview_subcommand" "$bundle_root" --scope project --project-root "$project_root"
+fi
+exec "$agentforge_bin" "$subcommand" "$bundle_root" --scope project --project-root "$project_root"
+`;
+}
+
+function assertNoCodexAgentBundleSetupSkillCollision(packageInput: CompilationPackage): void {
+  const collidingSkill = (packageInput.artifacts.get('skill') ?? []).find((artifact) => {
+    const parsed = matter(artifact.content);
+    return parsed.data.name === CODEX_AGENT_BUNDLE_SETUP_SKILL;
+  });
+  const collidingCommand = (packageInput.artifacts.get('command') ?? []).find(
+    (artifact) =>
+      parseCommandBehavior(artifact.path, artifact.content).name === CODEX_AGENT_BUNDLE_SETUP_SKILL,
+  );
+  const collision = collidingSkill ?? collidingCommand;
+  if (collision) {
+    throw new CompilationError(
+      `package ${JSON.stringify(packageInput.id)} enables a Codex agent bundle, which reserves skill name ${JSON.stringify(CODEX_AGENT_BUNDLE_SETUP_SKILL)}: ${collision.path}`,
+    );
+  }
 }
 
 function translateHookConfiguration({

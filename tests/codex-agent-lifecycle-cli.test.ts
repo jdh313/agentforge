@@ -48,8 +48,14 @@ describe('Codex agent lifecycle CLI', () => {
       const options = ['--scope', scope, '--project-root', project];
       const destination = scope === 'project' ? join(project, '.codex') : codexHome;
 
+      const missing = runCli(env, 'check-codex-agent', bundle, ...options);
+      expect(missing.exitCode).toBe(1);
+      expect(missing.stdout).toContain('missing:');
       expect(runCli(env, 'install-codex-agent', bundle, ...options).exitCode).toBe(0);
       expect(existsSync(join(destination, 'agents/alpha.toml'))).toBe(true);
+      expect(runCli(env, 'check-codex-agent', bundle, ...options).exitCode).toBe(0);
+      expect(runCli(env, 'preview-codex-agent-update', bundle, ...options).exitCode).toBe(0);
+      expect(runCli(env, 'update-codex-agent', bundle, ...options).exitCode).toBe(0);
       const preview = runCli(env, 'preview-codex-agent-remove', 'demo-roles', ...options);
       expect(preview.exitCode).toBe(0);
       expect(preview.stdout).toContain('remove:');
