@@ -7,9 +7,14 @@ import pkg from '../package.json' with { type: 'json' };
 import { checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
 import {
   buildCodexAgentBundleInstallPlan,
+  buildCodexAgentBundleRemovePlan,
+  buildCodexAgentBundleUpdatePlan,
   checkCodexAgentBundleInstallPlan,
   compileCodexAgentBundle,
   materializeCodexAgentBundleInstallPlan,
+  materializeCodexAgentBundleLifecyclePlan,
+  previewCodexAgentBundleLifecyclePlan,
+  repairCodexAgentBundleLifecyclePlan,
   validateCodexAgentBundleInstallPlan,
 } from './codex-agent-bundle.ts';
 import { type CompilationPlan, compileMarketplace, type RootAnchoredOutput } from './compiler.ts';
@@ -390,6 +395,28 @@ const resolveCodexBundleInstall = (bundleRoot: string, opts: CodexBundleInstallO
   });
 };
 
+const codexBundleScopeOptions = (opts: CodexBundleInstallOptions) => {
+  if (opts.scope !== 'user' && opts.scope !== 'project') {
+    throw new Error('Codex agent bundles support user or project installation scope');
+  }
+  return {
+    scope: opts.scope as 'user' | 'project',
+    projectRoot: resolve(opts.projectRoot ?? workingProjectRoot(process.cwd())),
+    ...(process.env.CODEX_HOME === undefined ? {} : { codexHomeDirectory: process.env.CODEX_HOME }),
+  };
+};
+
+const printCodexLifecyclePreview = (
+  preview: ReturnType<typeof previewCodexAgentBundleLifecyclePlan>,
+) => {
+  console.log(`${preview.status}: ${preview.operation}`);
+  for (const action of preview.actions) {
+    console.log(`${action.kind}: ${action.path}: ${action.reason}`);
+  }
+  for (const issue of preview.issues) console.error(`issue: ${issue.path}: ${issue.message}`);
+  if (preview.status !== 'ready') process.exitCode = 1;
+};
+
 program
   .command('compile-codex-agent <source-dir>')
   .description('Compile one canonical agent into a legacy-compatible Codex agent bundle')
@@ -466,6 +493,118 @@ program
       console.error(
         `unsupported: ${resolve(bundleDir)}: ${error instanceof Error ? error.message : String(error)}`,
       );
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command('preview-codex-agent-update <bundle-dir>')
+  .description('Preview owned Codex agent changes from a compiled bundle')
+  .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
+  .option('--project-root <dir>', 'project root used for project-scope installation')
+  .action((bundleDir: string, opts: CodexBundleInstallOptions) => {
+    try {
+      const plan = buildCodexAgentBundleUpdatePlan({
+        bundleRoot: resolve(bundleDir),
+        ...codexBundleScopeOptions(opts),
+      });
+      printCodexLifecyclePreview(previewCodexAgentBundleLifecyclePlan(plan));
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command('update-codex-agent <bundle-dir>')
+  .description('Update owned Codex agents from a compiled bundle')
+  .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
+  .option('--project-root <dir>', 'project root used for project-scope installation')
+  .action((bundleDir: string, opts: CodexBundleInstallOptions) => {
+    try {
+      const plan = buildCodexAgentBundleUpdatePlan({
+        bundleRoot: resolve(bundleDir),
+        ...codexBundleScopeOptions(opts),
+      });
+      materializeCodexAgentBundleLifecyclePlan(plan);
+      console.log(`updated Codex agents at ${plan.destinationRoot}`);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command('preview-codex-agent-remove <package-id>')
+  .description('Preview removal using the installed ownership receipt')
+  .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
+  .option('--project-root <dir>', 'project root used for project-scope installation')
+  .action((packageId: string, opts: CodexBundleInstallOptions) => {
+    try {
+      const plan = buildCodexAgentBundleRemovePlan({
+        packageId,
+        ...codexBundleScopeOptions(opts),
+      });
+      printCodexLifecyclePreview(previewCodexAgentBundleLifecyclePlan(plan));
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command('remove-codex-agent <package-id>')
+  .description('Remove owned Codex agents using only the installed receipt')
+  .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
+  .option('--project-root <dir>', 'project root used for project-scope installation')
+  .action((packageId: string, opts: CodexBundleInstallOptions) => {
+    try {
+      const plan = buildCodexAgentBundleRemovePlan({
+        packageId,
+        ...codexBundleScopeOptions(opts),
+      });
+      materializeCodexAgentBundleLifecyclePlan(plan);
+      console.log(`removed owned Codex agents for ${packageId} at ${plan.destinationRoot}`);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command('repair-codex-agent-remove <package-id>')
+  .description('Resume interrupted owned-agent removal after inspection')
+  .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
+  .option('--project-root <dir>', 'project root used for project-scope installation')
+  .action((packageId: string, opts: CodexBundleInstallOptions) => {
+    try {
+      const plan = buildCodexAgentBundleRemovePlan({
+        packageId,
+        ...codexBundleScopeOptions(opts),
+      });
+      repairCodexAgentBundleLifecyclePlan(plan);
+      console.log(`repaired Codex agent ownership for ${packageId} at ${plan.destinationRoot}`);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command('repair-codex-agent-update <bundle-dir>')
+  .description('Resume an interrupted owned-agent update after inspection')
+  .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
+  .option('--project-root <dir>', 'project root used for project-scope installation')
+  .action((bundleDir: string, opts: CodexBundleInstallOptions) => {
+    try {
+      const plan = buildCodexAgentBundleUpdatePlan({
+        bundleRoot: resolve(bundleDir),
+        ...codexBundleScopeOptions(opts),
+      });
+      repairCodexAgentBundleLifecyclePlan(plan);
+      console.log(`repaired Codex agent update at ${plan.destinationRoot}`);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;
     }
   });

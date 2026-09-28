@@ -117,8 +117,38 @@ conflicts, malformed receipts, unsupported receipt schemas, unsafe paths,
 symlinks, or bundle hash mismatches
 must be resolved before installation. Preview applies the same preflight.
 
-The caller supplies the compiled bundle explicitly. Inventory discovery,
-managed updates, and removal remain separate work.
+The caller supplies the compiled bundle explicitly. Inventory discovery remains
+separate work.
+
+## JUN-442 managed lifecycle
+
+Use `preview-codex-agent-update <bundle-dir> --scope user|project` before
+`update-codex-agent <bundle-dir> --scope user|project`. The update reads the
+scope-local receipt as the record of previously owned definitions, compares it
+with the new compiled bundle, and previews creates, replacements, removals, and
+preserved edits. A renamed agent is a removal of the old role and an addition
+of the new one. Both commands accept `--project-root <dir>` for project scope;
+user scope honors `CODEX_HOME` when set.
+
+Use `preview-codex-agent-remove <package-id> --scope user|project` before
+`remove-codex-agent <package-id> --scope user|project`. Removal needs only the
+package identity and the installed receipt. The compiled bundle, plugin cache,
+and original source directory may already be gone. A repeated removal of a
+fully removed package is safe. Edited definitions are preserved and stay
+recorded as unresolved ownership; other packages and the other scope are not
+part of the operation. If a v3-owned definition is already missing, its
+registration cannot be proven unchanged from the receipt alone, so removal
+retains that entry for review while removing any other unchanged roles.
+
+A scope-local lock serializes mutations of role definitions, registration, and
+receipts. A durable pending-operation record makes an interruption visible.
+While that record exists, normal update and removal refuse to mutate the scope.
+Inspect preview output and the named paths, then run
+`repair-codex-agent-update <bundle-dir> --scope user|project` or
+`repair-codex-agent-remove <package-id> --scope user|project` for the recorded
+operation. Repair proceeds only when the installed files match an unambiguous
+before or after state; ambiguous edits require manual resolution and retain the
+pending record. No plugin enable/disable event invokes these commands.
 
 ## Boundaries
 
@@ -129,4 +159,4 @@ foreign definitions, missing paired receipts, and pre-existing conflicting role
 registrations before materializing any destination path. It also refuses an
 inline `agents = { ... }` configuration without replacing it. Preview runs the
 same read-only ownership preflight, including the collision refusal. Managed
-updates and removal stay in JUN-442.
+managed lifecycle commands remain explicit local actions.

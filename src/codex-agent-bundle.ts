@@ -12,7 +12,12 @@ import type {
   ProposedCompilationDiagnostic,
   ProposedOutput,
 } from './compiler.ts';
-import { materializeCompilation, materializeCompilationOutputs } from './materializer.ts';
+import {
+  createManagedOutputLock,
+  materializeCompilation,
+  materializeCompilationOutputChanges,
+  materializeCompilationOutputs,
+} from './materializer.ts';
 import { isContainedPath } from './paths.ts';
 import { loadArtifactProjection, projectArtifact } from './render.ts';
 import { CanonicalAgentName } from './schema.ts';
@@ -25,6 +30,8 @@ export const CODEX_AGENT_BUNDLE_DIRECTORY = '.agentforge/codex-agent-bundle';
 const BUNDLE_SCHEMA = 'agentforge.codex-agent-bundle/v2';
 const LEGACY_BUNDLE_SCHEMA = 'agentforge.codex-agent-bundle/v1';
 const RECEIPT_SCHEMA = 'agentforge.codex-agent-receipt/v3';
+const LIFECYCLE_JOURNAL_SCHEMA = 'agentforge.codex-agent-lifecycle-journal/v1';
+const LIFECYCLE_SCOPE_LOCK = 'agents/.agentforge/.agentforge-lifecycle.lock';
 
 const BundleAgent = z.strictObject({
   id: CanonicalAgentName,
@@ -71,6 +78,18 @@ const Receipt = z.strictObject({
   schema: z.literal(RECEIPT_SCHEMA),
   owner: z.strictObject({ packageId: CanonicalAgentName, packageVersion: z.string().min(1) }),
   agents: z.array(ReceiptAgent).min(1),
+});
+const LifecycleJournal = z.strictObject({
+  schema: z.literal(LIFECYCLE_JOURNAL_SCHEMA),
+  operation: z.enum(['update', 'remove']),
+  owner: z.strictObject({ packageId: CanonicalAgentName }),
+  scope: z.enum(['user', 'project']),
+  before: z.array(
+    z.strictObject({ destination: z.string().min(1), sha256: z.string().regex(/^[a-f0-9]{64}$/) }),
+  ),
+  receipt: z.string().min(1),
+  after: z.array(z.strictObject({ destination: z.string().min(1), content: z.string() })),
+  removals: z.array(z.string().min(1)),
 });
 export const CodexAgentBundleDocument = {
   role: 'generated-document' as const,
@@ -422,6 +441,11 @@ export function buildCodexAgentBundleInstallPlan(
 }
 
 export function materializeCodexAgentBundleInstallPlan(install: CodexAgentBundleInstallPlan): void {
+  if (lstatSync(join(install.destinationRoot, LIFECYCLE_SCOPE_LOCK), { throwIfNoEntry: false })) {
+    throw new Error(
+      'refusing bundle installation: this Codex scope has an incomplete lifecycle operation',
+    );
+  }
   const check = checkCodexAgentBundleInstallPlan(install);
   if (check.status === 'current') return;
   if (check.status !== 'missing' || !isEmptyCodexAgentBundleInstall(install)) {
@@ -430,7 +454,33 @@ export function materializeCodexAgentBundleInstallPlan(install: CodexAgentBundle
       `refusing bundle collision: ${issue?.message ?? 'installed bundle state is unsupported'}`,
     );
   }
-  materializeCompilationOutputs(install.plan, install.destinationRoot);
+  createManagedOutputLock(
+    install.destinationRoot,
+    LIFECYCLE_SCOPE_LOCK,
+    '{"schema":"agentforge.codex-agent-install-lock/v1"}\n',
+  );
+  try {
+    const lockedCheck = checkCodexAgentBundleInstallPlan(install);
+    if (lockedCheck.status !== 'missing' || !isEmptyCodexAgentBundleInstall(install)) {
+      const issue = lockedCheck.issues[0];
+      throw new Error(
+        `refusing bundle collision: ${issue?.message ?? 'installed bundle state is unsupported'}`,
+      );
+    }
+    materializeCompilationOutputs(install.plan, install.destinationRoot);
+  } finally {
+    materializeCompilationOutputChanges(
+      {
+        marketplaceId: install.plan.marketplaceId,
+        outputs: [],
+        diagnostics: [],
+        rootOutputs: [],
+        redactions: [],
+      },
+      install.destinationRoot,
+      [LIFECYCLE_SCOPE_LOCK],
+    );
+  }
 }
 
 export function validateCodexAgentBundleInstallPlan(install: CodexAgentBundleInstallPlan): void {
@@ -603,6 +653,788 @@ function checkResult(
   return { destinationRoot, filesChecked, status, issues };
 }
 
+export interface BuildCodexAgentBundleRemovePlanOptions {
+  packageId: string;
+  scope: Extract<InstallScope, 'user' | 'project'>;
+  projectRoot: string;
+  homeDirectory?: string;
+  codexHomeDirectory?: string;
+}
+
+export interface CodexAgentBundleLifecycleAction {
+  kind: 'create' | 'replace' | 'remove' | 'preserve';
+  path: string;
+  reason: string;
+}
+export interface CodexAgentBundleLifecycleIssue {
+  path: string;
+  message: string;
+}
+export interface CodexAgentBundleLifecyclePreview {
+  operation: 'update' | 'remove';
+  status: 'ready' | 'refused' | 'interrupted';
+  actions: readonly CodexAgentBundleLifecycleAction[];
+  issues: readonly CodexAgentBundleLifecycleIssue[];
+}
+interface LifecyclePrecondition {
+  destination: string;
+  sha256: string;
+}
+export interface CodexAgentBundleLifecyclePlan extends CodexAgentBundleLifecyclePreview {
+  destinationRoot: string;
+  journalPath: string;
+  scope: Extract<InstallScope, 'user' | 'project'>;
+  plan: CompilationPlan;
+  removals: readonly string[];
+  preconditions: readonly LifecyclePrecondition[];
+  receiptContent?: string;
+}
+
+/** Build a receipt-owned update. It never treats a missing receipt as permission to replace files. */
+export function buildCodexAgentBundleUpdatePlan(
+  options: BuildCodexAgentBundleInstallPlanOptions,
+): CodexAgentBundleLifecyclePlan {
+  const next = buildCodexAgentBundleInstallPlan(options);
+  const receipt = expectedReceipt(next);
+  const definitions = next.plan.outputs
+    .filter(
+      (output): output is DesiredGeneratedOutput =>
+        output.kind === 'generated' &&
+        output.destination.startsWith('agents/') &&
+        output.destination.endsWith('.toml'),
+    )
+    .map((output) => {
+      const definition = output.destination;
+      const id = CanonicalAgentName.parse(definition.slice('agents/'.length, -'.toml'.length));
+      const parsed = parseCodexDefinition(output.content);
+      if (parsed.name !== `${receipt.owner.packageId}:${id}`)
+        throw new Error('bundle definition does not match indexed Codex agent name');
+      return {
+        id,
+        name: parsed.name,
+        definition,
+        content: output.content,
+        sha256: sha256(output.content),
+        description: parsed.description,
+      };
+    });
+  // The role name is independently verified by buildCodexAgentBundleInstallPlan;
+  // reparse here only to carry the current definition description into config.
+  return buildLifecyclePlan({
+    operation: 'update',
+    destinationRoot: next.destinationRoot,
+    scope: options.scope,
+    packageId: receipt.owner.packageId,
+    receiptPath: next.receiptPath,
+    newDefinitions: definitions,
+    nextOwner: receipt.owner,
+  });
+}
+
+/** Build a receipt-owned removal without loading a new bundle. */
+export function buildCodexAgentBundleRemovePlan(
+  options: BuildCodexAgentBundleRemovePlanOptions,
+): CodexAgentBundleLifecyclePlan {
+  const packageId = CanonicalAgentName.parse(options.packageId);
+  const destinationRoot = resolveCodexAgentDestination(options);
+  return buildLifecyclePlan({
+    operation: 'remove',
+    destinationRoot,
+    scope: options.scope,
+    packageId,
+    receiptPath: `agents/.agentforge/${packageId}.json`,
+    newDefinitions: [],
+  });
+}
+
+export function previewCodexAgentBundleLifecyclePlan(
+  lifecycle: CodexAgentBundleLifecyclePlan,
+): CodexAgentBundleLifecyclePreview {
+  return {
+    operation: lifecycle.operation,
+    status: lifecycle.status,
+    actions: lifecycle.actions,
+    issues: lifecycle.issues,
+  };
+}
+
+/** Apply a ready lifecycle plan. A persisted journal makes a later invocation refuse until repair. */
+export function materializeCodexAgentBundleLifecyclePlan(
+  lifecycle: CodexAgentBundleLifecyclePlan,
+): void {
+  if (lifecycle.status !== 'ready') throw lifecycleRefusal(lifecycle);
+  if (lifecycle.actions.length === 0 && lifecycle.preconditions.length === 0) return;
+  verifyLifecyclePreconditions(lifecycle);
+  createManagedOutputLock(
+    lifecycle.destinationRoot,
+    lifecycle.journalPath,
+    journalContent(lifecycle),
+  );
+  // A failed final-state mutation leaves the journal in place. It prevents a
+  // later operation from guessing whether the earlier operation reached its end.
+  verifyLifecyclePreconditions(lifecycle);
+  materializeLifecycleFinalState(lifecycle);
+  materializeCompilationOutputChanges(emptyLifecyclePlan(lifecycle), lifecycle.destinationRoot, [
+    lifecycle.journalPath,
+  ]);
+}
+
+/** Complete an interrupted operation only from an exact prior state or exact final state. */
+export function repairCodexAgentBundleLifecyclePlan(
+  lifecycle: CodexAgentBundleLifecyclePlan,
+): void {
+  if (lifecycle.status !== 'interrupted') throw lifecycleRefusal(lifecycle);
+  if (lifecycle.plan.outputs.length === 0 && lifecycle.preconditions.length === 0)
+    throw lifecycleRefusal(lifecycle);
+  if (lifecyclePreconditionsHold(lifecycle)) {
+    materializeLifecycleFinalState(lifecycle);
+  } else if (lifecycleBeforeReceiptStateHolds(lifecycle)) {
+    materializeLifecycleReceipt(lifecycle);
+  } else if (!lifecycleFinalStateHolds(lifecycle)) {
+    throw new Error(
+      `refusing lifecycle repair: interrupted managed state is ambiguous; inspect ${join(lifecycle.destinationRoot, lifecycle.journalPath)} and restore either its recorded before paths or after paths before retrying`,
+    );
+  }
+  materializeCompilationOutputChanges(emptyLifecyclePlan(lifecycle), lifecycle.destinationRoot, [
+    lifecycle.journalPath,
+  ]);
+}
+
+function materializeLifecycleFinalState(lifecycle: CodexAgentBundleLifecyclePlan): void {
+  const receipt = lifecycle.plan.outputs.filter((output) => output.destination.endsWith('.json'));
+  const prior: CompilationPlan = {
+    ...lifecycle.plan,
+    outputs: lifecycle.plan.outputs.filter((output) => !receipt.includes(output)),
+  };
+  materializeCompilationOutputChanges(prior, lifecycle.destinationRoot, lifecycle.removals);
+  if (receipt.length > 0) {
+    materializeCompilationOutputChanges(
+      { ...lifecycle.plan, outputs: receipt },
+      lifecycle.destinationRoot,
+      [],
+    );
+  }
+}
+
+function materializeLifecycleReceipt(lifecycle: CodexAgentBundleLifecyclePlan): void {
+  const receipt = lifecycle.plan.outputs.filter((output) => output.destination.endsWith('.json'));
+  if (receipt.length !== 1) throw new Error('interrupted lifecycle has no final ownership receipt');
+  materializeCompilationOutputChanges(
+    { ...lifecycle.plan, outputs: receipt },
+    lifecycle.destinationRoot,
+    [],
+  );
+}
+
+function buildLifecyclePlan(input: {
+  operation: 'update' | 'remove';
+  destinationRoot: string;
+  scope: Extract<InstallScope, 'user' | 'project'>;
+  packageId: string;
+  receiptPath: string;
+  newDefinitions: readonly OwnedDefinition[];
+  nextOwner?: { packageId: string; packageVersion: string };
+}): CodexAgentBundleLifecyclePlan {
+  const journalPath = LIFECYCLE_SCOPE_LOCK;
+  const base = {
+    operation: input.operation,
+    destinationRoot: input.destinationRoot,
+    scope: input.scope,
+    journalPath,
+    plan: emptyLifecyclePlan(input),
+    removals: [] as readonly string[],
+    preconditions: [] as readonly LifecyclePrecondition[],
+  };
+  const journal = lstatSync(join(input.destinationRoot, journalPath), { throwIfNoEntry: false });
+  if (journal) {
+    try {
+      const saved = readLifecycleJournal(input.destinationRoot, journalPath);
+      if (
+        saved.operation !== input.operation ||
+        saved.owner.packageId !== input.packageId ||
+        saved.scope !== input.scope
+      ) {
+        return {
+          ...base,
+          status: 'interrupted',
+          actions: [],
+          issues: [
+            {
+              path: join(input.destinationRoot, journalPath),
+              message: 'this scope is locked by another lifecycle operation',
+            },
+          ],
+        };
+      }
+      return lifecycleFromJournal(input.destinationRoot, journalPath, saved);
+    } catch (cause) {
+      return {
+        ...base,
+        status: 'interrupted',
+        actions: [],
+        issues: [
+          {
+            path: join(input.destinationRoot, journalPath),
+            message: cause instanceof Error ? cause.message : 'lifecycle journal is invalid',
+          },
+        ],
+      };
+    }
+  }
+  try {
+    if (!lstatSync(join(input.destinationRoot, input.receiptPath), { throwIfNoEntry: false })) {
+      if (input.operation === 'remove') {
+        return { ...base, status: 'ready', actions: [], issues: [] };
+      }
+      throw new Error('ownership receipt is missing');
+    }
+    const receiptContent = readRegularText(
+      join(input.destinationRoot, input.receiptPath),
+      'ownership receipt',
+    );
+    const receipt = Receipt.parse(JSON.parse(receiptContent));
+    if (receipt.owner.packageId !== input.packageId)
+      throw new Error('ownership receipt belongs to another package');
+    const inspected = inspectOwnedDefinitions(input.destinationRoot, receipt);
+    const configPath = join(input.destinationRoot, 'config.toml');
+    const configContent = readRegularText(configPath, 'Codex role configuration');
+    const registration = inspectOwnedRegistrations(configPath, configContent, inspected.owned);
+    const oldDefinitions = registration.owned;
+    const unresolved = [...inspected.unresolved, ...registration.unresolved];
+    if (input.operation === 'update' && unresolved.length > 0) {
+      throw new Error(
+        'managed bundle has unresolved or user-edited roles; update preserves them without mutation',
+      );
+    }
+    const unresolvedIds = new Set(unresolved.map(({ id }) => id));
+    const effectiveNewDefinitions = input.newDefinitions.filter(({ id }) => !unresolvedIds.has(id));
+    for (const definition of effectiveNewDefinitions) {
+      if (oldDefinitions.some(({ definition: old }) => old === definition.definition)) continue;
+      if (
+        lstatSync(join(input.destinationRoot, definition.definition), { throwIfNoEntry: false })
+      ) {
+        throw new Error(`unowned definition already exists at ${definition.definition}`);
+      }
+    }
+    const nextConfig = rewriteOwnedRegistrations(
+      configPath,
+      configContent,
+      oldDefinitions,
+      effectiveNewDefinitions,
+    );
+    const provenance = {
+      marketplacePath: join(input.destinationRoot, input.receiptPath),
+      publicationId: input.packageId,
+      packageId: input.packageId,
+    };
+    const nextReceipt = {
+      schema: RECEIPT_SCHEMA,
+      owner: input.operation === 'update' ? (input.nextOwner ?? receipt.owner) : receipt.owner,
+      agents: [...unresolved, ...effectiveNewDefinitions].map(receiptAgentFromDefinition),
+    };
+    const outputs: DesiredGeneratedOutput[] = [
+      ...effectiveNewDefinitions.map(({ definition, content }) => ({
+        kind: 'generated' as const,
+        producer: 'generated' as const,
+        destination: definition,
+        content,
+        target: 'codex' as const,
+        provenance,
+      })),
+      {
+        kind: 'generated',
+        producer: 'generated',
+        destination: 'config.toml',
+        content: nextConfig,
+        target: 'codex',
+        provenance,
+      },
+      ...(input.operation === 'update' || unresolved.length > 0
+        ? [
+            {
+              kind: 'generated' as const,
+              producer: 'generated' as const,
+              destination: input.receiptPath,
+              content: `${JSON.stringify(nextReceipt, null, 2)}\n`,
+              target: 'codex' as const,
+              provenance,
+            },
+          ]
+        : []),
+    ];
+    const removals = [
+      ...oldDefinitions
+        .filter(
+          ({ definition }) =>
+            !effectiveNewDefinitions.some((next) => next.definition === definition),
+        )
+        .map(({ definition }) => definition),
+      ...(input.operation === 'remove' && unresolved.length === 0 ? [input.receiptPath] : []),
+    ];
+    const plan: CompilationPlan = {
+      marketplaceId: input.packageId,
+      outputs,
+      diagnostics: [],
+      rootOutputs: [],
+      redactions: [],
+    };
+    const preconditions = [
+      ...oldDefinitions.map(({ definition, content }) => ({
+        destination: definition,
+        sha256: sha256(content),
+      })),
+      { destination: input.receiptPath, sha256: sha256(receiptContent) },
+      { destination: 'config.toml', sha256: sha256(configContent) },
+    ];
+    return {
+      ...base,
+      status: 'ready',
+      actions: [
+        ...lifecycleActions(input.destinationRoot, outputs, removals),
+        ...unresolved.map((agent) => ({
+          kind: 'preserve' as const,
+          path: join(input.destinationRoot, agent.destination),
+          reason: 'receipt ownership is unresolved or user-edited',
+        })),
+      ],
+      issues: [],
+      plan,
+      removals,
+      preconditions,
+      receiptContent,
+    };
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : 'ownership state is unsupported';
+    return {
+      ...base,
+      status: 'refused',
+      actions: [],
+      issues: [{ path: join(input.destinationRoot, input.receiptPath), message }],
+    };
+  }
+}
+
+interface OwnedDefinition {
+  id: string;
+  name: string;
+  definition: string;
+  content: string;
+  sha256: string;
+  description: string;
+}
+
+function resolveCodexAgentDestination(
+  options: Pick<
+    BuildCodexAgentBundleInstallPlanOptions,
+    'scope' | 'projectRoot' | 'homeDirectory' | 'codexHomeDirectory'
+  >,
+): string {
+  const config = getArtifactConfig('codex', 'agent');
+  const location = config?.installLocations[options.scope];
+  if (!location)
+    throw new Error(`Codex does not support ${options.scope}-scope agent installation`);
+  const agentsRoot = location({
+    homeDirectory: resolve(options.homeDirectory ?? homedir()),
+    ...(options.codexHomeDirectory === undefined
+      ? {}
+      : { codexHomeDirectory: resolve(options.codexHomeDirectory) }),
+    projectRoot: resolve(options.projectRoot),
+  });
+  const destinationRoot = resolve(agentsRoot, '..');
+  assertSafeDestinationRoot(destinationRoot);
+  return destinationRoot;
+}
+
+function inspectOwnedDefinitions(
+  destinationRoot: string,
+  receipt: z.infer<typeof Receipt>,
+): { owned: OwnedDefinition[]; unresolved: z.infer<typeof ReceiptAgent>[] } {
+  assertReceiptIdentities(receipt);
+  const seen = new Set<string>();
+  const owned: OwnedDefinition[] = [];
+  const unresolved: z.infer<typeof ReceiptAgent>[] = [];
+  for (const agent of receipt.agents) {
+    if (
+      agent.name !== `${receipt.owner.packageId}:${agent.id}` ||
+      agent.destination !== `agents/${agent.id}.toml` ||
+      seen.has(agent.id)
+    ) {
+      throw new Error('ownership receipt has inconsistent agent identity');
+    }
+    seen.add(agent.id);
+    try {
+      const path = join(destinationRoot, agent.destination);
+      const content = readRegularText(path, `managed definition ${agent.id}`);
+      if (sha256(content) !== agent.installedSha256)
+        throw new Error(`managed definition differs from its ownership receipt: ${agent.id}`);
+      const definition = validateCodexDefinition(content, agent.name);
+      owned.push({
+        id: agent.id,
+        name: agent.name,
+        definition: agent.destination,
+        content,
+        sha256: agent.installedSha256,
+        description: definition.description,
+      });
+    } catch {
+      unresolved.push(agent);
+    }
+  }
+  return { owned, unresolved };
+}
+
+function assertReceiptIdentities(receipt: z.infer<typeof Receipt>): void {
+  const ids = new Set<string>();
+  const destinations = new Set<string>();
+  for (const agent of receipt.agents) {
+    if (
+      agent.name !== `${receipt.owner.packageId}:${agent.id}` ||
+      agent.destination !== `agents/${agent.id}.toml` ||
+      ids.has(agent.id) ||
+      destinations.has(agent.destination)
+    ) {
+      throw new Error('ownership receipt has inconsistent agent identity');
+    }
+    ids.add(agent.id);
+    destinations.add(agent.destination);
+  }
+}
+
+function inspectOwnedRegistrations(
+  configPath: string,
+  content: string,
+  definitions: readonly OwnedDefinition[],
+): { owned: OwnedDefinition[]; unresolved: z.infer<typeof ReceiptAgent>[] } {
+  const parsed = parseRoleConfiguration(configPath, content);
+  const agents = parsed.agents;
+  const owned: OwnedDefinition[] = [];
+  const unresolved: z.infer<typeof ReceiptAgent>[] = [];
+  for (const definition of definitions) {
+    const current = agents[definition.name];
+    if (
+      !current ||
+      typeof current !== 'object' ||
+      (current as { config_file?: unknown }).config_file !== definition.definition ||
+      (current as { description?: unknown }).description !== definition.description
+    ) {
+      unresolved.push(receiptAgentFromDefinition(definition));
+    } else owned.push(definition);
+  }
+  return { owned, unresolved };
+}
+
+function receiptAgentFromDefinition(
+  definition: OwnedDefinition | z.infer<typeof ReceiptAgent>,
+): z.infer<typeof ReceiptAgent> {
+  return 'destination' in definition
+    ? definition
+    : {
+        id: definition.id,
+        name: definition.name,
+        destination: definition.definition,
+        installedSha256: definition.sha256,
+      };
+}
+
+function rewriteOwnedRegistrations(
+  configPath: string,
+  content: string,
+  oldDefinitions: readonly OwnedDefinition[],
+  newDefinitions: readonly OwnedDefinition[],
+): string {
+  let next = content;
+  for (const definition of oldDefinitions) {
+    const registration = registrationText(configPath, definition);
+    if (!next.includes(registration))
+      throw new Error(`managed role registration has unresolved formatting for ${definition.name}`);
+    next = next.replace(registration, '');
+  }
+  const registration = buildRoleRegistrationContent(configPath, next, newDefinitions);
+  if (registration.conflicts.size > 0 || registration.edited.size > 0) {
+    const name = [...registration.conflicts, ...registration.edited][0];
+    throw new Error(`unowned role registration already exists for ${name}`);
+  }
+  return registration.content;
+}
+
+function lifecycleActions(
+  destinationRoot: string,
+  outputs: readonly DesiredGeneratedOutput[],
+  removals: readonly string[],
+): CodexAgentBundleLifecycleAction[] {
+  return [
+    ...outputs.map((output) => {
+      const path = join(destinationRoot, output.destination);
+      const entry = lstatSync(path, { throwIfNoEntry: false });
+      return {
+        kind: !entry
+          ? 'create'
+          : entry.isFile() && readFileSync(path, 'utf8') === output.content
+            ? 'preserve'
+            : 'replace',
+        path,
+        reason: entry ? 'managed output changes' : 'managed output is absent',
+      } as CodexAgentBundleLifecycleAction;
+    }),
+    ...removals.map((destination) => ({
+      kind: 'remove' as const,
+      path: join(destinationRoot, destination),
+      reason: 'no longer owned by the requested bundle state',
+    })),
+  ];
+}
+
+function readLifecycleJournal(
+  destinationRoot: string,
+  journalPath: string,
+): z.infer<typeof LifecycleJournal> {
+  const path = join(destinationRoot, journalPath);
+  try {
+    const journal = LifecycleJournal.parse(JSON.parse(readRegularText(path, 'lifecycle journal')));
+    assertSafeLifecycleJournal(journal);
+    return journal;
+  } catch (cause) {
+    throw new Error(
+      `lifecycle journal is invalid at ${path}: ${cause instanceof Error ? cause.message : 'invalid JSON'}`,
+    );
+  }
+}
+
+function assertSafeLifecycleJournal(journal: z.infer<typeof LifecycleJournal>): void {
+  const receipt = Receipt.parse(JSON.parse(journal.receipt));
+  assertReceiptIdentities(receipt);
+  if (receipt.owner.packageId !== journal.owner.packageId)
+    throw new Error('lifecycle journal receipt belongs to another package');
+  const receiptPath = `agents/.agentforge/${journal.owner.packageId}.json`;
+  const ownedDefinitions = new Set(receipt.agents.map(({ destination }) => destination));
+  const isManagedPath = (destination: string): boolean =>
+    destination === 'config.toml' ||
+    destination === receiptPath ||
+    ownedDefinitions.has(destination);
+  const invalidBefore = journal.before.find(({ destination }) => !isManagedPath(destination));
+  const invalidAfter = journal.after.find(({ destination, content }) => {
+    if (destination === 'config.toml' || destination === receiptPath) return false;
+    if (!/^agents\/[a-z0-9]+(?:-[a-z0-9]+)*\.toml$/.test(destination)) return true;
+    try {
+      validateCodexDefinition(content, `${journal.owner.packageId}:${destination.slice(7, -5)}`);
+      return false;
+    } catch {
+      return true;
+    }
+  });
+  const invalidRemoval = journal.removals.find((destination) => !isManagedPath(destination));
+  if (invalidBefore || invalidAfter || invalidRemoval) {
+    throw new Error(
+      `lifecycle journal names a path outside its managed Codex scope: ${invalidBefore?.destination ?? invalidAfter?.destination ?? invalidRemoval}`,
+    );
+  }
+  const before = new Map(journal.before.map((entry) => [entry.destination, entry.sha256]));
+  if (
+    before.size !== journal.before.length ||
+    !before.has('config.toml') ||
+    before.get(receiptPath) !== sha256(journal.receipt)
+  )
+    throw new Error('lifecycle journal does not bind its configuration and receipt before-state');
+  const named = [...journal.after.map(({ destination }) => destination), ...journal.removals];
+  if (new Set(named).size !== named.length)
+    throw new Error('lifecycle journal has overlapping final writes and removals');
+  if (!journal.after.some(({ destination }) => destination === 'config.toml'))
+    throw new Error('lifecycle journal has no managed configuration state');
+  const afterReceipt = journal.after.find(({ destination }) => destination === receiptPath);
+  const afterDefinitions = journal.after.filter(
+    ({ destination }) => destination.startsWith('agents/') && destination.endsWith('.toml'),
+  );
+  if (journal.operation === 'remove') {
+    if (afterDefinitions.length > 0)
+      throw new Error('remove lifecycle journal must not introduce role definitions');
+    if (afterReceipt) {
+      const retained = Receipt.parse(JSON.parse(afterReceipt.content));
+      assertReceiptIdentities(retained);
+      if (
+        retained.owner.packageId !== receipt.owner.packageId ||
+        retained.agents.some((agent) => {
+          const prior = receipt.agents.find(({ id }) => id === agent.id);
+          return !prior || JSON.stringify(prior) !== JSON.stringify(agent);
+        })
+      ) {
+        throw new Error('remove lifecycle journal receipt does not retain only prior ownership');
+      }
+    }
+    return;
+  }
+  if (!afterReceipt) throw new Error('update lifecycle journal has no final ownership receipt');
+  const next = Receipt.parse(JSON.parse(afterReceipt.content));
+  assertReceiptIdentities(next);
+  if (next.owner.packageId !== receipt.owner.packageId)
+    throw new Error('update lifecycle journal receipt belongs to another package');
+  const byDestination = new Map(
+    afterDefinitions.map((output) => [output.destination, output.content]),
+  );
+  if (byDestination.size !== afterDefinitions.length || byDestination.size !== next.agents.length)
+    throw new Error('update lifecycle journal definition set does not match its receipt');
+  for (const agent of next.agents) {
+    const content = byDestination.get(agent.destination);
+    if (
+      content === undefined ||
+      sha256(content) !== agent.installedSha256 ||
+      (() => {
+        try {
+          validateCodexDefinition(content, agent.name);
+          return false;
+        } catch {
+          return true;
+        }
+      })()
+    ) {
+      throw new Error('update lifecycle journal definition does not match its receipt');
+    }
+  }
+}
+
+function lifecycleFromJournal(
+  destinationRoot: string,
+  journalPath: string,
+  journal: z.infer<typeof LifecycleJournal>,
+): CodexAgentBundleLifecyclePlan {
+  const provenance = {
+    marketplacePath: join(destinationRoot, journalPath),
+    publicationId: journal.owner.packageId,
+    packageId: journal.owner.packageId,
+  };
+  const outputs: DesiredGeneratedOutput[] = journal.after.map((output) => ({
+    kind: 'generated' as const,
+    producer: 'generated' as const,
+    destination: output.destination,
+    content: output.content,
+    target: 'codex' as const,
+    provenance,
+  }));
+  const plan: CompilationPlan = {
+    marketplaceId: journal.owner.packageId,
+    outputs,
+    diagnostics: [],
+    rootOutputs: [],
+    redactions: [],
+  };
+  return {
+    operation: journal.operation,
+    status: 'interrupted',
+    destinationRoot,
+    scope: journal.scope,
+    journalPath,
+    plan,
+    removals: journal.removals,
+    preconditions: journal.before,
+    receiptContent: journal.receipt,
+    actions: lifecycleActions(destinationRoot, outputs, journal.removals),
+    issues: [
+      {
+        path: join(destinationRoot, journalPath),
+        message: 'a prior lifecycle operation is incomplete; run the matching repair command',
+      },
+    ],
+  };
+}
+
+function lifecycleRefusal(lifecycle: CodexAgentBundleLifecyclePlan): Error {
+  const issue = lifecycle.issues[0];
+  return new Error(
+    `refusing lifecycle ${lifecycle.operation}: ${issue?.message ?? lifecycle.status}`,
+  );
+}
+
+function journalContent(lifecycle: CodexAgentBundleLifecyclePlan): string {
+  const outputs = lifecycle.plan.outputs.filter(
+    (output): output is DesiredGeneratedOutput => output.kind === 'generated',
+  );
+  if (outputs.length !== lifecycle.plan.outputs.length)
+    throw new Error('lifecycle journal can only record generated managed outputs');
+  return `${JSON.stringify({
+    schema: LIFECYCLE_JOURNAL_SCHEMA,
+    operation: lifecycle.operation,
+    owner: { packageId: lifecycle.plan.marketplaceId },
+    scope: lifecycle.scope,
+    before: lifecycle.preconditions,
+    receipt: lifecycle.receiptContent ?? '',
+    after: outputs.map(({ destination, content }) => ({ destination, content })),
+    removals: lifecycle.removals,
+  })}\n`;
+}
+
+function emptyLifecyclePlan(
+  input: { packageId: string } | CodexAgentBundleLifecyclePlan,
+): CompilationPlan {
+  return {
+    marketplaceId: 'plan' in input ? input.plan.marketplaceId : input.packageId,
+    outputs: [],
+    diagnostics: [],
+    rootOutputs: [],
+    redactions: [],
+  };
+}
+
+function lifecyclePreconditionsHold(lifecycle: CodexAgentBundleLifecyclePlan): boolean {
+  return lifecycle.preconditions.every(({ destination, sha256: digest }) => {
+    const path = join(lifecycle.destinationRoot, destination);
+    const entry = lstatSync(path, { throwIfNoEntry: false });
+    return Boolean(entry?.isFile() && sha256(readFileSync(path, 'utf8')) === digest);
+  });
+}
+
+function verifyLifecyclePreconditions(lifecycle: CodexAgentBundleLifecyclePlan): void {
+  if (!lifecyclePreconditionsHold(lifecycle))
+    throw new Error('refusing lifecycle mutation: managed scope changed after preview');
+}
+
+function lifecycleFinalStateHolds(lifecycle: CodexAgentBundleLifecyclePlan): boolean {
+  return (
+    lifecycle.plan.outputs.every((output) => {
+      const entry = lstatSync(join(lifecycle.destinationRoot, output.destination), {
+        throwIfNoEntry: false,
+      });
+      return (
+        entry?.isFile() &&
+        output.kind === 'generated' &&
+        readFileSync(join(lifecycle.destinationRoot, output.destination), 'utf8') === output.content
+      );
+    }) &&
+    lifecycle.removals.every(
+      (destination) =>
+        !lstatSync(join(lifecycle.destinationRoot, destination), { throwIfNoEntry: false }),
+    )
+  );
+}
+
+function lifecycleBeforeReceiptStateHolds(lifecycle: CodexAgentBundleLifecyclePlan): boolean {
+  const receipt = lifecycle.plan.outputs.filter((output) => output.destination.endsWith('.json'));
+  if (receipt.length !== 1) return false;
+  const oldReceipt = lifecycle.preconditions.find((entry) => entry.destination.endsWith('.json'));
+  if (!oldReceipt) return false;
+  const currentReceipt = join(lifecycle.destinationRoot, oldReceipt.destination);
+  const receiptEntry = lstatSync(currentReceipt, { throwIfNoEntry: false });
+  if (!receiptEntry?.isFile() || sha256(readFileSync(currentReceipt, 'utf8')) !== oldReceipt.sha256)
+    return false;
+  return (
+    lifecycle.plan.outputs
+      .filter((output) => !receipt.includes(output))
+      .every((output) => {
+        const entry = lstatSync(join(lifecycle.destinationRoot, output.destination), {
+          throwIfNoEntry: false,
+        });
+        return (
+          entry?.isFile() &&
+          output.kind === 'generated' &&
+          readFileSync(join(lifecycle.destinationRoot, output.destination), 'utf8') ===
+            output.content
+        );
+      }) &&
+    lifecycle.removals.every(
+      (destination) =>
+        !lstatSync(join(lifecycle.destinationRoot, destination), { throwIfNoEntry: false }),
+    )
+  );
+}
+
 interface ParsedBundleIndex {
   format: 'v1' | 'v2';
   package: { id: string; version: string };
@@ -735,6 +1567,13 @@ function validateCodexDefinition(
   content: string,
   expectedName: string,
 ): z.infer<typeof CodexBundleDefinition> {
+  const parsed = parseCodexDefinition(content);
+  if (parsed.name !== expectedName)
+    throw new Error('bundle definition does not match indexed Codex agent name');
+  return parsed;
+}
+
+function parseCodexDefinition(content: string): z.infer<typeof CodexBundleDefinition> {
   let document: unknown;
   try {
     document = Bun.TOML.parse(content);
@@ -744,8 +1583,6 @@ function validateCodexDefinition(
   const parsed = CodexBundleDefinition.safeParse(document);
   if (!parsed.success)
     throw new Error('bundle definition has unsupported or invalid Codex role fields');
-  if (parsed.data.name !== expectedName)
-    throw new Error('bundle definition does not match indexed Codex agent name');
   return parsed.data;
 }
 function buildRoleRegistrations(
@@ -759,27 +1596,26 @@ function buildRoleRegistrations(
 } {
   const entry = lstatSync(configPath, { throwIfNoEntry: false });
   const content = entry ? readRegularText(configPath, 'Codex role configuration') : '';
-  let parsed: unknown = {};
-  try {
-    if (content) parsed = Bun.TOML.parse(content);
-  } catch {
-    throw new Error(`Codex role configuration is not valid TOML: ${configPath}`);
-  }
-  const agents =
-    parsed && typeof parsed === 'object' && 'agents' in parsed
-      ? (parsed as { agents?: unknown }).agents
-      : undefined;
-  if (agents !== undefined && (!agents || typeof agents !== 'object'))
-    throw new Error(`Codex role configuration has invalid agents table: ${configPath}`);
+  return buildRoleRegistrationContent(configPath, content, definitions);
+}
+
+function buildRoleRegistrationContent(
+  configPath: string,
+  content: string,
+  definitions: readonly { name: string; definition: string; description: string }[],
+): {
+  content: string;
+  present: ReadonlySet<string>;
+  edited: ReadonlySet<string>;
+  conflicts: ReadonlySet<string>;
+} {
+  const { agents } = parseRoleConfiguration(configPath, content);
   const present = new Set<string>();
   const edited = new Set<string>();
   const conflicts = new Set<string>();
   const additions: string[] = [];
   for (const agent of definitions) {
-    const current =
-      agents && typeof agents === 'object'
-        ? (agents as Record<string, unknown>)[agent.name]
-        : undefined;
+    const current = agents[agent.name];
     if (current === undefined) {
       if (/^\s*agents\s*=\s*\{/m.test(content))
         throw new Error(
@@ -806,6 +1642,25 @@ function buildRoleRegistrations(
     throw new Error(`Codex role registration would make configuration invalid TOML: ${configPath}`);
   }
   return { content: next, present, edited, conflicts };
+}
+
+function parseRoleConfiguration(
+  configPath: string,
+  content: string,
+): { agents: Record<string, unknown> } {
+  let parsed: unknown = {};
+  try {
+    if (content) parsed = Bun.TOML.parse(content);
+  } catch {
+    throw new Error(`Codex role configuration is not valid TOML: ${configPath}`);
+  }
+  const agents =
+    parsed && typeof parsed === 'object' && 'agents' in parsed
+      ? (parsed as { agents?: unknown }).agents
+      : undefined;
+  if (agents !== undefined && (!agents || typeof agents !== 'object'))
+    throw new Error(`Codex role configuration has invalid agents table: ${configPath}`);
+  return { agents: (agents ?? {}) as Record<string, unknown> };
 }
 function registrationText(
   path: string,

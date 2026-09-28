@@ -1,10 +1,12 @@
 import {
   chmodSync,
+  closeSync,
   copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -79,6 +81,19 @@ export function materializeCompilationOutputs(
   plan: CompilationPlan,
   outputRoot: string,
 ): MaterializationResult {
+  return materializeCompilationOutputChanges(plan, outputRoot, []);
+}
+
+/**
+ * Publish named managed files and remove named managed regular files as one
+ * recoverable operation. Callers must have established ownership before
+ * supplying a removal; this layer only owns staging and rollback.
+ */
+export function materializeCompilationOutputChanges(
+  plan: CompilationPlan,
+  outputRoot: string,
+  removals: readonly string[],
+): MaterializationResult {
   const destinationRoot = resolve(outputRoot);
   if (destinationRoot === parse(destinationRoot).root) {
     throw new MaterializationError('refusing to materialize managed files at a filesystem root');
@@ -100,7 +115,7 @@ export function materializeCompilationOutputs(
   try {
     for (const output of plan.outputs) materializeOutput(output, stagingRoot);
     mkdirSync(destinationRoot, { recursive: true });
-    publishManagedOutputs(plan.outputs, stagingRoot, destinationRoot, backupRoot);
+    publishManagedOutputChanges(plan.outputs, removals, stagingRoot, destinationRoot, backupRoot);
   } catch (cause) {
     const detail = cause instanceof Error ? `: ${cause.message}` : '';
     throw new MaterializationError(
@@ -117,6 +132,36 @@ export function materializeCompilationOutputs(
     filesWritten: plan.outputs.map(({ destination }) => destination),
     rootFilesWritten: [],
   };
+}
+
+/** Atomically claim one managed path. Lifecycle callers use this as a scope lock. */
+export function createManagedOutputLock(
+  outputRoot: string,
+  destination: string,
+  content: string,
+): void {
+  const destinationRoot = resolve(outputRoot);
+  if (destinationRoot === parse(destinationRoot).root)
+    throw new MaterializationError('refusing to create a managed lock at a filesystem root');
+  const path = resolve(destinationRoot, destination);
+  requireContainedDestination(destinationRoot, path, destination);
+  requireRegularParentPath(destinationRoot, dirname(path), destination);
+  mkdirSync(dirname(path), { recursive: true });
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(path, 'wx', 0o644);
+    writeFileSync(descriptor, content, 'utf8');
+  } catch (cause) {
+    const detail = cause instanceof Error ? `: ${cause.message}` : '';
+    throw new MaterializationError(
+      `failed to claim managed lock ${JSON.stringify(destination)}${detail}`,
+      {
+        cause,
+      },
+    );
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
 }
 
 function materializeRootOutput(output: RootAnchoredOutput): string {
@@ -237,40 +282,50 @@ function publishStagedTree(stagingRoot: string, destinationRoot: string): void {
   rmSync(backupRoot, { recursive: true, force: true });
 }
 
-function publishManagedOutputs(
+function publishManagedOutputChanges(
   outputs: readonly DesiredOutput[],
+  removals: readonly string[],
   stagingRoot: string,
   destinationRoot: string,
   backupRoot: string,
 ): void {
   const published: Array<{ destination: string; backup?: string }> = [];
   try {
-    for (const output of outputs) {
-      const destination = resolve(destinationRoot, output.destination);
-      requireContainedDestination(destinationRoot, destination, output.destination);
-      requireRegularParentPath(destinationRoot, dirname(destination), output.destination);
+    const changes = [
+      ...outputs.map((output) => ({ destination: output.destination, output })),
+      ...removals.map((destination) => ({ destination })),
+    ];
+    if (new Set(changes.map(({ destination }) => destination)).size !== changes.length) {
+      throw new MaterializationError('managed output changes must name each destination once');
+    }
+    for (const change of changes) {
+      const destination = resolve(destinationRoot, change.destination);
+      requireContainedDestination(destinationRoot, destination, change.destination);
+      requireRegularParentPath(destinationRoot, dirname(destination), change.destination);
       mkdirSync(dirname(destination), { recursive: true });
 
       const entry = lstatSync(destination, { throwIfNoEntry: false });
       if (entry && !entry.isFile()) {
         throw new MaterializationError(
-          `managed output must replace only a regular file: ${JSON.stringify(output.destination)}`,
+          `managed output must replace only a regular file: ${JSON.stringify(change.destination)}`,
         );
       }
 
-      const staged = resolve(stagingRoot, output.destination);
       let backup: string | undefined;
       if (entry) {
-        backup = resolve(backupRoot, output.destination);
+        backup = resolve(backupRoot, change.destination);
         mkdirSync(dirname(backup), { recursive: true });
         renameSync(destination, backup);
       }
 
-      try {
-        renameSync(staged, destination);
-      } catch (cause) {
-        if (backup) renameSync(backup, destination);
-        throw cause;
+      if ('output' in change) {
+        const staged = resolve(stagingRoot, change.destination);
+        try {
+          renameSync(staged, destination);
+        } catch (cause) {
+          if (backup) renameSync(backup, destination);
+          throw cause;
+        }
       }
       published.push({ destination, ...(backup === undefined ? {} : { backup }) });
     }
