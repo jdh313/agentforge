@@ -63,7 +63,8 @@ const NAMED_ESCAPES: Readonly<Record<number, string>> = {
   13: '\\r', // U+000D
 };
 
-function tomlString(value: string, sourcePath: string, field: string): string {
+/** Serialize one TOML basic string with Codex's Unicode requirements. */
+export function codexTomlString(value: string, sourcePath: string, field: string): string {
   assertUnicodeScalarValues(value, sourcePath, field);
   let out = '"';
   for (let index = 0; index < value.length; index += 1) {
@@ -102,7 +103,7 @@ function tomlString(value: string, sourcePath: string, field: string): string {
 const codexAgentDocument: NativeAgentDocument = {
   extension: '.toml',
   serialize(behavior: CanonicalAgentBehavior, { sourcePath }: NativeAgentDocumentContext) {
-    const string = (value: string, field: string) => tomlString(value, sourcePath, field);
+    const string = (value: string, field: string) => codexTomlString(value, sourcePath, field);
     const lines = [
       `name = ${string(behavior.name, 'name')}`,
       `description = ${string(behavior.description, 'description')}`,
@@ -148,7 +149,8 @@ export const codexTarget = {
       // in `.codex/agents`; explicit `agent_type` selection was verified live
       // on 2026-09-21 (docs/limitations.md L-011 and L-012).
       installLocations: {
-        user: ({ homeDirectory }) => join(homeDirectory, '.codex/agents'),
+        user: ({ homeDirectory, codexHomeDirectory }) =>
+          join(codexHomeDirectory ?? join(homeDirectory, '.codex'), 'agents'),
         project: ({ projectRoot }) => join(projectRoot, '.codex/agents'),
       },
       surface: 'agent' as const,

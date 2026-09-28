@@ -28,6 +28,7 @@ export interface BuildInstallPlanOptions {
   projectRoot: string;
   pluginRoot?: string;
   homeDirectory?: string;
+  codexHomeDirectory?: string;
 }
 
 export interface InstallPlan {
@@ -75,11 +76,16 @@ export function buildInstallPlan(options: BuildInstallPlanOptions): InstallPlan 
 
   const artifactDef = ARTIFACT_DEFS[options.artifact];
   const resolvedHomeDirectory = resolve(options.homeDirectory ?? homedir());
+  const resolvedCodexHomeDirectory =
+    options.codexHomeDirectory === undefined ? undefined : resolve(options.codexHomeDirectory);
   const resolvedProjectRoot = resolve(options.projectRoot);
   const resolvedPluginRoot =
     options.pluginRoot === undefined ? undefined : resolve(options.pluginRoot);
   const locationRoot = location({
     homeDirectory: resolvedHomeDirectory,
+    ...(resolvedCodexHomeDirectory === undefined
+      ? {}
+      : { codexHomeDirectory: resolvedCodexHomeDirectory }),
     projectRoot: resolvedProjectRoot,
     ...(resolvedPluginRoot === undefined ? {} : { pluginRoot: resolvedPluginRoot }),
   });
@@ -123,6 +129,9 @@ export function buildInstallPlan(options: BuildInstallPlanOptions): InstallPlan 
     target: options.target,
     scope: options.scope,
     homeDirectory: resolvedHomeDirectory,
+    ...(resolvedCodexHomeDirectory === undefined
+      ? {}
+      : { codexHomeDirectory: resolvedCodexHomeDirectory }),
     projectRoot: resolvedProjectRoot,
     ...(resolvedPluginRoot === undefined ? {} : { pluginRoot: resolvedPluginRoot }),
     destinationRoot,

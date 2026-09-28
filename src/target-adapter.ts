@@ -9,6 +9,11 @@ import type { ArtifactType, ConstructSurface, InstallScope, TargetName, Warning 
 
 export interface InstallLocationContext {
   homeDirectory: string;
+  // Codex documents CODEX_HOME as the root containing config, agents, and
+  // other runtime state. It defaults to ~/.codex when unset. Keep this
+  // target-owned override distinct from homeDirectory so every other target
+  // retains its own documented home-relative locations.
+  codexHomeDirectory?: string;
   projectRoot: string;
   pluginRoot?: string;
 }

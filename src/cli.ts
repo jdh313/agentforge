@@ -5,6 +5,12 @@ import { Command } from 'commander';
 import matter from 'gray-matter';
 import pkg from '../package.json' with { type: 'json' };
 import { checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
+import {
+  buildCodexAgentBundleInstallPlan,
+  compileCodexAgentBundle,
+  materializeCodexAgentBundleInstallPlan,
+  validateCodexAgentBundleInstallPlan,
+} from './codex-agent-bundle.ts';
 import { type CompilationPlan, compileMarketplace, type RootAnchoredOutput } from './compiler.ts';
 import { type LoadedMarketplace, loadMarketplaceDefinition } from './definitions.ts';
 import { buildInstallPlan, checkInstallPlan, materializeInstallPlan } from './install.ts';
@@ -353,6 +359,7 @@ const resolveInstallPlan = (sourceDir: string, opts: InstallCommandOptions) => {
     artifact,
     scope: opts.scope,
     projectRoot: resolve(opts.projectRoot ?? workingProjectRoot(process.cwd())),
+    ...(process.env.CODEX_HOME === undefined ? {} : { codexHomeDirectory: process.env.CODEX_HOME }),
     ...(opts.pluginRoot === undefined ? {} : { pluginRoot: resolve(opts.pluginRoot) }),
   });
 };
@@ -364,6 +371,79 @@ const addInstallOptions = (command: Command): Command =>
     .option('-a, --artifact <name>', `artifact type (${ARTIFACT_TYPES.join(', ')})`)
     .option('--project-root <dir>', 'project root used for project-scope installation')
     .option('--plugin-root <dir>', 'package root used for plugin-scope installation');
+
+interface CodexBundleInstallOptions {
+  scope: string;
+  projectRoot?: string;
+}
+
+const resolveCodexBundleInstall = (bundleRoot: string, opts: CodexBundleInstallOptions) => {
+  if (opts.scope !== 'user' && opts.scope !== 'project') {
+    throw new Error('Codex agent bundles support user or project installation scope');
+  }
+  return buildCodexAgentBundleInstallPlan({
+    bundleRoot: resolve(bundleRoot),
+    scope: opts.scope,
+    projectRoot: resolve(opts.projectRoot ?? workingProjectRoot(process.cwd())),
+    ...(process.env.CODEX_HOME === undefined ? {} : { codexHomeDirectory: process.env.CODEX_HOME }),
+  });
+};
+
+program
+  .command('compile-codex-agent <source-dir>')
+  .description('Compile one canonical agent into a portable Codex agent bundle')
+  .requiredOption('--package-id <id>', 'stable package identity used to namespace the role')
+  .requiredOption('-o, --out <dir>', 'bundle output directory')
+  .action((sourceDir: string, opts: { packageId: string; out: string }) => {
+    try {
+      const bundle = compileCodexAgentBundle({
+        sourceDir: resolve(sourceDir),
+        packageId: opts.packageId,
+        outputRoot: resolve(opts.out),
+      });
+      console.log(`compiled ${bundle.agentName} at ${bundle.indexPath}`);
+      for (const line of formatCompilationDiagnostics(bundle.plan)) console.log(line);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command('preview-codex-agent <bundle-dir>')
+  .description('Validate a compiled Codex agent bundle and show its destination without writing')
+  .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
+  .option('--project-root <dir>', 'project root used for project-scope installation')
+  .action((bundleDir: string, opts: CodexBundleInstallOptions) => {
+    try {
+      const install = resolveCodexBundleInstall(bundleDir, opts);
+      validateCodexAgentBundleInstallPlan(install);
+      console.log(`ready: ${install.agentName}`);
+      console.log(`definition: ${join(install.destinationRoot, install.definitionPath)}`);
+      console.log(`receipt: ${join(install.destinationRoot, install.receiptPath)}`);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command('install-codex-agent <bundle-dir>')
+  .description('Install one validated compiled Codex agent bundle')
+  .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
+  .option('--project-root <dir>', 'project root used for project-scope installation')
+  .action((bundleDir: string, opts: CodexBundleInstallOptions) => {
+    try {
+      const install = resolveCodexBundleInstall(bundleDir, opts);
+      materializeCodexAgentBundleInstallPlan(install);
+      console.log(
+        `installed ${install.agentName} at ${join(install.destinationRoot, install.definitionPath)}`,
+      );
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  });
 
 const workingProjectRoot = (start: string): string => {
   const fallback = resolve(start);

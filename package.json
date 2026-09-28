@@ -21,6 +21,7 @@
     "./agent-command": "./src/agent-command.ts",
     "./artifact-plan": "./src/artifact-plan.ts",
     "./check": "./src/check.ts",
+    "./codex-agent-bundle": "./src/codex-agent-bundle.ts",
     "./compiler": "./src/compiler.ts",
     "./definitions": "./src/definitions.ts",
     "./install": "./src/install.ts",
