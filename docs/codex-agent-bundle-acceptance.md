@@ -96,6 +96,30 @@ changed. This trace establishes discovery, dispatch, instructions, and the
 observed model and effort settings for these two fixture roles. Other child
 settings remain unknown.
 
+## JUN-441 owned installation contract
+
+`install-codex-agent` uses a scope-local package receipt under
+`agents/.agentforge/`. The receipt records the package identity and version,
+each emitted role name and destination, and the hash of its installed TOML.
+This ownership format is `agentforge.codex-agent-receipt/v3`; earlier v2
+receipts are reported as unsupported and are preserved for explicit migration.
+Project and user installations therefore have independent ownership records,
+including when user scope uses a custom `CODEX_HOME`. The installer preserves
+unrelated agent definitions and refuses to replace an unowned definition or
+one owned by another package. An unchanged reinstall has no filesystem effect.
+
+`check-codex-agent <bundle-dir> --scope user|project` reads a compiled bundle
+and the selected installation root without writing. It reports `current`,
+`missing`, `edited`, `conflicted`, or `unsupported` with an actionable path for
+each issue. `current` exits 0; every other state exits 1. A wholly missing
+installation can be installed; partial missing state, edited content, ownership
+conflicts, malformed receipts, unsupported receipt schemas, unsafe paths,
+symlinks, or bundle hash mismatches
+must be resolved before installation. Preview applies the same preflight.
+
+The caller supplies the compiled bundle explicitly. Inventory discovery,
+managed updates, and removal remain separate work.
+
 ## Boundaries
 
 Codex reads project configuration only for a trusted project. The runtime probe
@@ -104,5 +128,5 @@ Installation refuses malformed indexes, invalid TOML, digest mismatches,
 foreign definitions, missing paired receipts, and pre-existing conflicting role
 registrations before materializing any destination path. It also refuses an
 inline `agents = { ... }` configuration without replacing it. Preview runs the
-same read-only ownership preflight, including the collision refusal. Broader
-ownership drift, update, and removal stay in JUN-441.
+same read-only ownership preflight, including the collision refusal. Managed
+updates and removal stay in JUN-442.

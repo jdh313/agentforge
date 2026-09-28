@@ -7,6 +7,7 @@ import pkg from '../package.json' with { type: 'json' };
 import { checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
 import {
   buildCodexAgentBundleInstallPlan,
+  checkCodexAgentBundleInstallPlan,
   compileCodexAgentBundle,
   materializeCodexAgentBundleInstallPlan,
   validateCodexAgentBundleInstallPlan,
@@ -441,6 +442,30 @@ program
       console.log(`installed ${install.agentNames.join(', ')} at ${install.destinationRoot}`);
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command('check-codex-agent <bundle-dir>')
+  .description('Check one compiled Codex agent bundle installation without writing')
+  .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
+  .option('--project-root <dir>', 'project root used for project-scope installation')
+  .action((bundleDir: string, opts: CodexBundleInstallOptions) => {
+    try {
+      const install = resolveCodexBundleInstall(bundleDir, opts);
+      const result = checkCodexAgentBundleInstallPlan(install);
+      console.log(
+        `${result.status}: ${result.filesChecked.length} managed paths at ${result.destinationRoot}`,
+      );
+      for (const issue of result.issues) {
+        console.error(`${issue.status}: ${issue.path}: ${issue.message}`);
+      }
+      if (result.status !== 'current') process.exitCode = 1;
+    } catch (error) {
+      console.error(
+        `unsupported: ${resolve(bundleDir)}: ${error instanceof Error ? error.message : String(error)}`,
+      );
       process.exitCode = 1;
     }
   });

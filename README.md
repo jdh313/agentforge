@@ -492,6 +492,9 @@ agentforge check <MARKETPLACE.yaml> --out <out-dir> --publication <id>
 agentforge check <MARKETPLACE.yaml> --out <out-dir> --claude-native
 agentforge install <artifact-source-dir> --target <name> --scope <user|project|plugin>
 agentforge check-install <artifact-source-dir> --target <name> --scope <user|project|plugin>
+agentforge preview-codex-agent <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
+agentforge install-codex-agent <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
+agentforge check-codex-agent <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
 agentforge render <artifact-source-dir> --target <name> --out <out-dir>
 agentforge render <artifact-source-dir> --all-targets --out-base <out-base>
 agentforge validate <artifact-source-dir>
@@ -554,6 +557,14 @@ agentforge list-targets
 - `check-install` resolves and builds the same plan without writing. Snapshot
   installs report unexpected files inside their owned root; planned-file
   installs check only their owned paths and ignore unrelated siblings.
+- `preview-codex-agent`, `install-codex-agent`, and `check-codex-agent` take an
+  explicit compiled Codex agent bundle. User scope resolves under `CODEX_HOME`
+  (or `~/.codex`); project scope resolves under the project root. Each scope
+  keeps its own package receipt. The check reads installation state without
+  writing and reports `current`, `missing`, `edited`, `conflicted`, or
+  `unsupported`, with paths for issues. Only `current` exits zero. A wholly
+  missing installation can be installed; partial missing state needs review
+  before installation. Repeating an unchanged install is a no-op.
 
 ### `root-manifest` publications
 

@@ -1,11 +1,21 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { checkCompilationSnapshot } from 'agentforge/check';
 import {
   buildCodexAgentBundleInstallPlan,
   CODEX_AGENT_BUNDLE_INDEX,
+  checkCodexAgentBundleInstallPlan,
   compileCodexAgentBundle,
   materializeCodexAgentBundleInstallPlan,
 } from 'agentforge/codex-agent-bundle';
@@ -107,6 +117,328 @@ describe('compiled Codex package agent bundle', () => {
     expect(readFileSync(join(project, '.codex/config.toml'), 'utf8')).toContain(
       '[agents."demo-roles:beta"]',
     );
+    expect(
+      checkCodexAgentBundleInstallPlan(
+        buildCodexAgentBundleInstallPlan({ bundleRoot, scope: 'project', projectRoot: project }),
+      ),
+    ).toMatchObject({ status: 'current' });
+    const alphaPath = join(project, '.codex/agents/alpha.toml');
+    const beforeRepeat = statSync(alphaPath);
+    materializeCodexAgentBundleInstallPlan(
+      buildCodexAgentBundleInstallPlan({ bundleRoot, scope: 'project', projectRoot: project }),
+    );
+    const afterRepeat = statSync(alphaPath);
+    expect(afterRepeat.ino).toBe(beforeRepeat.ino);
+    expect(afterRepeat.mtimeMs).toBe(beforeRepeat.mtimeMs);
+  });
+
+  test('records scope-local ownership and preserves an edited managed role', async () => {
+    const loaded = await loadMarketplaceDefinition(join(FIXTURE, 'MARKETPLACE.yaml'));
+    const out = join(temporaryRoot, 'compiled');
+    materializeCompilation(compileMarketplace(loaded, allTargets(), { outputRoot: out }), out);
+    const bundleRoot = join(out, 'packages/demo/.agentforge/codex-agent-bundle');
+    const codexHome = join(temporaryRoot, 'codex-home');
+    const install = buildCodexAgentBundleInstallPlan({
+      bundleRoot,
+      scope: 'user',
+      projectRoot: temporaryRoot,
+      codexHomeDirectory: codexHome,
+    });
+    materializeCodexAgentBundleInstallPlan(install);
+    const receipt = JSON.parse(
+      readFileSync(join(codexHome, 'agents/.agentforge/demo-roles.json'), 'utf8'),
+    );
+    expect(receipt).toMatchObject({
+      schema: 'agentforge.codex-agent-receipt/v3',
+      owner: { packageId: 'demo-roles', packageVersion: '2.3.4' },
+    });
+    expect(receipt.agents).toEqual(
+      expect.arrayContaining([
+        {
+          id: 'alpha',
+          name: 'demo-roles:alpha',
+          destination: 'agents/alpha.toml',
+          installedSha256: expect.any(String),
+        },
+      ]),
+    );
+    const definitionPath = join(codexHome, 'agents/alpha.toml');
+    writeFileSync(definitionPath, 'name = "edited-by-user"\n');
+    const repeat = buildCodexAgentBundleInstallPlan({
+      bundleRoot,
+      scope: 'user',
+      projectRoot: temporaryRoot,
+      codexHomeDirectory: codexHome,
+    });
+    expect(checkCodexAgentBundleInstallPlan(repeat)).toMatchObject({ status: 'edited' });
+    expect(() => materializeCodexAgentBundleInstallPlan(repeat)).toThrow(
+      'managed definition differs',
+    );
+    expect(readFileSync(definitionPath, 'utf8')).toBe('name = "edited-by-user"\n');
+  });
+
+  test('keeps v2 project and custom user-scope receipts isolated', async () => {
+    const loaded = await loadMarketplaceDefinition(join(FIXTURE, 'MARKETPLACE.yaml'));
+    const out = join(temporaryRoot, 'compiled');
+    materializeCompilation(compileMarketplace(loaded, allTargets(), { outputRoot: out }), out);
+    const bundleRoot = join(out, 'packages/demo/.agentforge/codex-agent-bundle');
+    const project = join(temporaryRoot, 'project');
+    const codexHome = join(temporaryRoot, 'custom-codex-home');
+    const projectInstall = buildCodexAgentBundleInstallPlan({
+      bundleRoot,
+      scope: 'project',
+      projectRoot: project,
+    });
+    const userInstall = buildCodexAgentBundleInstallPlan({
+      bundleRoot,
+      scope: 'user',
+      projectRoot: project,
+      codexHomeDirectory: codexHome,
+    });
+    materializeCodexAgentBundleInstallPlan(projectInstall);
+    materializeCodexAgentBundleInstallPlan(userInstall);
+    const projectReceiptPath = join(project, '.codex/agents/.agentforge/demo-roles.json');
+    const projectReceipt = readFileSync(projectReceiptPath, 'utf8');
+    writeFileSync(join(codexHome, 'agents/alpha.toml'), 'name = "user-scope-edit"\n');
+    expect(
+      checkCodexAgentBundleInstallPlan(
+        buildCodexAgentBundleInstallPlan({ bundleRoot, scope: 'project', projectRoot: project }),
+      ),
+    ).toMatchObject({ status: 'current' });
+    expect(
+      checkCodexAgentBundleInstallPlan(
+        buildCodexAgentBundleInstallPlan({
+          bundleRoot,
+          scope: 'user',
+          projectRoot: project,
+          codexHomeDirectory: codexHome,
+        }),
+      ),
+    ).toMatchObject({ status: 'edited' });
+    expect(readFileSync(projectReceiptPath, 'utf8')).toBe(projectReceipt);
+
+    const homeDirectory = join(temporaryRoot, 'default-home');
+    expect(
+      buildCodexAgentBundleInstallPlan({
+        bundleRoot,
+        scope: 'user',
+        projectRoot: project,
+        homeDirectory,
+      }).destinationRoot,
+    ).toBe(join(homeDirectory, '.codex'));
+  });
+
+  test('reports missing, current, and conflicted bundle state through the read-only CLI', async () => {
+    const loaded = await loadMarketplaceDefinition(join(FIXTURE, 'MARKETPLACE.yaml'));
+    const out = join(temporaryRoot, 'compiled');
+    materializeCompilation(compileMarketplace(loaded, allTargets(), { outputRoot: out }), out);
+    const bundleRoot = join(out, 'packages/demo/.agentforge/codex-agent-bundle');
+    const project = join(temporaryRoot, 'project');
+    const missing = runCli(
+      {},
+      'check-codex-agent',
+      bundleRoot,
+      '--scope',
+      'project',
+      '--project-root',
+      project,
+    );
+    expect(missing.exitCode).toBe(1);
+    expect(missing.stdout).toContain('missing:');
+    materializeCodexAgentBundleInstallPlan(
+      buildCodexAgentBundleInstallPlan({ bundleRoot, scope: 'project', projectRoot: project }),
+    );
+    const current = runCli(
+      {},
+      'check-codex-agent',
+      bundleRoot,
+      '--scope',
+      'project',
+      '--project-root',
+      project,
+    );
+    expect(current.exitCode).toBe(0);
+    expect(current.stdout).toContain('current:');
+    const receiptPath = join(project, '.codex/agents/.agentforge/demo-roles.json');
+    const receipt = JSON.parse(readFileSync(receiptPath, 'utf8'));
+    receipt.owner.packageVersion = 'foreign';
+    writeFileSync(receiptPath, `${JSON.stringify(receipt)}\n`);
+    const conflicted = runCli(
+      {},
+      'check-codex-agent',
+      bundleRoot,
+      '--scope',
+      'project',
+      '--project-root',
+      project,
+    );
+    expect(conflicted.exitCode).toBe(1);
+    expect(conflicted.stdout).toContain('conflicted:');
+    receipt.schema = 'agentforge.codex-agent-receipt/v2';
+    receipt.owner.packageVersion = '2.3.4';
+    writeFileSync(receiptPath, `${JSON.stringify(receipt)}\n`);
+    const priorSchema = runCli(
+      {},
+      'check-codex-agent',
+      bundleRoot,
+      '--scope',
+      'project',
+      '--project-root',
+      project,
+    );
+    expect(priorSchema.exitCode).toBe(1);
+    expect(priorSchema.stdout).toContain('unsupported:');
+    writeFileSync(receiptPath, '{}\n');
+    const unsupported = runCli(
+      {},
+      'check-codex-agent',
+      bundleRoot,
+      '--scope',
+      'project',
+      '--project-root',
+      project,
+    );
+    expect(unsupported.exitCode).toBe(1);
+    expect(unsupported.stdout).toContain('unsupported:');
+    expect(unsupported.stderr).toContain('.agentforge/demo-roles.json');
+  });
+
+  test('reports partial definitions and registrations as missing but refuses to repair them', async () => {
+    const loaded = await loadMarketplaceDefinition(join(FIXTURE, 'MARKETPLACE.yaml'));
+    const out = join(temporaryRoot, 'compiled');
+    materializeCompilation(compileMarketplace(loaded, allTargets(), { outputRoot: out }), out);
+    const bundleRoot = join(out, 'packages/demo/.agentforge/codex-agent-bundle');
+    const project = join(temporaryRoot, 'project');
+    materializeCodexAgentBundleInstallPlan(
+      buildCodexAgentBundleInstallPlan({ bundleRoot, scope: 'project', projectRoot: project }),
+    );
+    rmSync(join(project, '.codex/agents/alpha.toml'));
+    const missingDefinition = buildCodexAgentBundleInstallPlan({
+      bundleRoot,
+      scope: 'project',
+      projectRoot: project,
+    });
+    expect(checkCodexAgentBundleInstallPlan(missingDefinition)).toMatchObject({
+      status: 'missing',
+      issues: expect.arrayContaining([
+        expect.objectContaining({ path: join(project, '.codex/agents/alpha.toml') }),
+      ]),
+    });
+    expect(() => materializeCodexAgentBundleInstallPlan(missingDefinition)).toThrow(
+      'managed definition is missing',
+    );
+    expect(existsSync(join(project, '.codex/agents/alpha.toml'))).toBe(false);
+
+    writeFileSync(
+      join(project, '.codex/agents/alpha.toml'),
+      readFileSync(join(bundleRoot, 'agents/alpha.toml'), 'utf8'),
+    );
+    writeFileSync(join(project, '.codex/config.toml'), 'model = "kept"\n');
+    const missingRegistration = buildCodexAgentBundleInstallPlan({
+      bundleRoot,
+      scope: 'project',
+      projectRoot: project,
+    });
+    expect(checkCodexAgentBundleInstallPlan(missingRegistration)).toMatchObject({
+      status: 'missing',
+      issues: expect.arrayContaining([
+        expect.objectContaining({ path: join(project, '.codex/config.toml') }),
+      ]),
+    });
+    expect(() => materializeCodexAgentBundleInstallPlan(missingRegistration)).toThrow(
+      'role registration is missing',
+    );
+    expect(readFileSync(join(project, '.codex/config.toml'), 'utf8')).toBe('model = "kept"\n');
+  });
+
+  test('rejects a symlinked empty agents root before preview or installation writes', async () => {
+    const loaded = await loadMarketplaceDefinition(join(FIXTURE, 'MARKETPLACE.yaml'));
+    const out = join(temporaryRoot, 'compiled');
+    materializeCompilation(compileMarketplace(loaded, allTargets(), { outputRoot: out }), out);
+    const bundleRoot = join(out, 'packages/demo/.agentforge/codex-agent-bundle');
+    const project = join(temporaryRoot, 'project');
+    const outside = join(temporaryRoot, 'outside-agents');
+    mkdirSync(join(project, '.codex'), { recursive: true });
+    mkdirSync(outside);
+    symlinkSync(outside, join(project, '.codex/agents'));
+    const preview = runCli(
+      {},
+      'preview-codex-agent',
+      bundleRoot,
+      '--scope',
+      'project',
+      '--project-root',
+      project,
+    );
+    const install = runCli(
+      {},
+      'install-codex-agent',
+      bundleRoot,
+      '--scope',
+      'project',
+      '--project-root',
+      project,
+    );
+    expect(preview.exitCode).toBe(1);
+    expect(install.exitCode).toBe(1);
+    expect(preview.stderr).toContain('managed output parent must be a real directory');
+    expect(install.stderr).toContain('managed output parent must be a real directory');
+    expect(existsSync(join(project, '.codex/config.toml'))).toBe(false);
+    expect(existsSync(join(outside, 'alpha.toml'))).toBe(false);
+  });
+
+  test('reports edited role registrations and unowned definition symlinks before writing', async () => {
+    const loaded = await loadMarketplaceDefinition(join(FIXTURE, 'MARKETPLACE.yaml'));
+    const out = join(temporaryRoot, 'compiled');
+    materializeCompilation(compileMarketplace(loaded, allTargets(), { outputRoot: out }), out);
+    const bundleRoot = join(out, 'packages/demo/.agentforge/codex-agent-bundle');
+    const project = join(temporaryRoot, 'project');
+    materializeCodexAgentBundleInstallPlan(
+      buildCodexAgentBundleInstallPlan({ bundleRoot, scope: 'project', projectRoot: project }),
+    );
+    const configPath = join(project, '.codex/config.toml');
+    const editedConfig = readFileSync(configPath, 'utf8').replace(
+      /description = .*$/m,
+      'description = "user edited registration"',
+    );
+    writeFileSync(configPath, editedConfig);
+    const editedRegistration = buildCodexAgentBundleInstallPlan({
+      bundleRoot,
+      scope: 'project',
+      projectRoot: project,
+    });
+    expect(checkCodexAgentBundleInstallPlan(editedRegistration)).toMatchObject({
+      status: 'edited',
+      issues: expect.arrayContaining([
+        expect.objectContaining({ path: configPath, status: 'edited' }),
+      ]),
+    });
+    expect(() => materializeCodexAgentBundleInstallPlan(editedRegistration)).toThrow(
+      'managed role registration differs',
+    );
+    expect(readFileSync(configPath, 'utf8')).toBe(editedConfig);
+
+    const unownedProject = join(temporaryRoot, 'unowned-project');
+    const outside = join(temporaryRoot, 'outside-definition.toml');
+    mkdirSync(join(unownedProject, '.codex/agents'), { recursive: true });
+    writeFileSync(outside, 'name = "outside"\n');
+    const alphaPath = join(unownedProject, '.codex/agents/alpha.toml');
+    symlinkSync(outside, alphaPath);
+    const unowned = buildCodexAgentBundleInstallPlan({
+      bundleRoot,
+      scope: 'project',
+      projectRoot: unownedProject,
+    });
+    expect(checkCodexAgentBundleInstallPlan(unowned)).toMatchObject({
+      status: 'unsupported',
+      issues: expect.arrayContaining([
+        expect.objectContaining({ path: alphaPath, status: 'unsupported' }),
+      ]),
+    });
+    expect(() => materializeCodexAgentBundleInstallPlan(unowned)).toThrow(
+      'managed definition must be a regular file',
+    );
+    expect(readFileSync(outside, 'utf8')).toBe('name = "outside"\n');
   });
 
   test('rejects a newer schema before writing', async () => {

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { parseAgentBehavior } from './agent-command.ts';
 import { buildArtifactPlan } from './artifact-plan.ts';
@@ -13,6 +13,7 @@ import type {
   ProposedOutput,
 } from './compiler.ts';
 import { materializeCompilation, materializeCompilationOutputs } from './materializer.ts';
+import { isContainedPath } from './paths.ts';
 import { loadArtifactProjection, projectArtifact } from './render.ts';
 import { CanonicalAgentName } from './schema.ts';
 import { codexTomlString } from './targets/codex.ts';
@@ -23,7 +24,7 @@ export const CODEX_AGENT_BUNDLE_INDEX = 'agentforge-codex-agent-bundle.json';
 export const CODEX_AGENT_BUNDLE_DIRECTORY = '.agentforge/codex-agent-bundle';
 const BUNDLE_SCHEMA = 'agentforge.codex-agent-bundle/v2';
 const LEGACY_BUNDLE_SCHEMA = 'agentforge.codex-agent-bundle/v1';
-const RECEIPT_SCHEMA = 'agentforge.codex-agent-receipt/v2';
+const RECEIPT_SCHEMA = 'agentforge.codex-agent-receipt/v3';
 
 const BundleAgent = z.strictObject({
   id: CanonicalAgentName,
@@ -60,10 +61,16 @@ const LegacyBundleIndex = z.strictObject({
     sha256: z.string().regex(/^[a-f0-9]{64}$/),
   }),
 });
+const ReceiptAgent = z.strictObject({
+  id: CanonicalAgentName,
+  name: z.string().min(1),
+  destination: z.string().regex(/^agents\/[a-z0-9]+(?:-[a-z0-9]+)*\.toml$/),
+  installedSha256: z.string().regex(/^[a-f0-9]{64}$/),
+});
 const Receipt = z.strictObject({
   schema: z.literal(RECEIPT_SCHEMA),
   owner: z.strictObject({ packageId: CanonicalAgentName, packageVersion: z.string().min(1) }),
-  agents: z.array(BundleAgent).min(1),
+  agents: z.array(ReceiptAgent).min(1),
 });
 export const CodexAgentBundleDocument = {
   role: 'generated-document' as const,
@@ -289,7 +296,29 @@ export interface CodexAgentBundleInstallPlan {
   registrationPath: string;
   agentNames: readonly string[];
   registrationWasPresent: ReadonlySet<string>;
+  registrationWasEdited: ReadonlySet<string>;
+  registrationConflicts: ReadonlySet<string>;
   plan: CompilationPlan;
+}
+
+export type CodexAgentBundleCheckStatus =
+  | 'current'
+  | 'missing'
+  | 'edited'
+  | 'conflicted'
+  | 'unsupported';
+
+export interface CodexAgentBundleCheckIssue {
+  status: Exclude<CodexAgentBundleCheckStatus, 'current'>;
+  path: string;
+  message: string;
+}
+
+export interface CodexAgentBundleCheckResult {
+  destinationRoot: string;
+  filesChecked: readonly string[];
+  status: CodexAgentBundleCheckStatus;
+  issues: readonly CodexAgentBundleCheckIssue[];
 }
 
 /** Read all index, definition, and registration state before a destination is writable. */
@@ -297,11 +326,13 @@ export function buildCodexAgentBundleInstallPlan(
   options: BuildCodexAgentBundleInstallPlanOptions,
 ): CodexAgentBundleInstallPlan {
   const bundleRoot = resolve(options.bundleRoot);
+  assertSafeDirectory(bundleRoot, 'bundle root');
   const indexPath = join(bundleRoot, CODEX_AGENT_BUNDLE_INDEX);
   const index = parseBundleIndex(indexPath);
   const definitions = index.agents.map((agent) => {
-    const content = readRegularText(
-      join(bundleRoot, agent.sourceDefinition),
+    const content = readContainedRegularText(
+      bundleRoot,
+      agent.sourceDefinition,
       `bundle definition ${agent.id}`,
     );
     if (sha256(content) !== agent.sha256)
@@ -325,13 +356,19 @@ export function buildCodexAgentBundleInstallPlan(
     projectRoot: resolve(options.projectRoot),
   });
   const destinationRoot = resolve(agentsRoot, '..');
+  assertSafeDestinationRoot(destinationRoot);
   const registrationPath = 'config.toml';
   const registration = buildRoleRegistrations(join(destinationRoot, registrationPath), definitions);
   const receiptPath = `agents/.agentforge/${index.package.id}.json`;
   const receipt = {
     schema: RECEIPT_SCHEMA,
     owner: { packageId: index.package.id, packageVersion: index.package.version },
-    agents: index.agents,
+    agents: definitions.map(({ id, name, definition, sha256: digest }) => ({
+      id,
+      name,
+      destination: definition,
+      installedSha256: digest,
+    })),
   };
   const provenance = {
     marketplacePath: indexPath,
@@ -372,6 +409,8 @@ export function buildCodexAgentBundleInstallPlan(
     registrationPath,
     agentNames: definitions.map(({ name }) => name),
     registrationWasPresent: registration.present,
+    registrationWasEdited: registration.edited,
+    registrationConflicts: registration.conflicts,
     plan: {
       marketplaceId: index.package.id,
       outputs,
@@ -383,47 +422,185 @@ export function buildCodexAgentBundleInstallPlan(
 }
 
 export function materializeCodexAgentBundleInstallPlan(install: CodexAgentBundleInstallPlan): void {
-  validateCodexAgentBundleInstallPlan(install);
+  const check = checkCodexAgentBundleInstallPlan(install);
+  if (check.status === 'current') return;
+  if (check.status !== 'missing' || !isEmptyCodexAgentBundleInstall(install)) {
+    const issue = check.issues[0];
+    throw new Error(
+      `refusing bundle collision: ${issue?.message ?? 'installed bundle state is unsupported'}`,
+    );
+  }
   materializeCompilationOutputs(install.plan, install.destinationRoot);
 }
 
 export function validateCodexAgentBundleInstallPlan(install: CodexAgentBundleInstallPlan): void {
+  const check = checkCodexAgentBundleInstallPlan(install);
+  if (
+    check.status === 'current' ||
+    (check.status === 'missing' && isEmptyCodexAgentBundleInstall(install))
+  )
+    return;
+  const issue = check.issues[0];
+  throw new Error(
+    `refusing bundle collision: ${issue?.message ?? 'installed bundle state is unsupported'}`,
+  );
+}
+
+function isEmptyCodexAgentBundleInstall(install: CodexAgentBundleInstallPlan): boolean {
+  return (
+    !lstatSync(join(install.destinationRoot, install.receiptPath), { throwIfNoEntry: false }) &&
+    install.definitionPaths.every(
+      (path) => !lstatSync(join(install.destinationRoot, path), { throwIfNoEntry: false }),
+    ) &&
+    install.registrationWasPresent.size === 0 &&
+    install.registrationWasEdited.size === 0 &&
+    install.registrationConflicts.size === 0
+  );
+}
+
+/**
+ * Read only installed-state check. A wholly empty `missing` destination is
+ * installable; partial missing state and every other non-current status block
+ * installation so managed edits are never silently overwritten.
+ */
+export function checkCodexAgentBundleInstallPlan(
+  install: CodexAgentBundleInstallPlan,
+): CodexAgentBundleCheckResult {
+  const filesChecked = [...install.definitionPaths, install.receiptPath, install.registrationPath];
+  const issues: CodexAgentBundleCheckIssue[] = [];
+  const add = (
+    status: CodexAgentBundleCheckIssue['status'],
+    path: string,
+    message: string,
+  ): void => {
+    issues.push({ status, path: join(install.destinationRoot, path), message });
+  };
+
+  for (const name of install.registrationConflicts) {
+    add('conflicted', install.registrationPath, `role registration already exists for ${name}`);
+  }
+  for (const name of install.registrationWasEdited) {
+    add('edited', install.registrationPath, `managed role registration differs for ${name}`);
+  }
   const receiptPath = join(install.destinationRoot, install.receiptPath);
   const receiptEntry = lstatSync(receiptPath, { throwIfNoEntry: false });
-  const definitions = install.definitionPaths.map((path) =>
-    lstatSync(join(install.destinationRoot, path), { throwIfNoEntry: false }),
-  );
-  const count = definitions.filter(Boolean).length;
-  if (count === 0 && !receiptEntry) {
-    if (install.registrationWasPresent.size > 0)
-      throw new Error(
-        'refusing bundle collision: existing Codex role registration has no bundle receipt',
-      );
-    return;
+  const definitionEntries = install.definitionPaths.map((path) => ({
+    path,
+    entry: lstatSync(join(install.destinationRoot, path), { throwIfNoEntry: false }),
+  }));
+  for (const path of [...install.definitionPaths, install.receiptPath, install.registrationPath]) {
+    if (hasUnsafeManagedParent(install.destinationRoot, path)) {
+      add('unsupported', path, 'managed output parent must be a real directory');
+    }
   }
-  if (count !== definitions.length || !receiptEntry)
-    throw new Error(
-      'refusing bundle collision: definitions and ownership receipt must appear together',
-    );
-  if (!receiptEntry.isFile() || definitions.some((entry) => !entry?.isFile()))
-    throw new Error(
-      'refusing bundle collision: managed definitions and receipt must be regular files',
-    );
+  if (issues.length > 0) return checkResult(install.destinationRoot, filesChecked, issues);
+  const anyDefinitions = definitionEntries.some(({ entry }) => entry !== undefined);
+  const irregular = definitionEntries.find(({ entry }) => entry && !entry.isFile());
+  if (irregular) {
+    add('unsupported', irregular.path, 'managed definition must be a regular file');
+    return checkResult(install.destinationRoot, filesChecked, issues);
+  }
+
+  if (!receiptEntry && !anyDefinitions) {
+    if (install.registrationWasPresent.size > 0) {
+      for (const name of install.registrationWasPresent) {
+        add(
+          'conflicted',
+          install.registrationPath,
+          `existing role registration has no bundle receipt: ${name}`,
+        );
+      }
+    } else {
+      add('missing', install.receiptPath, 'ownership receipt is missing');
+    }
+    return checkResult(install.destinationRoot, filesChecked, issues);
+  }
+  if (!receiptEntry) {
+    add('conflicted', install.receiptPath, 'definitions have no ownership receipt');
+    return checkResult(install.destinationRoot, filesChecked, issues);
+  }
+  for (const { path, entry } of definitionEntries) {
+    if (!entry) add('missing', path, 'managed definition is missing');
+  }
+  for (const name of install.agentNames) {
+    if (
+      !install.registrationWasPresent.has(name) &&
+      !install.registrationWasEdited.has(name) &&
+      !install.registrationConflicts.has(name)
+    ) {
+      add('missing', install.registrationPath, `role registration is missing for ${name}`);
+    }
+  }
+  if (!receiptEntry.isFile()) {
+    add('unsupported', install.receiptPath, 'ownership receipt must be a regular file');
+    return checkResult(install.destinationRoot, filesChecked, issues);
+  }
   let received: z.infer<typeof Receipt>;
   try {
     received = Receipt.parse(JSON.parse(readFileSync(receiptPath, 'utf8')));
   } catch {
-    throw new Error('refusing bundle collision: ownership receipt is invalid');
+    add('unsupported', install.receiptPath, 'ownership receipt is invalid or unsupported');
+    return checkResult(install.destinationRoot, filesChecked, issues);
   }
+  const expected = expectedReceipt(install);
+  if (JSON.stringify(received) !== JSON.stringify(expected)) {
+    add(
+      'conflicted',
+      install.receiptPath,
+      'destination belongs to another bundle owner or version',
+    );
+    return checkResult(install.destinationRoot, filesChecked, issues);
+  }
+  for (const agent of received.agents) {
+    if (!lstatSync(join(install.destinationRoot, agent.destination), { throwIfNoEntry: false })) {
+      continue;
+    }
+    const content = readFileSync(join(install.destinationRoot, agent.destination), 'utf8');
+    if (sha256(content) !== agent.installedSha256) {
+      add('edited', agent.destination, 'managed definition differs from its ownership receipt');
+    }
+  }
+  return checkResult(install.destinationRoot, filesChecked, issues);
+}
+
+function hasUnsafeManagedParent(root: string, proposed: string): boolean {
+  let current = resolve(root, proposed, '..');
+  while (current !== root) {
+    const entry = lstatSync(current, { throwIfNoEntry: false });
+    if (entry?.isSymbolicLink() || (entry && !entry.isDirectory())) return true;
+    current = dirname(current);
+  }
+  return false;
+}
+
+function expectedReceipt(install: CodexAgentBundleInstallPlan): z.infer<typeof Receipt> {
   const expected = install.plan.outputs.find(
     (output) => output.destination === install.receiptPath,
   );
   if (!expected || expected.kind !== 'generated')
     throw new Error('bundle install plan is missing its receipt');
-  if (JSON.stringify(received) !== JSON.stringify(Receipt.parse(JSON.parse(expected.content))))
-    throw new Error(
-      'refusing bundle collision: destination belongs to another bundle owner or version',
-    );
+  return Receipt.parse(JSON.parse(expected.content));
+}
+
+function checkResult(
+  destinationRoot: string,
+  filesChecked: readonly string[],
+  issues: readonly CodexAgentBundleCheckIssue[],
+): CodexAgentBundleCheckResult {
+  const status = issues.some(({ status }) => status === 'unsupported')
+    ? 'unsupported'
+    : issues.some(({ status }) => status === 'conflicted')
+      ? 'conflicted'
+      : issues.some(({ status }) => status === 'edited')
+        ? 'edited'
+        : issues.some(({ status }) => status === 'missing')
+          ? 'missing'
+          : filesChecked.every((path) =>
+                lstatSync(join(destinationRoot, path), { throwIfNoEntry: false }),
+              )
+            ? 'current'
+            : 'missing';
+  return { destinationRoot, filesChecked, status, issues };
 }
 
 interface ParsedBundleIndex {
@@ -521,6 +698,39 @@ function readRegularText(path: string, label: string): string {
   if (!entry?.isFile()) throw new Error(`${label} must be a regular file: ${path}`);
   return readFileSync(path, 'utf8');
 }
+
+function readContainedRegularText(root: string, proposed: string, label: string): string {
+  const path = resolve(root, proposed);
+  if (!isContainedPath(root, path))
+    throw new Error(`${label} escapes the bundle root: ${proposed}`);
+  assertSafeDirectoryPath(root, path, label);
+  return readRegularText(path, label);
+}
+
+function assertSafeDestinationRoot(root: string): void {
+  const entry = lstatSync(root, { throwIfNoEntry: false });
+  if (entry && (!entry.isDirectory() || entry.isSymbolicLink())) {
+    throw new Error(`Codex installation root must be a real directory: ${root}`);
+  }
+}
+
+function assertSafeDirectory(root: string, label: string): void {
+  const entry = lstatSync(root, { throwIfNoEntry: false });
+  if (!entry?.isDirectory() || entry.isSymbolicLink()) {
+    throw new Error(`${label} must be a real directory: ${root}`);
+  }
+}
+
+function assertSafeDirectoryPath(root: string, path: string, label: string): void {
+  let current = path;
+  while (current !== root) {
+    current = dirname(current);
+    const entry = lstatSync(current, { throwIfNoEntry: false });
+    if (!entry?.isDirectory() || entry.isSymbolicLink()) {
+      throw new Error(`${label} must not traverse a symbolic link or irregular directory: ${path}`);
+    }
+  }
+}
 function validateCodexDefinition(
   content: string,
   expectedName: string,
@@ -541,7 +751,12 @@ function validateCodexDefinition(
 function buildRoleRegistrations(
   configPath: string,
   definitions: readonly { name: string; definition: string; description: string }[],
-): { content: string; present: ReadonlySet<string> } {
+): {
+  content: string;
+  present: ReadonlySet<string>;
+  edited: ReadonlySet<string>;
+  conflicts: ReadonlySet<string>;
+} {
   const entry = lstatSync(configPath, { throwIfNoEntry: false });
   const content = entry ? readRegularText(configPath, 'Codex role configuration') : '';
   let parsed: unknown = {};
@@ -557,6 +772,8 @@ function buildRoleRegistrations(
   if (agents !== undefined && (!agents || typeof agents !== 'object'))
     throw new Error(`Codex role configuration has invalid agents table: ${configPath}`);
   const present = new Set<string>();
+  const edited = new Set<string>();
+  const conflicts = new Set<string>();
   const additions: string[] = [];
   for (const agent of definitions) {
     const current =
@@ -569,13 +786,15 @@ function buildRoleRegistrations(
           `Codex role configuration uses an inline agents table and cannot register ${agent.name}`,
         );
       additions.push(registrationText(configPath, agent));
-    } else if (
-      !current ||
-      typeof current !== 'object' ||
-      (current as { config_file?: unknown }).config_file !== agent.definition
-    )
-      throw new Error(`Codex role registration already exists for ${agent.name}`);
-    else present.add(agent.name);
+    } else if (!current || typeof current !== 'object') {
+      conflicts.add(agent.name);
+    } else if ((current as { config_file?: unknown }).config_file !== agent.definition) {
+      conflicts.add(agent.name);
+    } else if ((current as { description?: unknown }).description !== agent.description) {
+      edited.add(agent.name);
+    } else {
+      present.add(agent.name);
+    }
   }
   const next =
     additions.length === 0
@@ -586,7 +805,7 @@ function buildRoleRegistrations(
   } catch {
     throw new Error(`Codex role registration would make configuration invalid TOML: ${configPath}`);
   }
-  return { content: next, present };
+  return { content: next, present, edited, conflicts };
 }
 function registrationText(
   path: string,
