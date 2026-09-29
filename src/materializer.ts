@@ -162,9 +162,7 @@ function materializeOutput(output: DesiredOutput, stagingRoot: string): void {
       ? output.sourcePath
       : requireContainedRegularSource(output.sourceRoot, output.sourcePath);
   copyFileSync(source, destination);
-  if (output.executable !== undefined) {
-    chmodSync(destination, output.executable ? 0o755 : 0o644);
-  }
+  chmodSync(destination, output.executable ? 0o755 : 0o644);
 }
 
 function requireContainedRegularSource(sourceRoot: string, sourcePath: string): string {

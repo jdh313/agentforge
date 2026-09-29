@@ -74,12 +74,12 @@ describe('marketplace materialization', () => {
     writeFileSync(executableSource, '#!/bin/sh\n');
     writeFileSync(regularSource, 'regular\n');
     chmodSync(executableSource, 0o751);
-    chmodSync(regularSource, 0o640);
+    chmodSync(regularSource, 0o666);
 
     materializeCompilation(
       plan([
         { ...copied('bin/run.sh', executableSource, 'commit'), executable: true },
-        { ...copied('README.txt', regularSource, 'commit'), executable: false },
+        copied('README.txt', regularSource, 'commit'),
       ]),
       outDir,
     );
