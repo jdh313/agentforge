@@ -651,7 +651,7 @@ function expectedBytes(output: DesiredOutput): Buffer {
 function expectedOutputMode(output: DesiredOutput): number {
   if (output.kind === 'generated' || output.kind === 'binary') return 0o644;
   if (output.executable !== undefined) return output.executable ? 0o755 : 0o644;
-  return lstatSync(output.sourcePath).mode & 0o777;
+  return 0o644;
 }
 
 function formatMode(mode: number): string {

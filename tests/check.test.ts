@@ -51,6 +51,22 @@ describe('marketplace check', () => {
     ]);
   });
 
+  test('accepts normalized mode for a regular copied output', () => {
+    if (process.platform === 'win32') return;
+    const source = join(temporaryRoot, 'source.txt');
+    const outputRoot = join(temporaryRoot, 'output-normalized-mode');
+    writeFileSync(source, 'copied\n');
+    chmodSync(source, 0o666);
+    const plan = fixturePlan(source);
+
+    materializeCompilation(plan, outputRoot);
+
+    expect(
+      statSync(join(outputRoot, 'claude', 'packages', 'example', 'source.txt')).mode & 0o777,
+    ).toBe(0o644);
+    expect(checkMarketplace(plan, outputRoot).issues).toEqual([]);
+  });
+
   test('reports every drift class without changing the output tree', () => {
     const source = join(temporaryRoot, 'source.txt');
     const outputRoot = join(temporaryRoot, 'output');
