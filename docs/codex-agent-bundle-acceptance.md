@@ -6,7 +6,7 @@ companion, and JUN-443's explicit registration skill. A package enables v2 under
 `.agentforge/codex-agent-bundle/` beside the unchanged Markdown procedures and
 `skills/setup-codex-agents/`.
 
-Last exercised: 2026-09-28.
+Last exercised: 2026-09-29.
 
 - AgentForge worktree: `JUN-439: one-agent Codex installation and dispatch`
 - Bun: 1.4.2
@@ -155,7 +155,8 @@ explicit-invocation `agents/openai.yaml` policy, and the visible
 `scripts/manage-codex-agent-bundle.sh`. Plugin installation exposes that skill;
 companion registration stays a user-selected AgentForge lifecycle action. The
 Markdown procedure at `agents/<name>.md` remains present and does not register
-a role.
+a role. Invoke it as `$<plugin-name>:setup-codex-agents` from the skill picker;
+the explicit-only policy omits it from ordinary natural-language skill context.
 
 The skill uses its active `SKILL.md` path, or an exact plugin-root fallback, to
 invoke the script. The script walks three parent directories from its own path
@@ -183,8 +184,36 @@ Focused tests copy the compiled package to a fresh plugin location, execute the
 generated script for both scopes, cover missing and incompatible CLI guidance,
 and remove receipt-owned roles after deleting the copied bundle. They also cover
 generated output and policy, a failed lifecycle mutation, and snapshot checks.
-They do not establish skill selection in a fresh Codex runtime; that still
-needs a model-backed installed-plugin trace.
+The fresh installed-plugin trace below establishes explicit skill selection.
+
+## JUN-443 installed runtime acceptance
+
+On 2026-09-29, a new Herdr tab (`w6Z:t2`) used an isolated
+`CODEX_HOME=/private/tmp/agentforge-jun443-herdr.WemCDN/codex-home` and a
+disposable trusted project. The home linked the existing `auth.json` without
+printing or copying its contents. Codex CLI was 0.158.0. The test compiled the
+fixture marketplace and a local AgentForge binary from this change; it did not
+test a published release binary. The fixture's display names were changed to
+valid plugin identifiers only in the temporary compiled copy before `codex
+plugin marketplace add` and `codex plugin add`; the generated skill and bundle
+were unchanged. The installed cache contained all three setup-skill files and
+the bundle index.
+
+| Probe | Observed result |
+| --- | --- |
+| Natural-language request | The explicit-only skill was absent from the ordinary skill catalog; no setup command ran. This is expected from `allow_implicit_invocation: false`. |
+| Explicit `$demo-roles:setup-codex-agents` | A fresh model session received the installed skill's absolute `SKILL.md` path. The path remained available with the generated manifest unchanged; adding `skills: "./skills/"` in a temporary manifest was not required for explicit invocation. |
+| Project install under `workspace-write` | Bundle validation exited 0, but installation exited 1 on `EPERM` creating the disposable project's `.codex` directory. `--add-dir` for that project did not change the result. The skill stopped before check or dispatch. |
+| Project install control under `danger-full-access` | The explicit skill located its installed bundle, invoked its script, installed `demo-roles:alpha` and `demo-roles:beta`, and ran `check` successfully: `current`, four managed paths. This control does not establish normal-sandbox write acceptance. |
+| Fresh read-only dispatch | A new parent invoked `spawn_agent` with `agent_type: "demo-roles:alpha"`; the child returned `ALPHA`. The child recorded `gpt-5.6-terra` and `high` reasoning effort in `thread_settings_applied`. |
+
+The model-backed traces are under
+`/private/tmp/agentforge-jun443-herdr.WemCDN/`: `explicit_original.jsonl`,
+`install_retry.jsonl`, `install_control.jsonl`, and `dispatch.jsonl`. The parent
+dispatch rollout is
+`codex-home/sessions/2026/09/29/rollout-2026-09-29T10-32-43-01a0ed95-0bc5-7270-b541-17c13ff5790d.jsonl`;
+the child rollout is
+`codex-home/sessions/2026/09/29/rollout-2026-09-29T10-32-47-01a0ed95-1c54-7de3-b887-7a42c0d71a24.jsonl`.
 
 ## Boundaries
 

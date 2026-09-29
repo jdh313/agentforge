@@ -570,10 +570,12 @@ agentforge list-targets
   missing installation can be installed; partial missing state needs review
   before installation. Repeating an unchanged install is a no-op.
 - A package with `codex-agent-bundle` also emits the explicit
-  `setup-codex-agents` skill. Plugin installation exposes that skill;
-  registration through its visible skill-local script remains separate. The
-  script derives the plugin root from its own path, checks the installed
-  `agentforge` subcommand, and keeps user and project lifecycle actions
+  `setup-codex-agents` skill. Invoke it from the Codex skill picker as
+  `$<plugin-name>:setup-codex-agents`; its explicit-only policy leaves it out
+  of ordinary natural-language skill discovery. Plugin installation exposes
+  the skill; registration through its visible skill-local script remains
+  separate. The script derives the plugin root from its own path, checks the
+  installed `agentforge` subcommand, and keeps user and project lifecycle actions
   independent. The skill names emitted role identities and requires a fresh
   session before dispatch.
 
