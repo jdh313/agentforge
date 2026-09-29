@@ -9,6 +9,8 @@ artifacts:
     pattern: agents/*.md
 targets:
   codex:
+    overrides:
+      name: demo-roles
     codex-agent-bundle: true
     native:
       interface:

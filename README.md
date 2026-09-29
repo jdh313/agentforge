@@ -577,7 +577,10 @@ agentforge list-targets
   separate. The script derives the plugin root from its own path, checks the
   installed `agentforge` subcommand, and keeps user and project lifecycle actions
   independent. The skill names emitted role identities and requires a fresh
-  session before dispatch.
+  session before dispatch. Project registration requires write access to the
+  selected project's `.codex` directory; a managed Codex permission profile
+  may deny it even when the project root is writable. In that case, run the
+  visible script with authorized directory access and rerun its read-only check.
 
 ### `root-manifest` publications
 

@@ -215,6 +215,32 @@ dispatch rollout is
 the child rollout is
 `codex-home/sessions/2026/09/29/rollout-2026-09-29T10-32-47-01a0ed95-1c54-7de3-b887-7a42c0d71a24.jsonl`.
 
+The project-scope `workspace-write` failure is a Codex managed-permission
+constraint: that run's profile marked the disposable project's `.codex`
+directory read-only even though the project root was writable. The first
+write attempted to create `.codex`. Adding the project root with `--add-dir`
+did not override that explicit restriction. Project registration therefore
+requires a session authorized to write that directory, or running the visible
+script in a terminal with that access. The read-only `check` action can still
+report the installed state.
+
+The latest published binary checked on 2026-09-29 was v1.1.0. Its `--help`
+does not list any Codex agent lifecycle commands, so it cannot yet satisfy
+the released-binary consumer path above. A post-JUN-443 release and a smoke
+test of its downloaded binary remain required before claiming that path.
+
+After giving the fixture's Codex publication and package native identifier
+overrides, a new compile installed through `codex plugin marketplace add`
+and `codex plugin add` without changing the compiled output. This isolated
+probe used `/private/tmp/agentforge-jun443-native.FkIhhi/` and Codex CLI
+0.158.0. The installed cache skill script, with a binary built from this
+working copy, installed both roles at user and project scope; each scope's
+`check` reported `current` and four managed paths. `codex plugin remove`
+left those roles current. AgentForge previewed removal and then removed
+both scopes from their receipts without relying on the removed plugin cache.
+This verifies the native plugin fixture and independent cleanup, but it is
+still a local-binary probe.
+
 ## Boundaries
 
 Codex reads project configuration only for a trusted project. The runtime probe

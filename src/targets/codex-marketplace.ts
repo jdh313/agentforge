@@ -391,6 +391,10 @@ user is preserved and remains recorded for review. Plugin removal does not
 remove these registered roles. Remove each scope independently with the
 receipt-based script action; do not clean up roles automatically.
 
+Project registration needs write access to \`<project-root>/.codex\`. If a
+managed permission profile denies that directory, request access or run this
+visible script in a terminal authorized to write it, then rerun \`check\`.
+
 ## Use a registered role
 
 Before claiming that a role is registered or dispatching it, run the selected

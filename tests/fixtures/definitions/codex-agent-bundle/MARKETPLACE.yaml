@@ -10,6 +10,8 @@ publications:
   - id: codex
     target: codex
     destination: .agents/plugins/marketplace.json
+    native:
+      name: codex-agent-bundle
     enrollment:
       mode: include
       packages: [demo-roles]

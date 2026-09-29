@@ -69,6 +69,21 @@ describe('compiled Codex package agent bundle', () => {
         output.kind === 'generated' ? output.content : '',
       ]),
     );
+    const marketplace = one.outputs.find(
+      ({ destination }) => destination === '.agents/plugins/marketplace.json',
+    );
+    const pluginManifest = one.outputs.find(
+      ({ destination }) => destination === 'packages/demo/.codex-plugin/plugin.json',
+    );
+    expect(marketplace?.kind).toBe('generated');
+    expect(pluginManifest?.kind).toBe('generated');
+    if (marketplace?.kind !== 'generated' || pluginManifest?.kind !== 'generated') {
+      throw new Error('missing generated Codex native identifiers');
+    }
+    expect(JSON.parse(marketplace.content)).toMatchObject({ name: 'codex-agent-bundle' });
+    expect(JSON.parse(pluginManifest.content)).toMatchObject({ name: 'demo-roles' });
+    expect(JSON.parse(marketplace.content).name).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+    expect(JSON.parse(pluginManifest.content).name).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
     const index = one.outputs.find(({ destination }) =>
       destination.endsWith(CODEX_AGENT_BUNDLE_INDEX),
     );
