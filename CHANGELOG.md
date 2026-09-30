@@ -1,3 +1,22 @@
+# [1.2.0](https://github.com/jdh313/agentforge/compare/v1.1.0...v1.2.0) (2026-09-30)
+
+
+### Bug Fixes
+
+* **check:** expect normalized copied file modes ([31cd8df](https://github.com/jdh313/agentforge/commit/31cd8df4c2126b83fc09a68691595bfdaad403d0))
+* **codex:** complete installed bundle acceptance ([a79a200](https://github.com/jdh313/agentforge/commit/a79a20057e008548ce9a6ae0c1a48f0c5818611e))
+* **codex:** harden agent bundle lifecycle ownership ([1026593](https://github.com/jdh313/agentforge/commit/10265934edf3c94b334f710fd8e52e4f2a795175))
+* **materializer:** normalize copied output modes ([cef06a8](https://github.com/jdh313/agentforge/commit/cef06a8e49d25cfac440315dba0aa797f1cc246c))
+
+
+### Features
+
+* **codex:** add deterministic package agent bundles ([7c39be2](https://github.com/jdh313/agentforge/commit/7c39be201f0db927c8bfeba7417bb6ea44523122))
+* **codex:** add durable agent bundle updates and removal ([e5c47c9](https://github.com/jdh313/agentforge/commit/e5c47c959b887f8d73ee0c6440cde8817557f370))
+* **codex:** add explicit agent bundle setup skill ([57aa408](https://github.com/jdh313/agentforge/commit/57aa40888d11adfa9df8943a047d3fe1e0522cc6))
+* **codex:** add owned agent bundle installation checks ([12df478](https://github.com/jdh313/agentforge/commit/12df4783decbada7e025fd726e89f4476d4d2786))
+* **codex:** install compiled agent bundles ([af325e0](https://github.com/jdh313/agentforge/commit/af325e0bdf272e2afda72d77f8f82a4755a3e8e0))
+
 # [1.1.0](https://github.com/jdh313/agentforge/compare/v1.0.0...v1.1.0) (2026-09-23)
 
 
