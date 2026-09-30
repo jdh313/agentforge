@@ -23,6 +23,11 @@ export interface MaterializationResult {
   rootFilesWritten: string[];
 }
 
+export interface ManagedOutputMaterializationOptions {
+  /** Generated paths that may hold secrets and therefore must remain owner-readable only. */
+  privateDestinations?: readonly string[];
+}
+
 export class MaterializationError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
@@ -80,8 +85,9 @@ export function materializeCompilation(
 export function materializeCompilationOutputs(
   plan: CompilationPlan,
   outputRoot: string,
+  options: ManagedOutputMaterializationOptions = {},
 ): MaterializationResult {
-  return materializeCompilationOutputChanges(plan, outputRoot, []);
+  return materializeCompilationOutputChanges(plan, outputRoot, [], options);
 }
 
 /**
@@ -93,6 +99,7 @@ export function materializeCompilationOutputChanges(
   plan: CompilationPlan,
   outputRoot: string,
   removals: readonly string[],
+  options: ManagedOutputMaterializationOptions = {},
 ): MaterializationResult {
   const destinationRoot = resolve(outputRoot);
   if (destinationRoot === parse(destinationRoot).root) {
@@ -113,7 +120,7 @@ export function materializeCompilationOutputChanges(
   const backupRoot = mkdtempSync(resolve(parent, `.${name}.backup-`));
 
   try {
-    for (const output of plan.outputs) materializeOutput(output, stagingRoot);
+    for (const output of plan.outputs) materializeOutput(output, stagingRoot, options);
     mkdirSync(destinationRoot, { recursive: true });
     publishManagedOutputChanges(plan.outputs, removals, stagingRoot, destinationRoot, backupRoot);
   } catch (cause) {
@@ -139,6 +146,7 @@ export function createManagedOutputLock(
   outputRoot: string,
   destination: string,
   content: string,
+  options: { mode?: number } = {},
 ): void {
   const destinationRoot = resolve(outputRoot);
   if (destinationRoot === parse(destinationRoot).root)
@@ -149,7 +157,7 @@ export function createManagedOutputLock(
   mkdirSync(dirname(path), { recursive: true });
   let descriptor: number | undefined;
   try {
-    descriptor = openSync(path, 'wx', 0o644);
+    descriptor = openSync(path, 'wx', options.mode ?? 0o644);
     writeFileSync(descriptor, content, 'utf8');
   } catch (cause) {
     const detail = cause instanceof Error ? `: ${cause.message}` : '';
@@ -187,14 +195,21 @@ function materializeRootOutput(output: RootAnchoredOutput): string {
   return destination;
 }
 
-function materializeOutput(output: DesiredOutput, stagingRoot: string): void {
+function materializeOutput(
+  output: DesiredOutput,
+  stagingRoot: string,
+  options: ManagedOutputMaterializationOptions = {},
+): void {
   const destination = resolve(stagingRoot, output.destination);
   requireContainedDestination(stagingRoot, destination, output.destination);
   mkdirSync(dirname(destination), { recursive: true });
 
   if (output.kind === 'generated') {
     writeFileSync(destination, output.content, 'utf8');
-    chmodSync(destination, 0o644);
+    chmodSync(
+      destination,
+      options.privateDestinations?.includes(output.destination) ? 0o600 : 0o644,
+    );
     return;
   }
   if (output.kind === 'binary') {

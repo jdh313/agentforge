@@ -564,8 +564,12 @@ agentforge list-targets
 - `preview-codex-agent`, `install-codex-agent`, and `check-codex-agent` take an
   explicit compiled Codex agent bundle. User scope resolves under `CODEX_HOME`
   (or `~/.codex`); project scope resolves under the project root. Each scope
-  keeps its own package receipt. The check reads installation state without
-  writing and reports `current`, `missing`, `edited`, `conflicted`, or
+  keeps its own package receipt. New bundles place definitions under
+  `agents/<package-id>/<agent-id>.toml`, so packages with the same agent id can
+  coexist. Existing receipts for `agents/<agent-id>.toml` remain readable and
+  can update to the package-qualified path with a newly compiled bundle. The
+  managed `config.toml` is written with mode `0600`. The check reads installation
+  state without writing and reports `current`, `missing`, `edited`, `conflicted`, or
   `unsupported`, with paths for issues. Only `current` exits zero. A wholly
   missing installation can be installed; partial missing state needs review
   before installation. Repeating an unchanged install is a no-op.

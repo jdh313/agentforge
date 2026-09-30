@@ -52,7 +52,7 @@ describe('Codex agent lifecycle CLI', () => {
       expect(missing.exitCode).toBe(1);
       expect(missing.stdout).toContain('missing:');
       expect(runCli(env, 'install-codex-agent', bundle, ...options).exitCode).toBe(0);
-      expect(existsSync(join(destination, 'agents/alpha.toml'))).toBe(true);
+      expect(existsSync(join(destination, 'agents/demo-roles/alpha.toml'))).toBe(true);
       expect(runCli(env, 'check-codex-agent', bundle, ...options).exitCode).toBe(0);
       expect(runCli(env, 'preview-codex-agent-update', bundle, ...options).exitCode).toBe(0);
       expect(runCli(env, 'update-codex-agent', bundle, ...options).exitCode).toBe(0);
@@ -63,12 +63,12 @@ describe('Codex agent lifecycle CLI', () => {
       const lock = 'agents/.agentforge/.agentforge-lifecycle.lock';
       createManagedOutputLock(destination, lock, 'another scope mutation\n');
       expect(runCli(env, 'remove-codex-agent', 'demo-roles', ...options).exitCode).toBe(1);
-      expect(existsSync(join(destination, 'agents/alpha.toml'))).toBe(true);
+      expect(existsSync(join(destination, 'agents/demo-roles/alpha.toml'))).toBe(true);
       rmSync(join(destination, lock));
 
       rmSync(out, { recursive: true, force: true });
       expect(runCli(env, 'remove-codex-agent', 'demo-roles', ...options).exitCode).toBe(0);
-      expect(existsSync(join(destination, 'agents/alpha.toml'))).toBe(false);
+      expect(existsSync(join(destination, 'agents/demo-roles/alpha.toml'))).toBe(false);
       expect(existsSync(join(destination, 'agents/.agentforge/demo-roles.json'))).toBe(false);
       expect(runCli(env, 'remove-codex-agent', 'demo-roles', ...options).exitCode).toBe(0);
     });

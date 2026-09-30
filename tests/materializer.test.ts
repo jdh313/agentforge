@@ -14,7 +14,11 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CompilationPlan, DesiredCopiedOutput, DesiredOutput } from '../src/compiler.ts';
-import { materializeCompilation, materializeCompilationOutputs } from '../src/materializer.ts';
+import {
+  createManagedOutputLock,
+  materializeCompilation,
+  materializeCompilationOutputs,
+} from '../src/materializer.ts';
 
 let temporaryRoot: string;
 
@@ -29,6 +33,19 @@ afterAll(() => {
 });
 
 describe('marketplace materialization', () => {
+  test('can create a private managed lock for sensitive recovery state', () => {
+    const outDir = join(temporaryRoot, 'private-lock');
+    createManagedOutputLock(
+      outDir,
+      'agents/.agentforge/lifecycle.lock',
+      'secret recovery state\n',
+      {
+        mode: 0o600,
+      },
+    );
+    expect(statSync(join(outDir, 'agents/.agentforge/lifecycle.lock')).mode & 0o777).toBe(0o600);
+  });
+
   test('writes generated documents and copied artifacts', () => {
     const source = join(temporaryRoot, 'source.txt');
     const outDir = join(temporaryRoot, 'clean-build');

@@ -30,13 +30,15 @@ export const CODEX_AGENT_BUNDLE_DIRECTORY = '.agentforge/codex-agent-bundle';
 const BUNDLE_SCHEMA = 'agentforge.codex-agent-bundle/v2';
 const LEGACY_BUNDLE_SCHEMA = 'agentforge.codex-agent-bundle/v1';
 const RECEIPT_SCHEMA = 'agentforge.codex-agent-receipt/v3';
-const LIFECYCLE_JOURNAL_SCHEMA = 'agentforge.codex-agent-lifecycle-journal/v1';
+const LIFECYCLE_JOURNAL_SCHEMA = 'agentforge.codex-agent-lifecycle-journal/v4';
 const LIFECYCLE_SCOPE_LOCK = 'agents/.agentforge/.agentforge-lifecycle.lock';
 
 const BundleAgent = z.strictObject({
   id: CanonicalAgentName,
   name: z.string().min(1),
-  definition: z.string().regex(/^agents\/[a-z0-9]+(?:-[a-z0-9]+)*\.toml$/),
+  definition: z
+    .string()
+    .regex(/^agents\/(?:[a-z0-9]+(?:-[a-z0-9]+)*\/)?[a-z0-9]+(?:-[a-z0-9]+)*\.toml$/),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
   execution: z.strictObject({
     model: z.discriminatedUnion('source', [
@@ -71,7 +73,9 @@ const LegacyBundleIndex = z.strictObject({
 const ReceiptAgent = z.strictObject({
   id: CanonicalAgentName,
   name: z.string().min(1),
-  destination: z.string().regex(/^agents\/[a-z0-9]+(?:-[a-z0-9]+)*\.toml$/),
+  destination: z
+    .string()
+    .regex(/^agents\/(?:[a-z0-9]+(?:-[a-z0-9]+)*\/)?[a-z0-9]+(?:-[a-z0-9]+)*\.toml$/),
   installedSha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
 const Receipt = z.strictObject({
@@ -85,9 +89,15 @@ const LifecycleJournal = z.strictObject({
   owner: z.strictObject({ packageId: CanonicalAgentName }),
   scope: z.enum(['user', 'project']),
   before: z.array(
-    z.strictObject({ destination: z.string().min(1), sha256: z.string().regex(/^[a-f0-9]{64}$/) }),
+    z.strictObject({
+      destination: z.string().min(1),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      content: z.string(),
+    }),
   ),
   receipt: z.string().min(1),
+  unresolved: z.array(ReceiptAgent),
+  absent: z.array(z.string().min(1)),
   after: z.array(z.strictObject({ destination: z.string().min(1), content: z.string() })),
   removals: z.array(z.string().min(1)),
 });
@@ -231,7 +241,7 @@ export function compileCodexAgentBundleOutputs(
       return {
         id,
         name,
-        definition: `agents/${id}.toml`,
+        definition: packageDefinitionPath(packageId, id),
         content,
         sha256: sha256(content),
         warnings: projection.warnings,
@@ -467,7 +477,9 @@ export function materializeCodexAgentBundleInstallPlan(install: CodexAgentBundle
         `refusing bundle collision: ${issue?.message ?? 'installed bundle state is unsupported'}`,
       );
     }
-    materializeCompilationOutputs(install.plan, install.destinationRoot);
+    materializeCompilationOutputs(install.plan, install.destinationRoot, {
+      privateDestinations: ['config.toml'],
+    });
   } finally {
     materializeCompilationOutputChanges(
       {
@@ -484,6 +496,11 @@ export function materializeCodexAgentBundleInstallPlan(install: CodexAgentBundle
 }
 
 export function validateCodexAgentBundleInstallPlan(install: CodexAgentBundleInstallPlan): void {
+  if (lstatSync(join(install.destinationRoot, LIFECYCLE_SCOPE_LOCK), { throwIfNoEntry: false })) {
+    throw new Error(
+      'refusing bundle installation: this Codex scope has an incomplete lifecycle operation',
+    );
+  }
   const check = checkCodexAgentBundleInstallPlan(install);
   if (
     check.status === 'current' ||
@@ -679,6 +696,7 @@ export interface CodexAgentBundleLifecyclePreview {
 interface LifecyclePrecondition {
   destination: string;
   sha256: string;
+  content: string;
 }
 export interface CodexAgentBundleLifecyclePlan extends CodexAgentBundleLifecyclePreview {
   destinationRoot: string;
@@ -687,6 +705,8 @@ export interface CodexAgentBundleLifecyclePlan extends CodexAgentBundleLifecycle
   plan: CompilationPlan;
   removals: readonly string[];
   preconditions: readonly LifecyclePrecondition[];
+  unresolved: readonly z.infer<typeof ReceiptAgent>[];
+  absences: readonly string[];
   receiptContent?: string;
 }
 
@@ -705,8 +725,13 @@ export function buildCodexAgentBundleUpdatePlan(
     )
     .map((output) => {
       const definition = output.destination;
-      const id = CanonicalAgentName.parse(definition.slice('agents/'.length, -'.toml'.length));
       const parsed = parseCodexDefinition(output.content);
+      const prefix = `${receipt.owner.packageId}:`;
+      if (!parsed.name.startsWith(prefix))
+        throw new Error('bundle definition does not match indexed Codex agent name');
+      const id = CanonicalAgentName.parse(parsed.name.slice(prefix.length));
+      if (!isPackageDefinitionPath(receipt.owner.packageId, id, definition))
+        throw new Error('bundle definition does not use a supported package definition path');
       if (parsed.name !== `${receipt.owner.packageId}:${id}`)
         throw new Error('bundle definition does not match indexed Codex agent name');
       return {
@@ -763,12 +788,18 @@ export function materializeCodexAgentBundleLifecyclePlan(
   lifecycle: CodexAgentBundleLifecyclePlan,
 ): void {
   if (lifecycle.status !== 'ready') throw lifecycleRefusal(lifecycle);
-  if (lifecycle.actions.length === 0 && lifecycle.preconditions.length === 0) return;
+  if (
+    lifecycle.actions.length === 0 &&
+    lifecycle.preconditions.length === 0 &&
+    lifecycle.absences.length === 0
+  )
+    return;
   verifyLifecyclePreconditions(lifecycle);
   createManagedOutputLock(
     lifecycle.destinationRoot,
     lifecycle.journalPath,
     journalContent(lifecycle),
+    { mode: 0o600 },
   );
   // A failed final-state mutation leaves the journal in place. It prevents a
   // later operation from guessing whether the earlier operation reached its end.
@@ -784,7 +815,11 @@ export function repairCodexAgentBundleLifecyclePlan(
   lifecycle: CodexAgentBundleLifecyclePlan,
 ): void {
   if (lifecycle.status !== 'interrupted') throw lifecycleRefusal(lifecycle);
-  if (lifecycle.plan.outputs.length === 0 && lifecycle.preconditions.length === 0)
+  if (
+    lifecycle.plan.outputs.length === 0 &&
+    lifecycle.preconditions.length === 0 &&
+    lifecycle.absences.length === 0
+  )
     throw lifecycleRefusal(lifecycle);
   if (lifecyclePreconditionsHold(lifecycle)) {
     materializeLifecycleFinalState(lifecycle);
@@ -806,7 +841,9 @@ function materializeLifecycleFinalState(lifecycle: CodexAgentBundleLifecyclePlan
     ...lifecycle.plan,
     outputs: lifecycle.plan.outputs.filter((output) => !receipt.includes(output)),
   };
-  materializeCompilationOutputChanges(prior, lifecycle.destinationRoot, lifecycle.removals);
+  materializeCompilationOutputChanges(prior, lifecycle.destinationRoot, lifecycle.removals, {
+    privateDestinations: ['config.toml'],
+  });
   if (receipt.length > 0) {
     materializeCompilationOutputChanges(
       { ...lifecycle.plan, outputs: receipt },
@@ -844,6 +881,8 @@ function buildLifecyclePlan(input: {
     plan: emptyLifecyclePlan(input),
     removals: [] as readonly string[],
     preconditions: [] as readonly LifecyclePrecondition[],
+    unresolved: [] as readonly z.infer<typeof ReceiptAgent>[],
+    absences: [] as readonly string[],
   };
   const journal = lstatSync(join(input.destinationRoot, journalPath), { throwIfNoEntry: false });
   if (journal) {
@@ -900,7 +939,12 @@ function buildLifecyclePlan(input: {
     const configContent = readRegularText(configPath, 'Codex role configuration');
     const registration = inspectOwnedRegistrations(configPath, configContent, inspected.owned);
     const oldDefinitions = registration.owned;
-    const unresolved = [...inspected.unresolved, ...registration.unresolved];
+    const unresolvedDestinations = new Set(
+      [...inspected.unresolved, ...registration.unresolved].map(({ destination }) => destination),
+    );
+    const unresolved = receipt.agents.filter(({ destination }) =>
+      unresolvedDestinations.has(destination),
+    );
     if (input.operation === 'update' && unresolved.length > 0) {
       throw new Error(
         'managed bundle has unresolved or user-edited roles; update preserves them without mutation',
@@ -982,10 +1026,19 @@ function buildLifecyclePlan(input: {
       ...oldDefinitions.map(({ definition, content }) => ({
         destination: definition,
         sha256: sha256(content),
+        content,
       })),
-      { destination: input.receiptPath, sha256: sha256(receiptContent) },
-      { destination: 'config.toml', sha256: sha256(configContent) },
+      {
+        destination: input.receiptPath,
+        sha256: sha256(receiptContent),
+        content: receiptContent,
+      },
+      { destination: 'config.toml', sha256: sha256(configContent), content: configContent },
     ];
+    const preconditionDestinations = new Set(preconditions.map(({ destination }) => destination));
+    const absences = outputs
+      .map(({ destination }) => destination)
+      .filter((destination) => !preconditionDestinations.has(destination));
     return {
       ...base,
       status: 'ready',
@@ -1001,6 +1054,8 @@ function buildLifecyclePlan(input: {
       plan,
       removals,
       preconditions,
+      unresolved,
+      absences,
       receiptContent,
     };
   } catch (cause) {
@@ -1056,7 +1111,7 @@ function inspectOwnedDefinitions(
   for (const agent of receipt.agents) {
     if (
       agent.name !== `${receipt.owner.packageId}:${agent.id}` ||
-      agent.destination !== `agents/${agent.id}.toml` ||
+      !isPackageDefinitionPath(receipt.owner.packageId, agent.id, agent.destination) ||
       seen.has(agent.id)
     ) {
       throw new Error('ownership receipt has inconsistent agent identity');
@@ -1089,7 +1144,7 @@ function assertReceiptIdentities(receipt: z.infer<typeof Receipt>): void {
   for (const agent of receipt.agents) {
     if (
       agent.name !== `${receipt.owner.packageId}:${agent.id}` ||
-      agent.destination !== `agents/${agent.id}.toml` ||
+      !isPackageDefinitionPath(receipt.owner.packageId, agent.id, agent.destination) ||
       ids.has(agent.id) ||
       destinations.has(agent.destination)
     ) {
@@ -1115,7 +1170,8 @@ function inspectOwnedRegistrations(
       !current ||
       typeof current !== 'object' ||
       (current as { config_file?: unknown }).config_file !== definition.definition ||
-      (current as { description?: unknown }).description !== definition.description
+      (current as { description?: unknown }).description !== definition.description ||
+      Object.keys(current).some((key) => key !== 'config_file' && key !== 'description')
     ) {
       unresolved.push(receiptAgentFromDefinition(definition));
     } else owned.push(definition);
@@ -1144,10 +1200,10 @@ function rewriteOwnedRegistrations(
 ): string {
   let next = content;
   for (const definition of oldDefinitions) {
-    const registration = registrationText(configPath, definition);
-    if (!next.includes(registration))
+    const rewritten = removeRoleRegistration(next, definition.name);
+    if (rewritten === undefined)
       throw new Error(`managed role registration has unresolved formatting for ${definition.name}`);
-    next = next.replace(registration, '');
+    next = rewritten;
   }
   const registration = buildRoleRegistrationContent(configPath, next, newDefinitions);
   if (registration.conflicts.size > 0 || registration.edited.size > 0) {
@@ -1155,6 +1211,30 @@ function rewriteOwnedRegistrations(
     throw new Error(`unowned role registration already exists for ${name}`);
   }
   return registration.content;
+}
+
+/** Remove one semantic role table while preserving every unrelated config byte. */
+function removeRoleRegistration(content: string, name: string): string | undefined {
+  const lines = content.split(/(?<=\n)/);
+  let start = -1;
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index]?.match(
+      /^\s*\[\s*agents\s*\.\s*("(?:\\.|[^"\\])*"|'[^']*')\s*\]\s*(?:#.*)?(?:\r?\n)?$/,
+    );
+    if (!match) continue;
+    try {
+      if ((Bun.TOML.parse(`value = ${match[1]}`) as { value?: unknown }).value === name) {
+        start = index;
+        break;
+      }
+    } catch {
+      // The full configuration parser reports malformed TOML before this helper is reached.
+    }
+  }
+  if (start < 0) return undefined;
+  let end = start + 1;
+  while (end < lines.length && !/^\s*\[/.test(lines[end] ?? '')) end += 1;
+  return [...lines.slice(0, start), ...lines.slice(end)].join('');
 }
 
 function lifecycleActions(
@@ -1212,38 +1292,75 @@ function assertSafeLifecycleJournal(journal: z.infer<typeof LifecycleJournal>): 
     destination === receiptPath ||
     ownedDefinitions.has(destination);
   const invalidBefore = journal.before.find(({ destination }) => !isManagedPath(destination));
-  const invalidAfter = journal.after.find(({ destination, content }) => {
-    if (destination === 'config.toml' || destination === receiptPath) return false;
-    if (!/^agents\/[a-z0-9]+(?:-[a-z0-9]+)*\.toml$/.test(destination)) return true;
-    try {
-      validateCodexDefinition(content, `${journal.owner.packageId}:${destination.slice(7, -5)}`);
-      return false;
-    } catch {
-      return true;
-    }
-  });
-  const invalidRemoval = journal.removals.find((destination) => !isManagedPath(destination));
-  if (invalidBefore || invalidAfter || invalidRemoval) {
+  if (invalidBefore) {
     throw new Error(
-      `lifecycle journal names a path outside its managed Codex scope: ${invalidBefore?.destination ?? invalidAfter?.destination ?? invalidRemoval}`,
+      `lifecycle journal names a path outside its managed Codex scope: ${invalidBefore.destination}`,
     );
   }
-  const before = new Map(journal.before.map((entry) => [entry.destination, entry.sha256]));
+  const before = new Map(journal.before.map((entry) => [entry.destination, entry]));
   if (
     before.size !== journal.before.length ||
     !before.has('config.toml') ||
-    before.get(receiptPath) !== sha256(journal.receipt)
+    before.get(receiptPath)?.content !== journal.receipt ||
+    before.get(receiptPath)?.sha256 !== sha256(journal.receipt) ||
+    [...before.values()].some(({ content, sha256: digest }) => sha256(content) !== digest)
   )
     throw new Error('lifecycle journal does not bind its configuration and receipt before-state');
+  const receiptByDestination = new Map(receipt.agents.map((agent) => [agent.destination, agent]));
+  const invalidUnresolved = journal.unresolved.find((agent) => {
+    const prior = receiptByDestination.get(agent.destination);
+    return prior === undefined || JSON.stringify(prior) !== JSON.stringify(agent);
+  });
+  if (
+    invalidUnresolved ||
+    new Set(journal.unresolved.map(({ destination }) => destination)).size !==
+      journal.unresolved.length
+  )
+    throw new Error('lifecycle journal has invalid unresolved ownership');
+  const unresolvedDestinations = new Set(journal.unresolved.map(({ destination }) => destination));
+  const cleanAgents = receipt.agents.filter(
+    ({ destination }) => !unresolvedDestinations.has(destination),
+  );
+  assertExactJournalPaths(
+    journal.before.map(({ destination }) => destination),
+    ['config.toml', receiptPath, ...cleanAgents.map(({ destination }) => destination)],
+    'before state',
+  );
   const named = [...journal.after.map(({ destination }) => destination), ...journal.removals];
   if (new Set(named).size !== named.length)
     throw new Error('lifecycle journal has overlapping final writes and removals');
-  if (!journal.after.some(({ destination }) => destination === 'config.toml'))
-    throw new Error('lifecycle journal has no managed configuration state');
+  const afterConfig = journal.after.find(({ destination }) => destination === 'config.toml');
+  if (!afterConfig) throw new Error('lifecycle journal has no managed configuration state');
   const afterReceipt = journal.after.find(({ destination }) => destination === receiptPath);
   const afterDefinitions = journal.after.filter(
     ({ destination }) => destination.startsWith('agents/') && destination.endsWith('.toml'),
   );
+  const priorDefinitions = receipt.agents.flatMap((agent) => {
+    const prior = before.get(agent.destination);
+    if (!prior) return [];
+    if (prior.sha256 !== agent.installedSha256)
+      throw new Error('lifecycle journal definition does not match its ownership receipt');
+    const definition = validateCodexDefinition(prior.content, agent.name);
+    return [
+      {
+        id: agent.id,
+        name: agent.name,
+        definition: agent.destination,
+        content: prior.content,
+        sha256: prior.sha256,
+        description: definition.description,
+      },
+    ];
+  });
+  const invalidRemoval = journal.removals.find(
+    (destination) =>
+      destination !== receiptPath &&
+      !priorDefinitions.some((definition) => definition.definition === destination),
+  );
+  if (invalidRemoval)
+    throw new Error(
+      `lifecycle journal removes a definition without exact prior ownership: ${invalidRemoval}`,
+    );
   if (journal.operation === 'remove') {
     if (afterDefinitions.length > 0)
       throw new Error('remove lifecycle journal must not introduce role definitions');
@@ -1251,15 +1368,31 @@ function assertSafeLifecycleJournal(journal: z.infer<typeof LifecycleJournal>): 
       const retained = Receipt.parse(JSON.parse(afterReceipt.content));
       assertReceiptIdentities(retained);
       if (
-        retained.owner.packageId !== receipt.owner.packageId ||
-        retained.agents.some((agent) => {
-          const prior = receipt.agents.find(({ id }) => id === agent.id);
-          return !prior || JSON.stringify(prior) !== JSON.stringify(agent);
-        })
+        JSON.stringify(retained.owner) !== JSON.stringify(receipt.owner) ||
+        JSON.stringify(retained.agents) !== JSON.stringify(journal.unresolved)
       ) {
-        throw new Error('remove lifecycle journal receipt does not retain only prior ownership');
+        throw new Error(
+          'remove lifecycle journal receipt does not retain exactly unresolved ownership',
+        );
       }
+    } else if (journal.unresolved.length > 0) {
+      throw new Error('remove lifecycle journal does not retain unresolved ownership');
     }
+    assertExactJournalPaths(
+      journal.after.map(({ destination }) => destination),
+      ['config.toml', ...(afterReceipt ? [receiptPath] : [])],
+      'final writes',
+    );
+    assertExactJournalPaths(
+      journal.removals,
+      [
+        ...cleanAgents.map(({ destination }) => destination),
+        ...(journal.unresolved.length === 0 ? [receiptPath] : []),
+      ],
+      'removals',
+    );
+    assertExactJournalPaths(journal.absent, [], 'absence preconditions');
+    assertJournalConfigRewrite(journal, priorDefinitions, [], afterConfig.content);
     return;
   }
   if (!afterReceipt) throw new Error('update lifecycle journal has no final ownership receipt');
@@ -1267,11 +1400,44 @@ function assertSafeLifecycleJournal(journal: z.infer<typeof LifecycleJournal>): 
   assertReceiptIdentities(next);
   if (next.owner.packageId !== receipt.owner.packageId)
     throw new Error('update lifecycle journal receipt belongs to another package');
+  if (journal.unresolved.length > 0)
+    throw new Error('update lifecycle journal cannot preserve unresolved ownership');
+  const priorIds = new Set(receipt.agents.map(({ id }) => id));
+  const legacyAddition = next.agents.find(
+    (agent) =>
+      !priorIds.has(agent.id) &&
+      agent.destination !== packageDefinitionPath(receipt.owner.packageId, agent.id),
+  );
+  if (legacyAddition)
+    throw new Error(
+      `update lifecycle journal introduces a role outside its package namespace: ${legacyAddition.destination}`,
+    );
   const byDestination = new Map(
     afterDefinitions.map((output) => [output.destination, output.content]),
   );
   if (byDestination.size !== afterDefinitions.length || byDestination.size !== next.agents.length)
     throw new Error('update lifecycle journal definition set does not match its receipt');
+  assertExactJournalPaths(
+    journal.after.map(({ destination }) => destination),
+    ['config.toml', receiptPath, ...next.agents.map(({ destination }) => destination)],
+    'final writes',
+  );
+  const priorDestinations = new Set(receipt.agents.map(({ destination }) => destination));
+  assertExactJournalPaths(
+    journal.absent,
+    next.agents
+      .map(({ destination }) => destination)
+      .filter((destination) => !priorDestinations.has(destination)),
+    'absence preconditions',
+  );
+  const nextDestinations = new Set(next.agents.map(({ destination }) => destination));
+  assertExactJournalPaths(
+    journal.removals,
+    priorDefinitions
+      .map(({ definition }) => definition)
+      .filter((destination) => !nextDestinations.has(destination)),
+    'removals',
+  );
   for (const agent of next.agents) {
     const content = byDestination.get(agent.destination);
     if (
@@ -1289,6 +1455,58 @@ function assertSafeLifecycleJournal(journal: z.infer<typeof LifecycleJournal>): 
       throw new Error('update lifecycle journal definition does not match its receipt');
     }
   }
+  const nextDefinitions = next.agents.map((agent) => {
+    const content = byDestination.get(agent.destination);
+    if (content === undefined)
+      throw new Error('update lifecycle journal definition set does not match its receipt');
+    const definition = validateCodexDefinition(content, agent.name);
+    return {
+      id: agent.id,
+      name: agent.name,
+      definition: agent.destination,
+      content,
+      sha256: agent.installedSha256,
+      description: definition.description,
+    };
+  });
+  assertJournalConfigRewrite(journal, priorDefinitions, nextDefinitions, afterConfig.content);
+}
+
+function assertExactJournalPaths(
+  actual: readonly string[],
+  expected: readonly string[],
+  label: string,
+): void {
+  if (
+    new Set(actual).size !== actual.length ||
+    actual.length !== expected.length ||
+    actual.some((destination) => !expected.includes(destination))
+  )
+    throw new Error(`lifecycle journal has invalid ${label}`);
+}
+
+function assertJournalConfigRewrite(
+  journal: z.infer<typeof LifecycleJournal>,
+  oldDefinitions: readonly OwnedDefinition[],
+  newDefinitions: readonly OwnedDefinition[],
+  afterConfig: string,
+): void {
+  const beforeConfig = journal.before.find(({ destination }) => destination === 'config.toml');
+  if (!beforeConfig)
+    throw new Error('lifecycle journal does not bind its configuration before-state');
+  if (
+    inspectOwnedRegistrations('config.toml', beforeConfig.content, oldDefinitions).unresolved
+      .length > 0
+  )
+    throw new Error('lifecycle journal would remove an edited role registration');
+  const expected = rewriteOwnedRegistrations(
+    'config.toml',
+    beforeConfig.content,
+    oldDefinitions,
+    newDefinitions,
+  );
+  if (afterConfig !== expected)
+    throw new Error('lifecycle journal final configuration does not match its owned role changes');
 }
 
 function lifecycleFromJournal(
@@ -1325,6 +1543,8 @@ function lifecycleFromJournal(
     plan,
     removals: journal.removals,
     preconditions: journal.before,
+    unresolved: journal.unresolved,
+    absences: journal.absent,
     receiptContent: journal.receipt,
     actions: lifecycleActions(destinationRoot, outputs, journal.removals),
     issues: [
@@ -1356,6 +1576,8 @@ function journalContent(lifecycle: CodexAgentBundleLifecyclePlan): string {
     scope: lifecycle.scope,
     before: lifecycle.preconditions,
     receipt: lifecycle.receiptContent ?? '',
+    unresolved: lifecycle.unresolved,
+    absent: lifecycle.absences,
     after: outputs.map(({ destination, content }) => ({ destination, content })),
     removals: lifecycle.removals,
   })}\n`;
@@ -1374,11 +1596,17 @@ function emptyLifecyclePlan(
 }
 
 function lifecyclePreconditionsHold(lifecycle: CodexAgentBundleLifecyclePlan): boolean {
-  return lifecycle.preconditions.every(({ destination, sha256: digest }) => {
-    const path = join(lifecycle.destinationRoot, destination);
-    const entry = lstatSync(path, { throwIfNoEntry: false });
-    return Boolean(entry?.isFile() && sha256(readFileSync(path, 'utf8')) === digest);
-  });
+  return (
+    lifecycle.preconditions.every(({ destination, sha256: digest }) => {
+      const path = join(lifecycle.destinationRoot, destination);
+      const entry = lstatSync(path, { throwIfNoEntry: false });
+      return Boolean(entry?.isFile() && sha256(readFileSync(path, 'utf8')) === digest);
+    }) &&
+    lifecycle.absences.every(
+      (destination) =>
+        !lstatSync(join(lifecycle.destinationRoot, destination), { throwIfNoEntry: false }),
+    )
+  );
 }
 
 function verifyLifecyclePreconditions(lifecycle: CodexAgentBundleLifecyclePlan): void {
@@ -1395,6 +1623,7 @@ function lifecycleFinalStateHolds(lifecycle: CodexAgentBundleLifecyclePlan): boo
       return (
         entry?.isFile() &&
         output.kind === 'generated' &&
+        (output.destination !== 'config.toml' || (entry.mode & 0o777) === 0o600) &&
         readFileSync(join(lifecycle.destinationRoot, output.destination), 'utf8') === output.content
       );
     }) &&
@@ -1424,6 +1653,7 @@ function lifecycleBeforeReceiptStateHolds(lifecycle: CodexAgentBundleLifecyclePl
         return (
           entry?.isFile() &&
           output.kind === 'generated' &&
+          (output.destination !== 'config.toml' || (entry.mode & 0o777) === 0o600) &&
           readFileSync(join(lifecycle.destinationRoot, output.destination), 'utf8') ===
             output.content
         );
@@ -1470,7 +1700,7 @@ function parseBundleIndex(path: string): ParsedBundleIndex {
       agents: [
         {
           ...agent,
-          definition: `agents/${agent.id}.toml`,
+          definition: legacyDefinitionPath(agent.id),
           sourceDefinition: agent.definition,
           execution: { model: { source: 'inherited' }, effort: { source: 'inherited' } },
           losses: [],
@@ -1496,7 +1726,7 @@ function parseBundleIndex(path: string): ParsedBundleIndex {
       throw new Error(
         'bundle index is invalid: agent name must match package and canonical agent identities',
       );
-    if (agent.definition !== `agents/${agent.id}.toml`)
+    if (!isPackageDefinitionPath(index.package.id, agent.id, agent.definition))
       throw new Error('bundle index is invalid: definition must match canonical agent identity');
   }
   return {
@@ -1504,6 +1734,21 @@ function parseBundleIndex(path: string): ParsedBundleIndex {
     package: index.package,
     agents: index.agents.map((agent) => ({ ...agent, sourceDefinition: agent.definition })),
   };
+}
+
+function legacyDefinitionPath(id: string): string {
+  return `agents/${id}.toml`;
+}
+
+function packageDefinitionPath(packageId: string, id: string): string {
+  return `agents/${packageId}/${id}.toml`;
+}
+
+/** v3 bundles namespace new roles; legacy v1/v2 indexes and v3 receipts retain their old path. */
+function isPackageDefinitionPath(packageId: string, id: string, definition: string): boolean {
+  return (
+    definition === legacyDefinitionPath(id) || definition === packageDefinitionPath(packageId, id)
+  );
 }
 
 function validateExecutionProvenance(
@@ -1626,7 +1871,10 @@ function buildRoleRegistrationContent(
       conflicts.add(agent.name);
     } else if ((current as { config_file?: unknown }).config_file !== agent.definition) {
       conflicts.add(agent.name);
-    } else if ((current as { description?: unknown }).description !== agent.description) {
+    } else if (
+      (current as { description?: unknown }).description !== agent.description ||
+      Object.keys(current).some((key) => key !== 'config_file' && key !== 'description')
+    ) {
       edited.add(agent.name);
     } else {
       present.add(agent.name);

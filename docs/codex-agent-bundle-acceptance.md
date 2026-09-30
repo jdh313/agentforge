@@ -54,8 +54,10 @@ remain unknown.
 
 The v2 index is `agentforge.codex-agent-bundle/v2`. It records the package id
 and resolved package version, then lexically ordered agents with their canonical
-id, emitted `<package>:<agent>` role name, safe `agents/<agent>.toml` path, and
-SHA-256. The installer rejects malformed or newer schemas, duplicate or
+id, emitted `<package>:<agent>` role name, definition path, and SHA-256. Current
+compilation uses `agents/<package>/<agent>.toml` so two packages can install the
+same canonical agent id. Earlier v2 indexes use `agents/<agent>.toml` and remain
+readable. The installer rejects malformed or newer schemas, duplicate or
 unsorted identities, unsafe definition paths, digest mismatches, invalid TOML,
 and any conflicting role or receipt before it writes. It validates the complete
 bundle before the planned-file materializer changes an installation root.
@@ -101,6 +103,8 @@ settings remain unknown.
 each emitted role name and destination, and the hash of its installed TOML.
 This ownership format is `agentforge.codex-agent-receipt/v3`; earlier v2
 receipts are reported as unsupported and are preserved for explicit migration.
+Existing v3 receipts with legacy `agents/<agent>.toml` destinations remain
+readable; an update moves clean owned definitions to package-qualified paths.
 Project and user installations therefore have independent ownership records,
 including when user scope uses a custom `CODEX_HOME`. The installer preserves
 unrelated agent definitions and refuses to replace an unowned definition or
@@ -140,6 +144,12 @@ retains that entry for review while removing any other unchanged roles.
 
 A scope-local lock serializes mutations of role definitions, registration, and
 receipts. A durable pending-operation record makes an interruption visible.
+V4 journals record complete before-state content, the absence of new role
+paths, and the exact unresolved role set. Repair verifies the configuration
+change, receipt ownership, writes, and removals before it proceeds. V1 through
+v3 pending journals cannot prove those conditions and require manual inspection;
+repair refuses them. The journal and managed `config.toml` are written with mode
+`0600`.
 While that record exists, normal update and removal refuse to mutate the scope.
 Inspect preview output and the named paths, then run
 `repair-codex-agent-update <bundle-dir> --scope user|project` or
@@ -250,4 +260,4 @@ foreign definitions, missing paired receipts, and pre-existing conflicting role
 registrations before materializing any destination path. It also refuses an
 inline `agents = { ... }` configuration without replacing it. Preview runs the
 same read-only ownership preflight, including the collision refusal. Managed
-managed lifecycle commands remain explicit local actions.
+lifecycle commands remain explicit local actions.
