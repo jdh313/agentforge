@@ -1974,7 +1974,7 @@ export class CodexScopeAnchorError extends Error {
 }
 
 /** Resolve each anchor once; the result is the only place a link is followed. */
-function resolveScopeAnchors(root: string): CodexScopeAnchors {
+export function resolveScopeAnchors(root: string): CodexScopeAnchors {
   const config = resolveAnchor(join(root, 'config.toml'), 'file', 'Codex role configuration');
   const agents = resolveAnchor(join(root, 'agents'), 'directory', 'Codex agents directory');
   return { ...(config ? { config } : {}), ...(agents ? { agents } : {}) };

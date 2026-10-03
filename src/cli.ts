@@ -19,6 +19,11 @@ import {
   repairCodexAgentBundleLifecyclePlan,
   validateCodexAgentBundleInstallPlan,
 } from './codex-agent-bundle.ts';
+import {
+  enumerateInstalledCodexPlugins,
+  syncInstalledCodexAgents,
+  userCodexHome,
+} from './codex-installed-plugins.ts';
 import { type CompilationPlan, compileMarketplace, type RootAnchoredOutput } from './compiler.ts';
 import { type LoadedMarketplace, loadMarketplaceDefinition } from './definitions.ts';
 import { buildInstallPlan, checkInstallPlan, materializeInstallPlan } from './install.ts';
@@ -610,6 +615,37 @@ program
       });
       repairCodexAgentBundleLifecyclePlan(plan);
       console.log(`repaired Codex agent update at ${plan.destinationRoot}`);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command('sync-codex-agents')
+  .description('Install or update Codex agent bundles shipped by installed, enabled Codex plugins')
+  .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
+  .option('--project-root <dir>', 'project root used for project-scope installation')
+  .option('--dry-run', 'print the planned action per plugin without writing')
+  .action((opts: CodexBundleInstallOptions & { dryRun?: boolean }) => {
+    try {
+      const { scope, projectRoot, codexHomeDirectory } = codexBundleScopeOptions(opts);
+      // Plugins are installed per user, so discovery reads the user's Codex home
+      // even when the agents are being installed at project scope.
+      const enumeration = enumerateInstalledCodexPlugins(userCodexHome());
+      const report = syncInstalledCodexAgents({
+        enumeration,
+        scope: {
+          scope,
+          projectRoot,
+          ...(codexHomeDirectory === undefined ? {} : { codexHomeDirectory }),
+        },
+        dryRun: opts.dryRun === true,
+      });
+      for (const line of report.anchorLines) console.log(line);
+      for (const line of report.lines) console.log(line.text);
+      console.log(report.summary);
+      if (!report.ok) process.exitCode = 1;
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;
