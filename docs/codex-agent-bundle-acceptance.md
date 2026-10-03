@@ -116,8 +116,20 @@ and the selected installation root without writing. It reports `current`,
 each issue. `current` exits 0; every other state exits 1. A wholly missing
 installation can be installed; partial missing state, edited content, ownership
 conflicts, malformed receipts, unsupported receipt schemas, unsafe paths,
-symlinks, or bundle hash mismatches
+symlinks other than the two scope anchors below, or bundle hash mismatches
 must be resolved before installation. Preview applies the same preflight.
+
+Two scope anchors may be symbolic links, as a dotfiles manager such as
+home-manager creates them: `<root>/config.toml` and `<root>/agents`. Every
+lifecycle command resolves each anchor once, requires the target to be a
+regular 0600 file or a real directory respectively, and writes through it by
+staging beside the resolved target, so the link itself is never replaced.
+Each anchor is revalidated immediately before publishing; a retargeted,
+dangling, wrong-type, unwritable, or cross-device target is refused before any
+write. A symbolic link anywhere else under the root is still refused. The
+receipt and the lifecycle lock live under `agents/`, so with a linked anchor
+they land inside the resolved target. Preview, check, and install name each
+followed anchor as `config: <link> -> <target>` and `agents: <link> -> <target>`.
 
 The caller supplies the compiled bundle explicitly. Inventory discovery remains
 separate work.
