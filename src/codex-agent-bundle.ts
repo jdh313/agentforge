@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync } from 'node:fs';
+import { accessSync, constants, lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
@@ -14,6 +14,7 @@ import type {
 } from './compiler.ts';
 import {
   createManagedOutputLock,
+  type ManagedOutputAnchor,
   materializeCompilation,
   materializeCompilationOutputChanges,
   materializeCompilationOutputs,
@@ -327,6 +328,7 @@ export interface CodexAgentBundleInstallPlan {
   registrationWasPresent: ReadonlySet<string>;
   registrationWasEdited: ReadonlySet<string>;
   registrationConflicts: ReadonlySet<string>;
+  anchors: CodexScopeAnchors;
   plan: CompilationPlan;
 }
 
@@ -386,8 +388,13 @@ export function buildCodexAgentBundleInstallPlan(
   });
   const destinationRoot = resolve(agentsRoot, '..');
   assertSafeDestinationRoot(destinationRoot);
+  const anchors = resolveScopeAnchors(destinationRoot);
   const registrationPath = 'config.toml';
-  const registration = buildRoleRegistrations(join(destinationRoot, registrationPath), definitions);
+  const registration = buildRoleRegistrations(
+    join(destinationRoot, registrationPath),
+    physicalPath(destinationRoot, anchors, registrationPath),
+    definitions,
+  );
   const receiptPath = `agents/.agentforge/${index.package.id}.json`;
   const receipt = {
     schema: RECEIPT_SCHEMA,
@@ -440,6 +447,7 @@ export function buildCodexAgentBundleInstallPlan(
     registrationWasPresent: registration.present,
     registrationWasEdited: registration.edited,
     registrationConflicts: registration.conflicts,
+    anchors,
     plan: {
       marketplaceId: index.package.id,
       outputs,
@@ -451,11 +459,16 @@ export function buildCodexAgentBundleInstallPlan(
 }
 
 export function materializeCodexAgentBundleInstallPlan(install: CodexAgentBundleInstallPlan): void {
-  if (lstatSync(join(install.destinationRoot, LIFECYCLE_SCOPE_LOCK), { throwIfNoEntry: false })) {
+  if (
+    lstatSync(physicalPath(install.destinationRoot, install.anchors, LIFECYCLE_SCOPE_LOCK), {
+      throwIfNoEntry: false,
+    })
+  ) {
     throw new Error(
       'refusing bundle installation: this Codex scope has an incomplete lifecycle operation',
     );
   }
+  assertAnchorsUnchanged(install.anchors);
   const check = checkCodexAgentBundleInstallPlan(install);
   if (check.status === 'current') return;
   if (check.status !== 'missing' || !isEmptyCodexAgentBundleInstall(install)) {
@@ -464,12 +477,14 @@ export function materializeCodexAgentBundleInstallPlan(install: CodexAgentBundle
       `refusing bundle collision: ${issue?.message ?? 'installed bundle state is unsupported'}`,
     );
   }
-  createManagedOutputLock(
+  createScopeLock(
     install.destinationRoot,
+    install.anchors,
     LIFECYCLE_SCOPE_LOCK,
     '{"schema":"agentforge.codex-agent-install-lock/v1"}\n',
   );
   try {
+    assertAnchorsUnchanged(install.anchors);
     const lockedCheck = checkCodexAgentBundleInstallPlan(install);
     if (lockedCheck.status !== 'missing' || !isEmptyCodexAgentBundleInstall(install)) {
       const issue = lockedCheck.issues[0];
@@ -479,6 +494,7 @@ export function materializeCodexAgentBundleInstallPlan(install: CodexAgentBundle
     }
     materializeCompilationOutputs(install.plan, install.destinationRoot, {
       privateDestinations: ['config.toml'],
+      anchors: managedAnchors(install.anchors),
     });
   } finally {
     materializeCompilationOutputChanges(
@@ -491,12 +507,17 @@ export function materializeCodexAgentBundleInstallPlan(install: CodexAgentBundle
       },
       install.destinationRoot,
       [LIFECYCLE_SCOPE_LOCK],
+      { anchors: managedAnchors(install.anchors) },
     );
   }
 }
 
 export function validateCodexAgentBundleInstallPlan(install: CodexAgentBundleInstallPlan): void {
-  if (lstatSync(join(install.destinationRoot, LIFECYCLE_SCOPE_LOCK), { throwIfNoEntry: false })) {
+  if (
+    lstatSync(physicalPath(install.destinationRoot, install.anchors, LIFECYCLE_SCOPE_LOCK), {
+      throwIfNoEntry: false,
+    })
+  ) {
     throw new Error(
       'refusing bundle installation: this Codex scope has an incomplete lifecycle operation',
     );
@@ -515,9 +536,14 @@ export function validateCodexAgentBundleInstallPlan(install: CodexAgentBundleIns
 
 function isEmptyCodexAgentBundleInstall(install: CodexAgentBundleInstallPlan): boolean {
   return (
-    !lstatSync(join(install.destinationRoot, install.receiptPath), { throwIfNoEntry: false }) &&
+    !lstatSync(physicalPath(install.destinationRoot, install.anchors, install.receiptPath), {
+      throwIfNoEntry: false,
+    }) &&
     install.definitionPaths.every(
-      (path) => !lstatSync(join(install.destinationRoot, path), { throwIfNoEntry: false }),
+      (path) =>
+        !lstatSync(physicalPath(install.destinationRoot, install.anchors, path), {
+          throwIfNoEntry: false,
+        }),
     ) &&
     install.registrationWasPresent.size === 0 &&
     install.registrationWasEdited.size === 0 &&
@@ -549,23 +575,26 @@ export function checkCodexAgentBundleInstallPlan(
   for (const name of install.registrationWasEdited) {
     add('edited', install.registrationPath, `managed role registration differs for ${name}`);
   }
-  const receiptPath = join(install.destinationRoot, install.receiptPath);
+  const receiptPath = physicalPath(install.destinationRoot, install.anchors, install.receiptPath);
   const receiptEntry = lstatSync(receiptPath, { throwIfNoEntry: false });
   const definitionEntries = install.definitionPaths.map((path) => ({
     path,
-    entry: lstatSync(join(install.destinationRoot, path), { throwIfNoEntry: false }),
+    entry: lstatSync(physicalPath(install.destinationRoot, install.anchors, path), {
+      throwIfNoEntry: false,
+    }),
   }));
   for (const path of [...install.definitionPaths, install.receiptPath, install.registrationPath]) {
-    if (hasUnsafeManagedParent(install.destinationRoot, path)) {
+    if (hasUnsafeManagedParent(install.destinationRoot, install.anchors, path)) {
       add('unsupported', path, 'managed output parent must be a real directory');
     }
   }
-  if (issues.length > 0) return checkResult(install.destinationRoot, filesChecked, issues);
+  if (issues.length > 0)
+    return checkResult(install.destinationRoot, install.anchors, filesChecked, issues);
   const anyDefinitions = definitionEntries.some(({ entry }) => entry !== undefined);
   const irregular = definitionEntries.find(({ entry }) => entry && !entry.isFile());
   if (irregular) {
     add('unsupported', irregular.path, 'managed definition must be a regular file');
-    return checkResult(install.destinationRoot, filesChecked, issues);
+    return checkResult(install.destinationRoot, install.anchors, filesChecked, issues);
   }
 
   if (!receiptEntry && !anyDefinitions) {
@@ -580,11 +609,11 @@ export function checkCodexAgentBundleInstallPlan(
     } else {
       add('missing', install.receiptPath, 'ownership receipt is missing');
     }
-    return checkResult(install.destinationRoot, filesChecked, issues);
+    return checkResult(install.destinationRoot, install.anchors, filesChecked, issues);
   }
   if (!receiptEntry) {
     add('conflicted', install.receiptPath, 'definitions have no ownership receipt');
-    return checkResult(install.destinationRoot, filesChecked, issues);
+    return checkResult(install.destinationRoot, install.anchors, filesChecked, issues);
   }
   for (const { path, entry } of definitionEntries) {
     if (!entry) add('missing', path, 'managed definition is missing');
@@ -600,14 +629,14 @@ export function checkCodexAgentBundleInstallPlan(
   }
   if (!receiptEntry.isFile()) {
     add('unsupported', install.receiptPath, 'ownership receipt must be a regular file');
-    return checkResult(install.destinationRoot, filesChecked, issues);
+    return checkResult(install.destinationRoot, install.anchors, filesChecked, issues);
   }
   let received: z.infer<typeof Receipt>;
   try {
     received = Receipt.parse(JSON.parse(readFileSync(receiptPath, 'utf8')));
   } catch {
     add('unsupported', install.receiptPath, 'ownership receipt is invalid or unsupported');
-    return checkResult(install.destinationRoot, filesChecked, issues);
+    return checkResult(install.destinationRoot, install.anchors, filesChecked, issues);
   }
   const expected = expectedReceipt(install);
   if (JSON.stringify(received) !== JSON.stringify(expected)) {
@@ -616,23 +645,35 @@ export function checkCodexAgentBundleInstallPlan(
       install.receiptPath,
       'destination belongs to another bundle owner or version',
     );
-    return checkResult(install.destinationRoot, filesChecked, issues);
+    return checkResult(install.destinationRoot, install.anchors, filesChecked, issues);
   }
   for (const agent of received.agents) {
-    if (!lstatSync(join(install.destinationRoot, agent.destination), { throwIfNoEntry: false })) {
+    const installed = physicalPath(install.destinationRoot, install.anchors, agent.destination);
+    if (!lstatSync(installed, { throwIfNoEntry: false })) {
       continue;
     }
-    const content = readFileSync(join(install.destinationRoot, agent.destination), 'utf8');
+    const content = readFileSync(installed, 'utf8');
     if (sha256(content) !== agent.installedSha256) {
       add('edited', agent.destination, 'managed definition differs from its ownership receipt');
     }
   }
-  return checkResult(install.destinationRoot, filesChecked, issues);
+  return checkResult(install.destinationRoot, install.anchors, filesChecked, issues);
 }
 
-function hasUnsafeManagedParent(root: string, proposed: string): boolean {
-  let current = resolve(root, proposed, '..');
-  while (current !== root) {
+function hasUnsafeManagedParent(
+  root: string,
+  anchors: CodexScopeAnchors,
+  proposed: string,
+): boolean {
+  const physical = physicalPath(root, anchors, proposed);
+  const base =
+    anchors.agents && proposed.startsWith('agents/')
+      ? anchors.agents.target
+      : anchors.config && proposed === 'config.toml'
+        ? dirname(anchors.config.target)
+        : root;
+  let current = dirname(physical);
+  while (current !== base) {
     const entry = lstatSync(current, { throwIfNoEntry: false });
     if (entry?.isSymbolicLink() || (entry && !entry.isDirectory())) return true;
     current = dirname(current);
@@ -651,6 +692,7 @@ function expectedReceipt(install: CodexAgentBundleInstallPlan): z.infer<typeof R
 
 function checkResult(
   destinationRoot: string,
+  anchors: CodexScopeAnchors,
   filesChecked: readonly string[],
   issues: readonly CodexAgentBundleCheckIssue[],
 ): CodexAgentBundleCheckResult {
@@ -663,7 +705,9 @@ function checkResult(
         : issues.some(({ status }) => status === 'missing')
           ? 'missing'
           : filesChecked.every((path) =>
-                lstatSync(join(destinationRoot, path), { throwIfNoEntry: false }),
+                lstatSync(physicalPath(destinationRoot, anchors, path), {
+                  throwIfNoEntry: false,
+                }),
               )
             ? 'current'
             : 'missing';
@@ -700,6 +744,7 @@ interface LifecyclePrecondition {
 }
 export interface CodexAgentBundleLifecyclePlan extends CodexAgentBundleLifecyclePreview {
   destinationRoot: string;
+  anchors: CodexScopeAnchors;
   journalPath: string;
   scope: Extract<InstallScope, 'user' | 'project'>;
   plan: CompilationPlan;
@@ -795,8 +840,9 @@ export function materializeCodexAgentBundleLifecyclePlan(
   )
     return;
   verifyLifecyclePreconditions(lifecycle);
-  createManagedOutputLock(
+  createScopeLock(
     lifecycle.destinationRoot,
+    lifecycle.anchors,
     lifecycle.journalPath,
     journalContent(lifecycle),
     { mode: 0o600 },
@@ -805,9 +851,12 @@ export function materializeCodexAgentBundleLifecyclePlan(
   // later operation from guessing whether the earlier operation reached its end.
   verifyLifecyclePreconditions(lifecycle);
   materializeLifecycleFinalState(lifecycle);
-  materializeCompilationOutputChanges(emptyLifecyclePlan(lifecycle), lifecycle.destinationRoot, [
-    lifecycle.journalPath,
-  ]);
+  materializeCompilationOutputChanges(
+    emptyLifecyclePlan(lifecycle),
+    lifecycle.destinationRoot,
+    [lifecycle.journalPath],
+    { anchors: managedAnchors(lifecycle.anchors) },
+  );
 }
 
 /** Complete an interrupted operation only from an exact prior state or exact final state. */
@@ -821,6 +870,7 @@ export function repairCodexAgentBundleLifecyclePlan(
     lifecycle.absences.length === 0
   )
     throw lifecycleRefusal(lifecycle);
+  assertAnchorsUnchanged(lifecycle.anchors);
   if (lifecyclePreconditionsHold(lifecycle)) {
     materializeLifecycleFinalState(lifecycle);
   } else if (lifecycleBeforeReceiptStateHolds(lifecycle)) {
@@ -830,9 +880,12 @@ export function repairCodexAgentBundleLifecyclePlan(
       `refusing lifecycle repair: interrupted managed state is ambiguous; inspect ${join(lifecycle.destinationRoot, lifecycle.journalPath)} and restore either its recorded before paths or after paths before retrying`,
     );
   }
-  materializeCompilationOutputChanges(emptyLifecyclePlan(lifecycle), lifecycle.destinationRoot, [
-    lifecycle.journalPath,
-  ]);
+  materializeCompilationOutputChanges(
+    emptyLifecyclePlan(lifecycle),
+    lifecycle.destinationRoot,
+    [lifecycle.journalPath],
+    { anchors: managedAnchors(lifecycle.anchors) },
+  );
 }
 
 function materializeLifecycleFinalState(lifecycle: CodexAgentBundleLifecyclePlan): void {
@@ -843,12 +896,14 @@ function materializeLifecycleFinalState(lifecycle: CodexAgentBundleLifecyclePlan
   };
   materializeCompilationOutputChanges(prior, lifecycle.destinationRoot, lifecycle.removals, {
     privateDestinations: ['config.toml'],
+    anchors: managedAnchors(lifecycle.anchors),
   });
   if (receipt.length > 0) {
     materializeCompilationOutputChanges(
       { ...lifecycle.plan, outputs: receipt },
       lifecycle.destinationRoot,
       [],
+      { anchors: managedAnchors(lifecycle.anchors) },
     );
   }
 }
@@ -860,6 +915,7 @@ function materializeLifecycleReceipt(lifecycle: CodexAgentBundleLifecyclePlan): 
     { ...lifecycle.plan, outputs: receipt },
     lifecycle.destinationRoot,
     [],
+    { anchors: managedAnchors(lifecycle.anchors) },
   );
 }
 
@@ -873,9 +929,35 @@ function buildLifecyclePlan(input: {
   nextOwner?: { packageId: string; packageVersion: string };
 }): CodexAgentBundleLifecyclePlan {
   const journalPath = LIFECYCLE_SCOPE_LOCK;
+  let anchors: CodexScopeAnchors;
+  try {
+    anchors = resolveScopeAnchors(input.destinationRoot);
+  } catch (cause) {
+    return {
+      operation: input.operation,
+      destinationRoot: input.destinationRoot,
+      anchors: {},
+      scope: input.scope,
+      journalPath,
+      plan: emptyLifecyclePlan(input),
+      removals: [],
+      preconditions: [],
+      unresolved: [],
+      absences: [],
+      status: 'refused',
+      actions: [],
+      issues: [
+        {
+          path: join(input.destinationRoot, input.receiptPath),
+          message: cause instanceof Error ? cause.message : 'scope anchors are unsupported',
+        },
+      ],
+    };
+  }
   const base = {
     operation: input.operation,
     destinationRoot: input.destinationRoot,
+    anchors,
     scope: input.scope,
     journalPath,
     plan: emptyLifecyclePlan(input),
@@ -884,10 +966,12 @@ function buildLifecyclePlan(input: {
     unresolved: [] as readonly z.infer<typeof ReceiptAgent>[],
     absences: [] as readonly string[],
   };
-  const journal = lstatSync(join(input.destinationRoot, journalPath), { throwIfNoEntry: false });
+  const journal = lstatSync(physicalPath(input.destinationRoot, anchors, journalPath), {
+    throwIfNoEntry: false,
+  });
   if (journal) {
     try {
-      const saved = readLifecycleJournal(input.destinationRoot, journalPath);
+      const saved = readLifecycleJournal(input.destinationRoot, anchors, journalPath);
       if (
         saved.operation !== input.operation ||
         saved.owner.packageId !== input.packageId ||
@@ -905,7 +989,7 @@ function buildLifecyclePlan(input: {
           ],
         };
       }
-      return lifecycleFromJournal(input.destinationRoot, journalPath, saved);
+      return lifecycleFromJournal(input.destinationRoot, anchors, journalPath, saved);
     } catch (cause) {
       return {
         ...base,
@@ -921,22 +1005,23 @@ function buildLifecyclePlan(input: {
     }
   }
   try {
-    if (!lstatSync(join(input.destinationRoot, input.receiptPath), { throwIfNoEntry: false })) {
+    const receiptFile = physicalPath(input.destinationRoot, anchors, input.receiptPath);
+    if (!lstatSync(receiptFile, { throwIfNoEntry: false })) {
       if (input.operation === 'remove') {
         return { ...base, status: 'ready', actions: [], issues: [] };
       }
       throw new Error('ownership receipt is missing');
     }
-    const receiptContent = readRegularText(
-      join(input.destinationRoot, input.receiptPath),
-      'ownership receipt',
-    );
+    const receiptContent = readRegularText(receiptFile, 'ownership receipt');
     const receipt = Receipt.parse(JSON.parse(receiptContent));
     if (receipt.owner.packageId !== input.packageId)
       throw new Error('ownership receipt belongs to another package');
-    const inspected = inspectOwnedDefinitions(input.destinationRoot, receipt);
+    const inspected = inspectOwnedDefinitions(input.destinationRoot, anchors, receipt);
     const configPath = join(input.destinationRoot, 'config.toml');
-    const configContent = readRegularText(configPath, 'Codex role configuration');
+    const configContent = readRegularText(
+      physicalPath(input.destinationRoot, anchors, 'config.toml'),
+      'Codex role configuration',
+    );
     const registration = inspectOwnedRegistrations(configPath, configContent, inspected.owned);
     const oldDefinitions = registration.owned;
     const unresolvedDestinations = new Set(
@@ -955,7 +1040,9 @@ function buildLifecyclePlan(input: {
     for (const definition of effectiveNewDefinitions) {
       if (oldDefinitions.some(({ definition: old }) => old === definition.definition)) continue;
       if (
-        lstatSync(join(input.destinationRoot, definition.definition), { throwIfNoEntry: false })
+        lstatSync(physicalPath(input.destinationRoot, anchors, definition.definition), {
+          throwIfNoEntry: false,
+        })
       ) {
         throw new Error(`unowned definition already exists at ${definition.definition}`);
       }
@@ -1043,7 +1130,7 @@ function buildLifecyclePlan(input: {
       ...base,
       status: 'ready',
       actions: [
-        ...lifecycleActions(input.destinationRoot, outputs, removals),
+        ...lifecycleActions(input.destinationRoot, anchors, outputs, removals),
         ...unresolved.map((agent) => ({
           kind: 'preserve' as const,
           path: join(input.destinationRoot, agent.destination),
@@ -1102,6 +1189,7 @@ function resolveCodexAgentDestination(
 
 function inspectOwnedDefinitions(
   destinationRoot: string,
+  anchors: CodexScopeAnchors,
   receipt: z.infer<typeof Receipt>,
 ): { owned: OwnedDefinition[]; unresolved: z.infer<typeof ReceiptAgent>[] } {
   assertReceiptIdentities(receipt);
@@ -1118,7 +1206,7 @@ function inspectOwnedDefinitions(
     }
     seen.add(agent.id);
     try {
-      const path = join(destinationRoot, agent.destination);
+      const path = physicalPath(destinationRoot, anchors, agent.destination);
       const content = readRegularText(path, `managed definition ${agent.id}`);
       if (sha256(content) !== agent.installedSha256)
         throw new Error(`managed definition differs from its ownership receipt: ${agent.id}`);
@@ -1239,17 +1327,19 @@ function removeRoleRegistration(content: string, name: string): string | undefin
 
 function lifecycleActions(
   destinationRoot: string,
+  anchors: CodexScopeAnchors,
   outputs: readonly DesiredGeneratedOutput[],
   removals: readonly string[],
 ): CodexAgentBundleLifecycleAction[] {
   return [
     ...outputs.map((output) => {
       const path = join(destinationRoot, output.destination);
-      const entry = lstatSync(path, { throwIfNoEntry: false });
+      const physical = physicalPath(destinationRoot, anchors, output.destination);
+      const entry = lstatSync(physical, { throwIfNoEntry: false });
       return {
         kind: !entry
           ? 'create'
-          : entry.isFile() && readFileSync(path, 'utf8') === output.content
+          : entry.isFile() && readFileSync(physical, 'utf8') === output.content
             ? 'preserve'
             : 'replace',
         path,
@@ -1266,11 +1356,16 @@ function lifecycleActions(
 
 function readLifecycleJournal(
   destinationRoot: string,
+  anchors: CodexScopeAnchors,
   journalPath: string,
 ): z.infer<typeof LifecycleJournal> {
   const path = join(destinationRoot, journalPath);
   try {
-    const journal = LifecycleJournal.parse(JSON.parse(readRegularText(path, 'lifecycle journal')));
+    const journal = LifecycleJournal.parse(
+      JSON.parse(
+        readRegularText(physicalPath(destinationRoot, anchors, journalPath), 'lifecycle journal'),
+      ),
+    );
     assertSafeLifecycleJournal(journal);
     return journal;
   } catch (cause) {
@@ -1511,6 +1606,7 @@ function assertJournalConfigRewrite(
 
 function lifecycleFromJournal(
   destinationRoot: string,
+  anchors: CodexScopeAnchors,
   journalPath: string,
   journal: z.infer<typeof LifecycleJournal>,
 ): CodexAgentBundleLifecyclePlan {
@@ -1538,6 +1634,7 @@ function lifecycleFromJournal(
     operation: journal.operation,
     status: 'interrupted',
     destinationRoot,
+    anchors,
     scope: journal.scope,
     journalPath,
     plan,
@@ -1546,7 +1643,7 @@ function lifecycleFromJournal(
     unresolved: journal.unresolved,
     absences: journal.absent,
     receiptContent: journal.receipt,
-    actions: lifecycleActions(destinationRoot, outputs, journal.removals),
+    actions: lifecycleActions(destinationRoot, anchors, outputs, journal.removals),
     issues: [
       {
         path: join(destinationRoot, journalPath),
@@ -1595,21 +1692,25 @@ function emptyLifecyclePlan(
   };
 }
 
+function lifecyclePath(lifecycle: CodexAgentBundleLifecyclePlan, destination: string): string {
+  return physicalPath(lifecycle.destinationRoot, lifecycle.anchors, destination);
+}
+
 function lifecyclePreconditionsHold(lifecycle: CodexAgentBundleLifecyclePlan): boolean {
   return (
     lifecycle.preconditions.every(({ destination, sha256: digest }) => {
-      const path = join(lifecycle.destinationRoot, destination);
+      const path = lifecyclePath(lifecycle, destination);
       const entry = lstatSync(path, { throwIfNoEntry: false });
       return Boolean(entry?.isFile() && sha256(readFileSync(path, 'utf8')) === digest);
     }) &&
     lifecycle.absences.every(
-      (destination) =>
-        !lstatSync(join(lifecycle.destinationRoot, destination), { throwIfNoEntry: false }),
+      (destination) => !lstatSync(lifecyclePath(lifecycle, destination), { throwIfNoEntry: false }),
     )
   );
 }
 
 function verifyLifecyclePreconditions(lifecycle: CodexAgentBundleLifecyclePlan): void {
+  assertAnchorsUnchanged(lifecycle.anchors);
   if (!lifecyclePreconditionsHold(lifecycle))
     throw new Error('refusing lifecycle mutation: managed scope changed after preview');
 }
@@ -1617,19 +1718,18 @@ function verifyLifecyclePreconditions(lifecycle: CodexAgentBundleLifecyclePlan):
 function lifecycleFinalStateHolds(lifecycle: CodexAgentBundleLifecyclePlan): boolean {
   return (
     lifecycle.plan.outputs.every((output) => {
-      const entry = lstatSync(join(lifecycle.destinationRoot, output.destination), {
+      const entry = lstatSync(lifecyclePath(lifecycle, output.destination), {
         throwIfNoEntry: false,
       });
       return (
         entry?.isFile() &&
         output.kind === 'generated' &&
         (output.destination !== 'config.toml' || (entry.mode & 0o777) === 0o600) &&
-        readFileSync(join(lifecycle.destinationRoot, output.destination), 'utf8') === output.content
+        readFileSync(lifecyclePath(lifecycle, output.destination), 'utf8') === output.content
       );
     }) &&
     lifecycle.removals.every(
-      (destination) =>
-        !lstatSync(join(lifecycle.destinationRoot, destination), { throwIfNoEntry: false }),
+      (destination) => !lstatSync(lifecyclePath(lifecycle, destination), { throwIfNoEntry: false }),
     )
   );
 }
@@ -1639,7 +1739,7 @@ function lifecycleBeforeReceiptStateHolds(lifecycle: CodexAgentBundleLifecyclePl
   if (receipt.length !== 1) return false;
   const oldReceipt = lifecycle.preconditions.find((entry) => entry.destination.endsWith('.json'));
   if (!oldReceipt) return false;
-  const currentReceipt = join(lifecycle.destinationRoot, oldReceipt.destination);
+  const currentReceipt = lifecyclePath(lifecycle, oldReceipt.destination);
   const receiptEntry = lstatSync(currentReceipt, { throwIfNoEntry: false });
   if (!receiptEntry?.isFile() || sha256(readFileSync(currentReceipt, 'utf8')) !== oldReceipt.sha256)
     return false;
@@ -1647,20 +1747,18 @@ function lifecycleBeforeReceiptStateHolds(lifecycle: CodexAgentBundleLifecyclePl
     lifecycle.plan.outputs
       .filter((output) => !receipt.includes(output))
       .every((output) => {
-        const entry = lstatSync(join(lifecycle.destinationRoot, output.destination), {
+        const entry = lstatSync(lifecyclePath(lifecycle, output.destination), {
           throwIfNoEntry: false,
         });
         return (
           entry?.isFile() &&
           output.kind === 'generated' &&
           (output.destination !== 'config.toml' || (entry.mode & 0o777) === 0o600) &&
-          readFileSync(join(lifecycle.destinationRoot, output.destination), 'utf8') ===
-            output.content
+          readFileSync(lifecyclePath(lifecycle, output.destination), 'utf8') === output.content
         );
       }) &&
     lifecycle.removals.every(
-      (destination) =>
-        !lstatSync(join(lifecycle.destinationRoot, destination), { throwIfNoEntry: false }),
+      (destination) => !lstatSync(lifecyclePath(lifecycle, destination), { throwIfNoEntry: false }),
     )
   );
 }
@@ -1770,6 +1868,114 @@ function validateExecutionProvenance(
     throw new Error(`bundle index execution.effort does not match definition for ${agent.id}`);
   }
 }
+export interface CodexScopeAnchor {
+  link: string;
+  target: string;
+}
+/**
+ * The two paths of a Codex scope that a dotfiles tool may own through a
+ * symbolic link. Only these are followed; every other managed path keeps the
+ * no-symlink invariant, so a link is trusted exactly where it was resolved.
+ */
+export interface CodexScopeAnchors {
+  config?: CodexScopeAnchor;
+  agents?: CodexScopeAnchor;
+}
+
+/** Resolve each anchor once; the result is the only place a link is followed. */
+function resolveScopeAnchors(root: string): CodexScopeAnchors {
+  const config = resolveAnchor(join(root, 'config.toml'), 'file', 'Codex role configuration');
+  const agents = resolveAnchor(join(root, 'agents'), 'directory', 'Codex agents directory');
+  return { ...(config ? { config } : {}), ...(agents ? { agents } : {}) };
+}
+
+function resolveAnchor(
+  link: string,
+  kind: 'file' | 'directory',
+  label: string,
+): CodexScopeAnchor | undefined {
+  if (!lstatSync(link, { throwIfNoEntry: false })?.isSymbolicLink()) return undefined;
+  let target: string;
+  try {
+    target = realpathSync(link);
+  } catch {
+    throw new Error(`${label} symbolic link is dangling: ${link}`);
+  }
+  const entry = statSync(target);
+  const named = `${link} -> ${target}`;
+  if (kind === 'file' ? !entry.isFile() : !entry.isDirectory())
+    throw new Error(
+      `${label} symbolic link must resolve to a ${kind === 'file' ? 'regular file' : 'real directory'}: ${named}`,
+    );
+  if (kind === 'file' && (entry.mode & 0o777) !== 0o600)
+    throw new Error(`${label} symbolic link target must have mode 0600: ${named}`);
+  try {
+    accessSync(target, constants.W_OK);
+    accessSync(dirname(target), constants.W_OK);
+  } catch {
+    throw new Error(`${label} symbolic link target is not writable: ${named}`);
+  }
+  return { link, target };
+}
+
+/** Refuse when an anchor no longer resolves to the target planned against. */
+function assertAnchorsUnchanged(anchors: CodexScopeAnchors): void {
+  for (const anchor of [anchors.config, anchors.agents]) {
+    if (!anchor) continue;
+    let current: string | undefined;
+    try {
+      current = realpathSync(anchor.link);
+    } catch {
+      current = undefined;
+    }
+    if (current !== anchor.target)
+      throw new Error(
+        `refusing to write: ${anchor.link} no longer resolves to ${anchor.target}; re-run to plan against the new target`,
+      );
+  }
+}
+
+/** The on-disk path a scope-relative managed destination is read from and written to. */
+function physicalPath(root: string, anchors: CodexScopeAnchors, destination: string): string {
+  if (anchors.config && destination === 'config.toml') return anchors.config.target;
+  if (anchors.agents && destination.startsWith('agents/'))
+    return join(anchors.agents.target, destination.slice('agents/'.length));
+  return join(root, destination);
+}
+
+function managedAnchors(anchors: CodexScopeAnchors): ManagedOutputAnchor[] {
+  return [
+    ...(anchors.config ? [{ destination: 'config.toml', ...anchors.config }] : []),
+    ...(anchors.agents ? [{ destination: 'agents/', ...anchors.agents }] : []),
+  ];
+}
+
+/** Lock and journal keep their logical `agents/.agentforge/` path; the anchor decides where it lands. */
+function createScopeLock(
+  root: string,
+  anchors: CodexScopeAnchors,
+  destination: string,
+  content: string,
+  options: { mode?: number } = {},
+): void {
+  if (anchors.agents && destination.startsWith('agents/'))
+    createManagedOutputLock(
+      anchors.agents.target,
+      destination.slice('agents/'.length),
+      content,
+      options,
+    );
+  else createManagedOutputLock(root, destination, content, options);
+}
+
+/** Human-readable `<role>: <link> -> <target>` lines for each followed anchor. */
+export function describeCodexScopeAnchors(anchors: CodexScopeAnchors): string[] {
+  return [
+    ...(anchors.config ? [`config: ${anchors.config.link} -> ${anchors.config.target}`] : []),
+    ...(anchors.agents ? [`agents: ${anchors.agents.link} -> ${anchors.agents.target}`] : []),
+  ];
+}
+
 function readRegularText(path: string, label: string): string {
   const entry = lstatSync(path, { throwIfNoEntry: false });
   if (!entry?.isFile()) throw new Error(`${label} must be a regular file: ${path}`);
@@ -1832,6 +2038,7 @@ function parseCodexDefinition(content: string): z.infer<typeof CodexBundleDefini
 }
 function buildRoleRegistrations(
   configPath: string,
+  physicalConfigPath: string,
   definitions: readonly { name: string; definition: string; description: string }[],
 ): {
   content: string;
@@ -1839,8 +2046,8 @@ function buildRoleRegistrations(
   edited: ReadonlySet<string>;
   conflicts: ReadonlySet<string>;
 } {
-  const entry = lstatSync(configPath, { throwIfNoEntry: false });
-  const content = entry ? readRegularText(configPath, 'Codex role configuration') : '';
+  const entry = lstatSync(physicalConfigPath, { throwIfNoEntry: false });
+  const content = entry ? readRegularText(physicalConfigPath, 'Codex role configuration') : '';
   return buildRoleRegistrationContent(configPath, content, definitions);
 }
 

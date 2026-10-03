@@ -23,9 +23,31 @@ export interface MaterializationResult {
   rootFilesWritten: string[];
 }
 
+/**
+ * A managed destination (or, when it ends in `/`, a directory prefix) whose
+ * parent chain is a symbolic link the caller resolved ahead of time. Writes land
+ * in `target` instead of beneath the output root, so the link itself is never
+ * replaced. The caller owns validating `target`; this layer re-resolves `link`
+ * immediately before publishing and refuses if it no longer reaches `target`.
+ */
+export interface ManagedOutputAnchor {
+  destination: string;
+  link: string;
+  target: string;
+}
+
 export interface ManagedOutputMaterializationOptions {
   /** Generated paths that may hold secrets and therefore must remain owner-readable only. */
   privateDestinations?: readonly string[];
+  /** Resolved symbolic-link anchors; see `ManagedOutputAnchor`. */
+  anchors?: readonly ManagedOutputAnchor[];
+}
+
+interface ManagedLocation {
+  destination: string;
+  staged: string;
+  backup: string;
+  parentRoot: string;
 }
 
 export class MaterializationError extends Error {
@@ -118,11 +140,76 @@ export function materializeCompilationOutputChanges(
   mkdirSync(parent, { recursive: true });
   const stagingRoot = mkdtempSync(resolve(parent, `.${name}.staging-`));
   const backupRoot = mkdtempSync(resolve(parent, `.${name}.backup-`));
+  // An anchored destination stages and backs up beside its resolved target, so
+  // every rename stays on the target's own filesystem.
+  const lanes = new Map<ManagedOutputAnchor, { staging: string; backup: string }>();
+  const anchorLane = (anchor: ManagedOutputAnchor): { staging: string; backup: string } => {
+    let lane = lanes.get(anchor);
+    if (!lane) {
+      const home = dirname(anchor.target);
+      const label = basename(anchor.target);
+      lane = {
+        staging: mkdtempSync(resolve(home, `.${label}.agentforge-staging-`)),
+        backup: mkdtempSync(resolve(home, `.${label}.agentforge-backup-`)),
+      };
+      lanes.set(anchor, lane);
+    }
+    return lane;
+  };
+  const locate = (proposed: string): ManagedLocation => {
+    const anchor = options.anchors?.find(({ destination }) =>
+      destination.endsWith('/') ? proposed.startsWith(destination) : proposed === destination,
+    );
+    if (!anchor) {
+      const destination = resolve(destinationRoot, proposed);
+      requireContainedDestination(destinationRoot, destination, proposed);
+      return {
+        destination,
+        staged: resolve(stagingRoot, proposed),
+        backup: resolve(backupRoot, proposed),
+        parentRoot: destinationRoot,
+      };
+    }
+    const lane = anchorLane(anchor);
+    if (!anchor.destination.endsWith('/')) {
+      const file = basename(anchor.target);
+      return {
+        destination: anchor.target,
+        staged: resolve(lane.staging, file),
+        backup: resolve(lane.backup, file),
+        parentRoot: dirname(anchor.target),
+      };
+    }
+    const rest = proposed.slice(anchor.destination.length);
+    const destination = resolve(anchor.target, rest);
+    requireContainedDestination(anchor.target, destination, proposed);
+    return {
+      destination,
+      staged: resolve(lane.staging, rest),
+      backup: resolve(lane.backup, rest),
+      parentRoot: anchor.target,
+    };
+  };
 
   try {
-    for (const output of plan.outputs) materializeOutput(output, stagingRoot, options);
+    for (const output of plan.outputs) {
+      writeStagedOutput(output, locate(output.destination).staged, options);
+    }
     mkdirSync(destinationRoot, { recursive: true });
-    publishManagedOutputChanges(plan.outputs, removals, stagingRoot, destinationRoot, backupRoot);
+    for (const anchor of options.anchors ?? []) {
+      let current: string | undefined;
+      try {
+        current = realpathSync(anchor.link);
+      } catch {
+        current = undefined;
+      }
+      if (current !== anchor.target) {
+        throw new MaterializationError(
+          `refusing to publish: ${anchor.link} no longer resolves to ${anchor.target}`,
+        );
+      }
+    }
+    publishManagedOutputChanges(plan.outputs, removals, locate);
   } catch (cause) {
     const detail = cause instanceof Error ? `: ${cause.message}` : '';
     throw new MaterializationError(
@@ -130,8 +217,12 @@ export function materializeCompilationOutputChanges(
       { cause },
     );
   } finally {
-    if (existsSync(stagingRoot)) rmSync(stagingRoot, { recursive: true, force: true });
-    if (existsSync(backupRoot)) rmSync(backupRoot, { recursive: true, force: true });
+    const roots = [
+      stagingRoot,
+      backupRoot,
+      ...[...lanes.values()].flatMap(({ staging, backup }) => [staging, backup]),
+    ];
+    for (const root of roots) if (existsSync(root)) rmSync(root, { recursive: true, force: true });
   }
 
   return {
@@ -202,6 +293,14 @@ function materializeOutput(
 ): void {
   const destination = resolve(stagingRoot, output.destination);
   requireContainedDestination(stagingRoot, destination, output.destination);
+  writeStagedOutput(output, destination, options);
+}
+
+function writeStagedOutput(
+  output: DesiredOutput,
+  destination: string,
+  options: ManagedOutputMaterializationOptions,
+): void {
   mkdirSync(dirname(destination), { recursive: true });
 
   if (output.kind === 'generated') {
@@ -300,9 +399,7 @@ function publishStagedTree(stagingRoot: string, destinationRoot: string): void {
 function publishManagedOutputChanges(
   outputs: readonly DesiredOutput[],
   removals: readonly string[],
-  stagingRoot: string,
-  destinationRoot: string,
-  backupRoot: string,
+  locate: (destination: string) => ManagedLocation,
 ): void {
   const published: Array<{ destination: string; backup?: string }> = [];
   try {
@@ -314,9 +411,9 @@ function publishManagedOutputChanges(
       throw new MaterializationError('managed output changes must name each destination once');
     }
     for (const change of changes) {
-      const destination = resolve(destinationRoot, change.destination);
-      requireContainedDestination(destinationRoot, destination, change.destination);
-      requireRegularParentPath(destinationRoot, dirname(destination), change.destination);
+      const location = locate(change.destination);
+      const destination = location.destination;
+      requireRegularParentPath(location.parentRoot, dirname(destination), change.destination);
       mkdirSync(dirname(destination), { recursive: true });
 
       const entry = lstatSync(destination, { throwIfNoEntry: false });
@@ -328,15 +425,14 @@ function publishManagedOutputChanges(
 
       let backup: string | undefined;
       if (entry) {
-        backup = resolve(backupRoot, change.destination);
+        backup = location.backup;
         mkdirSync(dirname(backup), { recursive: true });
-        renameSync(destination, backup);
+        renameWithinFilesystem(destination, backup);
       }
 
       if ('output' in change) {
-        const staged = resolve(stagingRoot, change.destination);
         try {
-          renameSync(staged, destination);
+          renameWithinFilesystem(location.staged, destination);
         } catch (cause) {
           if (backup) renameSync(backup, destination);
           throw cause;
@@ -351,6 +447,21 @@ function publishManagedOutputChanges(
         mkdirSync(dirname(item.destination), { recursive: true });
         renameSync(item.backup, item.destination);
       }
+    }
+    throw cause;
+  }
+}
+
+/** A cross-device rename is refused rather than copied: copying breaks atomic replacement. */
+function renameWithinFilesystem(from: string, to: string): void {
+  try {
+    renameSync(from, to);
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === 'EXDEV') {
+      throw new MaterializationError(
+        `refusing cross-device replacement of ${to}: staging and target are on different filesystems`,
+        { cause },
+      );
     }
     throw cause;
   }

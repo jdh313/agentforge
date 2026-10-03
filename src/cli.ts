@@ -5,12 +5,14 @@ import { Command } from 'commander';
 import matter from 'gray-matter';
 import pkg from '../package.json' with { type: 'json' };
 import { checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
+import type { CodexScopeAnchors } from './codex-agent-bundle.ts';
 import {
   buildCodexAgentBundleInstallPlan,
   buildCodexAgentBundleRemovePlan,
   buildCodexAgentBundleUpdatePlan,
   checkCodexAgentBundleInstallPlan,
   compileCodexAgentBundle,
+  describeCodexScopeAnchors,
   materializeCodexAgentBundleInstallPlan,
   materializeCodexAgentBundleLifecyclePlan,
   previewCodexAgentBundleLifecyclePlan,
@@ -408,8 +410,10 @@ const codexBundleScopeOptions = (opts: CodexBundleInstallOptions) => {
 
 const printCodexLifecyclePreview = (
   preview: ReturnType<typeof previewCodexAgentBundleLifecyclePlan>,
+  anchors: CodexScopeAnchors,
 ) => {
   console.log(`${preview.status}: ${preview.operation}`);
+  for (const line of describeCodexScopeAnchors(anchors)) console.log(line);
   for (const action of preview.actions) {
     console.log(`${action.kind}: ${action.path}: ${action.reason}`);
   }
@@ -451,6 +455,7 @@ program
         console.log(`definition: ${join(install.destinationRoot, definition)}`);
       }
       console.log(`receipt: ${join(install.destinationRoot, install.receiptPath)}`);
+      for (const line of describeCodexScopeAnchors(install.anchors)) console.log(line);
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;
@@ -467,6 +472,7 @@ program
       const install = resolveCodexBundleInstall(bundleDir, opts);
       materializeCodexAgentBundleInstallPlan(install);
       console.log(`installed ${install.agentNames.join(', ')} at ${install.destinationRoot}`);
+      for (const line of describeCodexScopeAnchors(install.anchors)) console.log(line);
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;
@@ -485,6 +491,7 @@ program
       console.log(
         `${result.status}: ${result.filesChecked.length} managed paths at ${result.destinationRoot}`,
       );
+      for (const line of describeCodexScopeAnchors(install.anchors)) console.log(line);
       for (const issue of result.issues) {
         console.error(`${issue.status}: ${issue.path}: ${issue.message}`);
       }
@@ -508,7 +515,7 @@ program
         bundleRoot: resolve(bundleDir),
         ...codexBundleScopeOptions(opts),
       });
-      printCodexLifecyclePreview(previewCodexAgentBundleLifecyclePlan(plan));
+      printCodexLifecyclePreview(previewCodexAgentBundleLifecyclePlan(plan), plan.anchors);
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;
@@ -545,7 +552,7 @@ program
         packageId,
         ...codexBundleScopeOptions(opts),
       });
-      printCodexLifecyclePreview(previewCodexAgentBundleLifecyclePlan(plan));
+      printCodexLifecyclePreview(previewCodexAgentBundleLifecyclePlan(plan), plan.anchors);
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;

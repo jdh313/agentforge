@@ -4,9 +4,12 @@ import {
   chmodSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -14,7 +17,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { checkCompilationSnapshot } from 'agentforge/check';
 import {
   buildCodexAgentBundleInstallPlan,
@@ -1433,7 +1436,7 @@ describe('compiled Codex package agent bundle', () => {
     expect(readFileSync(join(project, '.codex/config.toml'), 'utf8')).toBe('model = "kept"\n');
   });
 
-  test('rejects a symlinked empty agents root before preview or installation writes', async () => {
+  test('installs through a symlinked empty agents root and leaves the link in place', async () => {
     const loaded = await loadMarketplaceDefinition(join(FIXTURE, 'MARKETPLACE.yaml'));
     const out = join(temporaryRoot, 'compiled');
     materializeCompilation(compileMarketplace(loaded, allTargets(), { outputRoot: out }), out);
@@ -1443,30 +1446,24 @@ describe('compiled Codex package agent bundle', () => {
     mkdirSync(join(project, '.codex'), { recursive: true });
     mkdirSync(outside);
     symlinkSync(outside, join(project, '.codex/agents'));
-    const preview = runCli(
-      {},
-      'preview-codex-agent',
-      bundleRoot,
-      '--scope',
-      'project',
-      '--project-root',
-      project,
+    const args = ['--scope', 'project', '--project-root', project];
+    const preview = runCli({}, 'preview-codex-agent', bundleRoot, ...args);
+    expect(preview.exitCode).toBe(0);
+    expect(preview.stdout).toContain(
+      `agents: ${join(project, '.codex/agents')} -> ${realpathSync(outside)}`,
     );
-    const install = runCli(
-      {},
-      'install-codex-agent',
-      bundleRoot,
-      '--scope',
-      'project',
-      '--project-root',
-      project,
+    const install = runCli({}, 'install-codex-agent', bundleRoot, ...args);
+    expect(install.exitCode).toBe(0);
+    expect(install.stdout).toContain(
+      `agents: ${join(project, '.codex/agents')} -> ${realpathSync(outside)}`,
     );
-    expect(preview.exitCode).toBe(1);
-    expect(install.exitCode).toBe(1);
-    expect(preview.stderr).toContain('managed output parent must be a real directory');
-    expect(install.stderr).toContain('managed output parent must be a real directory');
-    expect(existsSync(join(project, '.codex/config.toml'))).toBe(false);
-    expect(existsSync(join(outside, 'alpha.toml'))).toBe(false);
+    expect(lstatSync(join(project, '.codex/agents')).isSymbolicLink()).toBe(true);
+    expect(existsSync(join(outside, 'demo-roles/alpha.toml'))).toBe(true);
+    expect(existsSync(join(outside, '.agentforge/demo-roles.json'))).toBe(true);
+    expect(existsSync(join(project, '.codex/config.toml'))).toBe(true);
+    const check = runCli({}, 'check-codex-agent', bundleRoot, ...args);
+    expect(check.exitCode).toBe(0);
+    expect(check.stdout).toContain('current:');
   });
 
   test('rejects install preview while a lifecycle journal locks the scope', async () => {
@@ -1706,6 +1703,306 @@ describe('compiled Codex package agent bundle', () => {
     );
     expect(diagnostics.exitCode).toBe(0);
     expect(diagnostics.stdout).toContain('claude-only-frontmatter-stripped');
+  });
+});
+
+describe('symlinked Codex scope anchors', () => {
+  async function compiledBundle(): Promise<string> {
+    const loaded = await loadMarketplaceDefinition(join(FIXTURE, 'MARKETPLACE.yaml'));
+    const out = join(temporaryRoot, 'compiled');
+    materializeCompilation(compileMarketplace(loaded, allTargets(), { outputRoot: out }), out);
+    return join(out, 'packages/demo/.agentforge/codex-agent-bundle');
+  }
+
+  /** Mimic home-manager: scope link -> store-style link -> dotfiles target. */
+  function linkScope(scopeRoot: string, dotfiles: string) {
+    const store = join(temporaryRoot, 'store');
+    mkdirSync(scopeRoot, { recursive: true });
+    mkdirSync(store, { recursive: true });
+    mkdirSync(join(dotfiles, 'agents'), { recursive: true });
+    const config = join(dotfiles, 'config.personal.toml');
+    writeFileSync(config, 'model = "kept"\n');
+    chmodSync(config, 0o600);
+    symlinkSync(config, join(store, 'config.toml'));
+    symlinkSync(join(dotfiles, 'agents'), join(store, 'agents'));
+    symlinkSync(join(store, 'config.toml'), join(scopeRoot, 'config.toml'));
+    symlinkSync(join(store, 'agents'), join(scopeRoot, 'agents'));
+    return { config: realpathSync(config), agents: realpathSync(join(dotfiles, 'agents')) };
+  }
+
+  function userOptions(bundleRoot: string, codexHome: string) {
+    return {
+      bundleRoot,
+      scope: 'user' as const,
+      projectRoot: join(temporaryRoot, 'project'),
+      codexHomeDirectory: codexHome,
+    };
+  }
+
+  test('installs, checks, updates, and removes through symlinked anchors', async () => {
+    const bundleRoot = await compiledBundle();
+    const codexHome = join(temporaryRoot, 'codex-home');
+    const dotfiles = join(temporaryRoot, 'dotfiles/codex');
+    const target = linkScope(codexHome, dotfiles);
+    const options = userOptions(bundleRoot, codexHome);
+
+    const install = buildCodexAgentBundleInstallPlan(options);
+    expect(install.anchors).toEqual({
+      config: { link: join(codexHome, 'config.toml'), target: target.config },
+      agents: { link: join(codexHome, 'agents'), target: target.agents },
+    });
+    materializeCodexAgentBundleInstallPlan(install);
+    expect(lstatSync(join(codexHome, 'config.toml')).isSymbolicLink()).toBe(true);
+    expect(lstatSync(join(codexHome, 'agents')).isSymbolicLink()).toBe(true);
+    const written = readFileSync(target.config, 'utf8');
+    expect(written.startsWith('model = "kept"\n')).toBe(true);
+    expect(written).toContain('[agents."demo-roles:alpha"]');
+    expect(statSync(target.config).mode & 0o777).toBe(0o600);
+    expect(existsSync(join(target.agents, 'demo-roles/alpha.toml'))).toBe(true);
+    expect(existsSync(join(target.agents, '.agentforge/demo-roles.json'))).toBe(true);
+    expect(existsSync(join(target.agents, '.agentforge/.agentforge-lifecycle.lock'))).toBe(false);
+    expect(checkCodexAgentBundleInstallPlan(buildCodexAgentBundleInstallPlan(options)).status).toBe(
+      'current',
+    );
+    // No staging or backup siblings are left beside the targets.
+    expect(readdirSync(dirname(target.config)).sort()).toEqual(['agents', 'config.personal.toml']);
+
+    const alphaPath = join(bundleRoot, 'agents/demo-roles/alpha.toml');
+    const alpha = readFileSync(alphaPath, 'utf8').replace(
+      'Explicit Codex model',
+      'Updated through links',
+    );
+    writeFileSync(alphaPath, alpha);
+    const indexPath = join(bundleRoot, CODEX_AGENT_BUNDLE_INDEX);
+    const index = JSON.parse(readFileSync(indexPath, 'utf8'));
+    index.package.version = '2.4.0';
+    index.agents[0].sha256 = createHash('sha256').update(alpha).digest('hex');
+    writeFileSync(indexPath, `${JSON.stringify(index, null, 2)}\n`);
+    const update = buildCodexAgentBundleUpdatePlan(options);
+    expect(update.anchors.agents?.target).toBe(target.agents);
+    materializeCodexAgentBundleLifecyclePlan(update);
+    expect(readFileSync(join(target.agents, 'demo-roles/alpha.toml'), 'utf8')).toContain(
+      'Updated through links',
+    );
+    expect(lstatSync(join(codexHome, 'agents')).isSymbolicLink()).toBe(true);
+    expect(statSync(target.config).mode & 0o777).toBe(0o600);
+
+    const remove = buildCodexAgentBundleRemovePlan({
+      packageId: 'demo-roles',
+      scope: 'user',
+      projectRoot: options.projectRoot,
+      codexHomeDirectory: codexHome,
+    });
+    expect(remove.status).toBe('ready');
+    materializeCodexAgentBundleLifecyclePlan(remove);
+    expect(lstatSync(join(codexHome, 'config.toml')).isSymbolicLink()).toBe(true);
+    expect(lstatSync(join(codexHome, 'agents')).isSymbolicLink()).toBe(true);
+    expect(readFileSync(target.config, 'utf8')).toBe('model = "kept"\n');
+    expect(existsSync(join(target.agents, 'demo-roles/alpha.toml'))).toBe(false);
+    expect(existsSync(join(target.agents, '.agentforge/demo-roles.json'))).toBe(false);
+  });
+
+  test('repairs an interrupted lifecycle journal that lives behind the agents link', async () => {
+    const bundleRoot = await compiledBundle();
+    const codexHome = join(temporaryRoot, 'codex-home');
+    const target = linkScope(codexHome, join(temporaryRoot, 'dotfiles/codex'));
+    materializeCodexAgentBundleInstallPlan(
+      buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, codexHome)),
+    );
+    const removeOptions = {
+      packageId: 'demo-roles',
+      scope: 'user' as const,
+      projectRoot: join(temporaryRoot, 'project'),
+      codexHomeDirectory: codexHome,
+    };
+    const planned = buildCodexAgentBundleRemovePlan(removeOptions);
+    const journal = join(target.agents, '.agentforge/.agentforge-lifecycle.lock');
+    writeFileSync(
+      journal,
+      `${JSON.stringify({
+        schema: 'agentforge.codex-agent-lifecycle-journal/v4',
+        operation: 'remove',
+        owner: { packageId: 'demo-roles' },
+        scope: 'user',
+        before: planned.preconditions,
+        receipt: planned.receiptContent,
+        unresolved: planned.unresolved,
+        absent: planned.absences,
+        after: planned.plan.outputs
+          .filter((output) => output.kind === 'generated')
+          .map(({ destination, content }) => ({ destination, content })),
+        removals: planned.removals,
+      })}\n`,
+    );
+    const interrupted = buildCodexAgentBundleRemovePlan(removeOptions);
+    expect(interrupted.status).toBe('interrupted');
+    expect(() => materializeCodexAgentBundleLifecyclePlan(interrupted)).toThrow('incomplete');
+    repairCodexAgentBundleLifecyclePlan(interrupted);
+    expect(existsSync(journal)).toBe(false);
+    expect(existsSync(join(target.agents, 'demo-roles/alpha.toml'))).toBe(false);
+    expect(readFileSync(target.config, 'utf8')).toBe('model = "kept"\n');
+    expect(lstatSync(join(codexHome, 'agents')).isSymbolicLink()).toBe(true);
+    expect(lstatSync(join(codexHome, 'config.toml')).isSymbolicLink()).toBe(true);
+  });
+
+  test('refuses a dangling anchor, naming the link', async () => {
+    const bundleRoot = await compiledBundle();
+    const codexHome = join(temporaryRoot, 'codex-home');
+    mkdirSync(codexHome, { recursive: true });
+    symlinkSync(join(temporaryRoot, 'missing.toml'), join(codexHome, 'config.toml'));
+    expect(() => buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, codexHome))).toThrow(
+      `symbolic link is dangling: ${join(codexHome, 'config.toml')}`,
+    );
+    const remove = buildCodexAgentBundleRemovePlan({
+      packageId: 'demo-roles',
+      scope: 'user',
+      projectRoot: join(temporaryRoot, 'project'),
+      codexHomeDirectory: codexHome,
+    });
+    expect(remove.status).toBe('refused');
+    expect(() => materializeCodexAgentBundleLifecyclePlan(remove)).toThrow('dangling');
+  });
+
+  test('refuses anchors that resolve to the wrong type or mode, naming link and target', async () => {
+    const bundleRoot = await compiledBundle();
+    const wrongConfig = join(temporaryRoot, 'wrong-config');
+    mkdirSync(join(temporaryRoot, 'a-dir'), { recursive: true });
+    mkdirSync(wrongConfig, { recursive: true });
+    symlinkSync(join(temporaryRoot, 'a-dir'), join(wrongConfig, 'config.toml'));
+    expect(() => buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, wrongConfig))).toThrow(
+      `must resolve to a regular file: ${join(wrongConfig, 'config.toml')} -> ${realpathSync(join(temporaryRoot, 'a-dir'))}`,
+    );
+
+    const wrongAgents = join(temporaryRoot, 'wrong-agents');
+    const file = join(temporaryRoot, 'a-file');
+    mkdirSync(wrongAgents, { recursive: true });
+    writeFileSync(file, 'x');
+    symlinkSync(file, join(wrongAgents, 'agents'));
+    expect(() => buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, wrongAgents))).toThrow(
+      `must resolve to a real directory: ${join(wrongAgents, 'agents')} -> ${realpathSync(file)}`,
+    );
+
+    const loose = join(temporaryRoot, 'loose');
+    mkdirSync(loose, { recursive: true });
+    const looseTarget = join(temporaryRoot, 'loose-target.toml');
+    writeFileSync(looseTarget, '');
+    chmodSync(looseTarget, 0o644);
+    symlinkSync(looseTarget, join(loose, 'config.toml'));
+    expect(() => buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, loose))).toThrow(
+      'must have mode 0600',
+    );
+    expect(existsSync(join(loose, 'agents'))).toBe(false);
+  });
+
+  test('refuses a read-only target before any write', async () => {
+    if (process.getuid?.() === 0) return;
+    const bundleRoot = await compiledBundle();
+    const codexHome = join(temporaryRoot, 'codex-home');
+    const dotfiles = join(temporaryRoot, 'dotfiles/codex');
+    const target = linkScope(codexHome, dotfiles);
+    chmodSync(dotfiles, 0o555);
+    try {
+      expect(() => buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, codexHome))).toThrow(
+        'is not writable',
+      );
+    } finally {
+      chmodSync(dotfiles, 0o755);
+    }
+    expect(readFileSync(target.config, 'utf8')).toBe('model = "kept"\n');
+    expect(readdirSync(target.agents)).toEqual([]);
+  });
+
+  test('refuses to write when an anchor is retargeted between plan and materialize', async () => {
+    const bundleRoot = await compiledBundle();
+    const codexHome = join(temporaryRoot, 'codex-home');
+    const target = linkScope(codexHome, join(temporaryRoot, 'dotfiles/codex'));
+    const install = buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, codexHome));
+    const other = join(temporaryRoot, 'other.toml');
+    writeFileSync(other, 'model = "other"\n');
+    chmodSync(other, 0o600);
+    rmSync(join(codexHome, 'config.toml'));
+    symlinkSync(other, join(codexHome, 'config.toml'));
+    expect(() => materializeCodexAgentBundleInstallPlan(install)).toThrow('no longer resolves');
+    expect(readFileSync(other, 'utf8')).toBe('model = "other"\n');
+    expect(readFileSync(target.config, 'utf8')).toBe('model = "kept"\n');
+    expect(readdirSync(target.agents)).toEqual([]);
+
+    // The materializer re-checks on its own, past the bundle layer's guard.
+    expect(() =>
+      materializeCompilationOutputChanges(install.plan, codexHome, [], {
+        anchors: [
+          {
+            destination: 'config.toml',
+            link: join(codexHome, 'config.toml'),
+            target: target.config,
+          },
+        ],
+      }),
+    ).toThrow('no longer resolves');
+    expect(readdirSync(target.agents)).toEqual([]);
+  });
+
+  test('keeps refusing symbolic links at non-anchor paths under an anchored agents directory', async () => {
+    const bundleRoot = await compiledBundle();
+    const codexHome = join(temporaryRoot, 'codex-home');
+    const target = linkScope(codexHome, join(temporaryRoot, 'dotfiles/codex'));
+    const elsewhere = join(temporaryRoot, 'elsewhere');
+    mkdirSync(elsewhere);
+    symlinkSync(elsewhere, join(target.agents, 'demo-roles'));
+    const packageLink = buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, codexHome));
+    expect(checkCodexAgentBundleInstallPlan(packageLink)).toMatchObject({ status: 'unsupported' });
+    expect(() => materializeCodexAgentBundleInstallPlan(packageLink)).toThrow('refusing');
+    expect(readdirSync(elsewhere)).toEqual([]);
+    rmSync(join(target.agents, 'demo-roles'));
+
+    mkdirSync(join(target.agents, 'demo-roles'));
+    const outside = join(temporaryRoot, 'outside-definition.toml');
+    writeFileSync(outside, 'name = "outside"\n');
+    symlinkSync(outside, join(target.agents, 'demo-roles/alpha.toml'));
+    const definitionLink = buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, codexHome));
+    expect(checkCodexAgentBundleInstallPlan(definitionLink)).toMatchObject({
+      status: 'unsupported',
+    });
+    expect(() => materializeCodexAgentBundleInstallPlan(definitionLink)).toThrow(
+      'managed definition must be a regular file',
+    );
+    expect(readFileSync(outside, 'utf8')).toBe('name = "outside"\n');
+    expect(readFileSync(target.config, 'utf8')).toBe('model = "kept"\n');
+  });
+
+  test('still refuses a symlinked scope root and a symlinked receipt directory', async () => {
+    const bundleRoot = await compiledBundle();
+    const real = join(temporaryRoot, 'real-home');
+    mkdirSync(real);
+    symlinkSync(real, join(temporaryRoot, 'linked-home'));
+    expect(() =>
+      buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, join(temporaryRoot, 'linked-home'))),
+    ).toThrow('must be a real directory');
+
+    const codexHome = join(temporaryRoot, 'codex-home');
+    const target = linkScope(codexHome, join(temporaryRoot, 'dotfiles/codex'));
+    const receiptDir = join(temporaryRoot, 'receipt-dir');
+    mkdirSync(receiptDir);
+    symlinkSync(receiptDir, join(target.agents, '.agentforge'));
+    const install = buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, codexHome));
+    expect(checkCodexAgentBundleInstallPlan(install).status).toBe('unsupported');
+    expect(() => materializeCodexAgentBundleInstallPlan(install)).toThrow('refusing');
+    expect(readdirSync(receiptDir)).toEqual([]);
+  });
+
+  test('installs a project scope through a symlinked agents directory via the library', async () => {
+    const bundleRoot = await compiledBundle();
+    const project = join(temporaryRoot, 'project');
+    const dotfiles = join(temporaryRoot, 'dotfiles/project-codex');
+    mkdirSync(join(project, '.codex'), { recursive: true });
+    mkdirSync(join(dotfiles, 'agents'), { recursive: true });
+    symlinkSync(join(dotfiles, 'agents'), join(project, '.codex/agents'));
+    materializeCodexAgentBundleInstallPlan(
+      buildCodexAgentBundleInstallPlan({ bundleRoot, scope: 'project', projectRoot: project }),
+    );
+    expect(lstatSync(join(project, '.codex/agents')).isSymbolicLink()).toBe(true);
+    expect(existsSync(join(dotfiles, 'agents/demo-roles/beta.toml'))).toBe(true);
+    expect(lstatSync(join(project, '.codex/config.toml')).isFile()).toBe(true);
   });
 });
 
