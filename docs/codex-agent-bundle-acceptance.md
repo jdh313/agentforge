@@ -271,6 +271,35 @@ both scopes from their receipts without relying on the removed plugin cache.
 This verifies the native plugin fixture and independent cleanup, but it is
 still a local-binary probe.
 
+## Installed-plugin sync and session check
+
+`sync-codex-agents --scope user|project [--project-root <dir>] [--dry-run]`
+registers or updates the roles of every enabled Codex plugin that ships a
+bundle, in one command. It reads the user Codex home only to discover plugins:
+each `[plugins."<name>@<marketplace>"]` entry with `enabled = true` in
+`config.toml` (read through its link when it is one, with no write access
+needed), resolved to `plugins/cache/<marketplace>/<name>/<version>/`. One version
+directory is used as is; several resolve to the highest semver name and the
+choice is reported. Per bundle it runs the existing check, then installs a
+wholly missing installation, updates an owned one through the lifecycle plan,
+or skips a current one. It refuses, per plugin and without stopping the run:
+two enabled plugins shipping the same package id (they would share one
+receipt), a cached bundle older than the installed receipt, an edited,
+conflicted, or unsupported installation, and an unreadable cache entry. The
+exit status is 0 only when every bundle ends current or skipped. `--dry-run`
+writes nothing and prints the planned action per plugin.
+
+A package compiled with `codex-agent-bundle: true` also ships
+`hooks/agentforge-codex-agents.json`, its own `SessionStart` hook beside any
+authored hooks (ndr:pz1x3e). The hook runs a generated read-only script that
+checks user scope and the nearest project receipt found by walking up from the
+working directory. It prints nothing when any checked scope is current;
+otherwise it prints one `{"systemMessage": ...}` object, which Codex surfaces
+as a UI warning (plain stdout would reach only the model as developer
+context). Missing or stale roles point at `sync-codex-agents`; edited,
+conflicted, or unsupported roles point at `check-codex-agent` for review. It
+always exits 0 and never writes. Codex asks the user to trust the hook once.
+
 ## Boundaries
 
 Codex reads project configuration only for a trusted project. The runtime probe

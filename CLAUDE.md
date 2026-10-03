@@ -44,7 +44,10 @@ shell, OS, and global preferences; only narrows or extends here.
   check/update/remove/repair siblings) writes through a symlinked scope
   `config.toml` or `agents/` — the dotfiles-managed case — and refuses every
   other symlink; its lock and journal stay at the real `<root>/.agentforge/`
-  (`docs/codex-agent-bundle-acceptance.md`).
+  (`docs/codex-agent-bundle-acceptance.md`). `sync-codex-agents` installs or
+  updates every enabled installed plugin's bundle in one command, and bundle
+  packages ship a read-only `SessionStart` check hook that warns through
+  `systemMessage` when roles are not current.
   Remaining target projections stay gated on verified native semantics. See
   [docs/roadmap.md](docs/roadmap.md).
 - Releases are automated (semantic-release + per-platform binaries; see

@@ -499,6 +499,7 @@ agentforge preview-codex-agent-update <compiled-bundle-dir> --scope <user|projec
 agentforge update-codex-agent <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
 agentforge preview-codex-agent-remove <package-id> --scope <user|project> [--project-root <dir>]
 agentforge remove-codex-agent <package-id> --scope <user|project> [--project-root <dir>]
+agentforge sync-codex-agents --scope <user|project> [--project-root <dir>] [--dry-run]
 agentforge render <artifact-source-dir> --target <name> --out <out-dir>
 agentforge render <artifact-source-dir> --all-targets --out-base <out-base>
 agentforge validate <artifact-source-dir>
