@@ -568,7 +568,11 @@ agentforge list-targets
   `agents/<package-id>/<agent-id>.toml`, so packages with the same agent id can
   coexist. Existing receipts for `agents/<agent-id>.toml` remain readable and
   can update to the package-qualified path with a newly compiled bundle. The
-  managed `config.toml` is written with mode `0600`. The check reads installation
+  managed `config.toml` is written with mode `0600`. When the scope's
+  `config.toml` or `agents` is a symbolic link (for example, managed by
+  home-manager or another dotfiles tool), these commands write through it into
+  the resolved target and leave the link in place; any other symbolic link under
+  the scope is refused. See `docs/codex-agent-bundle-acceptance.md`. The check reads installation
   state without writing and reports `current`, `missing`, `edited`, `conflicted`, or
   `unsupported`, with paths for issues. Only `current` exits zero. A wholly
   missing installation can be installed; partial missing state needs review

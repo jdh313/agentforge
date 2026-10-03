@@ -122,13 +122,21 @@ must be resolved before installation. Preview applies the same preflight.
 Two scope anchors may be symbolic links, as a dotfiles manager such as
 home-manager creates them: `<root>/config.toml` and `<root>/agents`. Every
 lifecycle command resolves each anchor once, requires the target to be a
-regular 0600 file or a real directory respectively, and writes through it by
-staging beside the resolved target, so the link itself is never replaced.
-Each anchor is revalidated immediately before publishing; a retargeted,
-dangling, wrong-type, unwritable, or cross-device target is refused before any
-write. A symbolic link anywhere else under the root is still refused. The
-receipt and the lifecycle lock live under `agents/`, so with a linked anchor
-they land inside the resolved target. Preview, check, and install name each
+regular file or a real directory respectively, and writes through it by
+staging beside the resolved target, so the link itself is never replaced. As
+with an unlinked `config.toml`, the written configuration has mode `0600`
+whatever mode the target had before. Each anchor this operation writes
+through is revalidated immediately before publishing; a retargeted, dangling,
+wrong-type, unwritable, or cross-device target is refused before any write. A
+symbolic link anywhere else under the root is still refused. The receipt lives
+under `agents/`, so with a linked anchor it lands inside the resolved target
+and travels with the definitions. The lifecycle lock and journal stay at
+`<root>/.agentforge/` (always a real directory, never behind an anchor), and
+the journal records each followed anchor's target: if a link resolves
+elsewhere after an interruption, update, removal, repair, and install refuse
+and name both targets. A lock or journal left at the legacy
+`agents/.agentforge/` location by an earlier build still blocks and repairs.
+Preview, check, and install name each
 followed anchor as `config: <link> -> <target>` and `agents: <link> -> <target>`.
 
 The caller supplies the compiled bundle explicitly. Inventory discovery remains

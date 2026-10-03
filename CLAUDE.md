@@ -40,6 +40,11 @@ shell, OS, and global preferences; only narrows or extends here.
   Codex-cli 0.155.1 discovers roles in both `$CODEX_HOME/agents` and a
   repository's `.codex/agents`; explicit project-role selection has fresh
   runtime acceptance (`docs/limitations.md` L-011 and L-012).
+  The compiled Codex agent bundle lifecycle (`install-codex-agent` and its
+  check/update/remove/repair siblings) writes through a symlinked scope
+  `config.toml` or `agents/` — the dotfiles-managed case — and refuses every
+  other symlink; its lock and journal stay at the real `<root>/.agentforge/`
+  (`docs/codex-agent-bundle-acceptance.md`).
   Remaining target projections stay gated on verified native semantics. See
   [docs/roadmap.md](docs/roadmap.md).
 - Releases are automated (semantic-release + per-platform binaries; see
