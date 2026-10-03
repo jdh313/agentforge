@@ -93,7 +93,8 @@ describe('Codex agent bundle SessionStart check hook', () => {
 });
 
 describe('generated check script behavior', () => {
-  // A fake `agentforge` that logs each invocation and exits per scope.
+  // A fake `agentforge` that logs each invocation and reports a status per scope,
+  // exiting nonzero for anything but `current`.
   async function setup() {
     const plan = await compile();
     const plugin = join(root, 'plugin');
@@ -109,30 +110,47 @@ describe('generated check script behavior', () => {
         '#!/bin/sh',
         'echo "$*" >> "$FAKE_LOG"',
         'case "$*" in',
-        '  *"--scope user"*) exit "$FAKE_USER" ;;',
-        '  *) exit "$FAKE_PROJECT" ;;',
+        '  *"--scope user"*) status=$FAKE_USER ;;',
+        '  *) status=$FAKE_PROJECT ;;',
         'esac',
+        '[ "$status" = current ] && { echo "current: 3 managed paths at /x"; exit 0; }',
+        '[ "$status" = thrown ] && { echo "unsupported: /x: boom" >&2; exit 1; }',
+        'echo "$status: 3 managed paths at /x"',
+        'exit 1',
         '',
       ].join('\n'),
     );
     chmodSync(fake, 0o755);
     const project = join(root, 'project');
-    mkdirSync(project);
+    mkdirSync(join(project, 'nested/deeper'), { recursive: true });
     const log = join(root, 'log');
     writeFileSync(log, '');
-    const run = (env: Record<string, string>, path = `${bin}:/usr/bin:/bin`) => {
+    const run = (env: Record<string, string>, options: { path?: string; cwd?: string } = {}) => {
       const result = Bun.spawnSync(['sh', script], {
-        cwd: project,
-        env: { PATH: path, FAKE_LOG: log, FAKE_USER: '0', FAKE_PROJECT: '0', ...env },
+        cwd: options.cwd ?? project,
+        env: {
+          PATH: options.path ?? `${bin}:/usr/bin:/bin`,
+          FAKE_LOG: log,
+          FAKE_USER: 'current',
+          FAKE_PROJECT: 'current',
+          ...env,
+        },
       });
+      const out = result.stdout.toString();
       return {
         code: result.exitCode,
-        out: result.stdout.toString(),
+        out,
+        message:
+          out === '' ? undefined : (JSON.parse(out) as { systemMessage: string }).systemMessage,
         err: result.stderr.toString(),
         log: readFileSync(log, 'utf8'),
       };
     };
-    return { run, project };
+    const receipt = (dir: string) => {
+      mkdirSync(join(dir, '.codex/agents/.agentforge'), { recursive: true });
+      writeFileSync(join(dir, '.codex/agents/.agentforge/demo-roles.json'), '{}');
+    };
+    return { run, project, receipt, plugin };
   }
 
   test('is silent and exits 0 when the user scope is current', async () => {
@@ -144,35 +162,79 @@ describe('generated check script behavior', () => {
     expect(result.log).not.toContain('--scope project');
   });
 
-  test('prints one line and exits 0 when the user scope is not current', async () => {
+  test('prints one systemMessage object and exits 0 when roles are missing', async () => {
     const { run } = await setup();
-    const result = run({ FAKE_USER: '1' });
+    const result = run({ FAKE_USER: 'missing' });
     expect(result.code).toBe(0);
-    expect(result.out).toBe(
-      'demo-roles agent roles are not current for user: run agentforge sync-codex-agents --scope user\n',
+    expect(result.out.trim().split('\n')).toHaveLength(1);
+    expect(result.message).toBe(
+      'demo-roles: agent roles are not current at user scope; run agentforge sync-codex-agents --scope user',
+    );
+  });
+
+  test.each([
+    'edited',
+    'conflicted',
+    'unsupported',
+    'thrown',
+  ])('advises a review rather than a sync when the status is %s', async (status) => {
+    const { run, plugin } = await setup();
+    const result = run({ FAKE_USER: status });
+    expect(result.code).toBe(0);
+    expect(result.message).toBe(
+      `demo-roles: agent roles are not current at user scope; run agentforge check-codex-agent ${join(realpathSync(plugin), '.agentforge/codex-agent-bundle')} --scope user to review`,
     );
   });
 
   test('prints one line and exits 0 when agentforge is missing', async () => {
     const { run } = await setup();
-    const result = run({}, '/usr/bin:/bin');
+    const result = run({}, { path: '/usr/bin:/bin' });
     expect(result.code).toBe(0);
-    expect(result.out).toBe(
-      'demo-roles: agentforge not found; install a release from https://github.com/jdh313/agentforge/releases to register agent roles\n',
+    expect(result.message).toBe(
+      'demo-roles: AgentForge not found; install a released AgentForge binary from https://github.com/jdh313/agentforge/releases to register agent roles',
     );
   });
 
-  test('checks project scope only when a receipt exists', async () => {
-    const { run, project } = await setup();
-    mkdirSync(join(project, '.codex/agents/.agentforge'), { recursive: true });
-    writeFileSync(join(project, '.codex/agents/.agentforge/demo-roles.json'), '{}');
-    const current = run({});
-    expect(current).toMatchObject({ code: 0, out: '' });
-    expect(current.log).toContain(`--scope project --project-root ${realpathSync(project)}`);
-    const stale = run({ FAKE_PROJECT: '1' });
-    expect(stale.code).toBe(0);
-    expect(stale.out).toBe(
-      'demo-roles agent roles are not current for project: run agentforge sync-codex-agents --scope project\n',
+  test('is current when the project scope is current even though user is not', async () => {
+    const { run, project, receipt } = await setup();
+    receipt(project);
+    const result = run({ FAKE_USER: 'missing' });
+    expect(result).toMatchObject({ code: 0, out: '' });
+    expect(result.log).toContain(`--scope project --project-root ${realpathSync(project)}`);
+  });
+
+  test('is current when the user scope is current and the project is stale', async () => {
+    const { run, project, receipt } = await setup();
+    receipt(project);
+    const result = run({ FAKE_PROJECT: 'missing' });
+    expect(result).toMatchObject({ code: 0, out: '' });
+  });
+
+  test('reports the project scope when neither checked scope is current', async () => {
+    const { run, project, receipt } = await setup();
+    receipt(project);
+    const result = run({ FAKE_USER: 'missing', FAKE_PROJECT: 'missing' });
+    expect(result.code).toBe(0);
+    expect(result.message).toBe(
+      'demo-roles: agent roles are not current at project scope; run agentforge sync-codex-agents --scope project',
     );
+  });
+
+  test('walks up from a nested working directory to the project receipt', async () => {
+    const { run, project, receipt } = await setup();
+    receipt(project);
+    const result = run(
+      { FAKE_USER: 'missing', FAKE_PROJECT: 'edited' },
+      { cwd: join(project, 'nested/deeper') },
+    );
+    expect(result.log).toContain(`--project-root ${realpathSync(project)}`);
+    expect(result.message).toContain('at project scope; run agentforge check-codex-agent');
+    expect(result.message).toContain(`--project-root ${realpathSync(project)} to review`);
+  });
+
+  test('skips the project check when no ancestor holds a receipt', async () => {
+    const { run } = await setup();
+    const result = run({ FAKE_USER: 'missing' });
+    expect(result.log).not.toContain('--scope project');
   });
 });

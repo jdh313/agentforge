@@ -42,7 +42,7 @@ export interface CodexPluginEnumeration {
   /** Per-user Codex home the plugin configuration and cache were read from. */
   codexHome: string;
   configPath: string;
-  /** Followed `config.toml` anchor of the user home, when it is a symbolic link. */
+  /** Followed `config.toml` and `agents` anchors of the user Codex home. */
   anchors: CodexScopeAnchors;
   discoveries: readonly CodexPluginDiscovery[];
   disabled: number;
@@ -58,7 +58,7 @@ export function userCodexHome(env: NodeJS.ProcessEnv = process.env): string {
  * plugin configuration is Codex's own and is never written here.
  */
 export function enumerateInstalledCodexPlugins(codexHome: string): CodexPluginEnumeration {
-  const anchors = resolveScopeAnchors(codexHome);
+  const anchors = resolveScopeAnchors(codexHome, { requireWritable: false });
   const configPath = anchors.config?.target ?? join(codexHome, 'config.toml');
   let parsed: { plugins?: unknown } = {};
   if (existsSync(configPath)) {
@@ -81,10 +81,17 @@ export function enumerateInstalledCodexPlugins(codexHome: string): CodexPluginEn
       disabled += 1;
       continue;
     }
-    discoveries.push(discoverPlugin(codexHome, key));
+    try {
+      discoveries.push(discoverPlugin(codexHome, key));
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      discoveries.push({ kind: 'refused', key, reason: oneLine(reason) });
+    }
   }
   return { codexHome, configPath, anchors, discoveries, disabled };
 }
+
+const oneLine = (text: string): string => text.replace(/\s+/g, ' ').trim();
 
 const isPathSegment = (value: string): boolean =>
   value.length > 0 && value !== '.' && value !== '..' && !/[\\/]/.test(value);
@@ -111,7 +118,7 @@ function discoverPlugin(codexHome: string, key: string): CodexPluginDiscovery {
       return {
         kind: 'refused',
         key,
-        reason: `refusing to choose among version directories without a semver name: ${versions.sort().join(', ')}`,
+        reason: `version directories have no semver name, so none can be chosen: ${versions.sort().join(', ')}`,
       };
     }
     semver.sort((a, b) => Bun.semver.order(a, b));
@@ -141,6 +148,19 @@ function discoverPlugin(codexHome: string, key: string): CodexPluginDiscovery {
   };
 }
 
+/** The package version an ownership receipt records, or undefined when unreadable. */
+function installedPackageVersion(receiptPath: string): string | undefined {
+  try {
+    const receipt = JSON.parse(readFileSync(receiptPath, 'utf8')) as {
+      owner?: { packageVersion?: unknown };
+    };
+    const version = receipt.owner?.packageVersion;
+    return typeof version === 'string' ? version : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export type CodexSyncAction = 'install' | 'update' | 'current';
 export type CodexSyncOutcome =
   | { kind: 'done'; action: CodexSyncAction; anchors: CodexScopeAnchors }
@@ -158,8 +178,6 @@ const DONE_VERB: Record<CodexSyncAction, string> = {
   current: 'current',
 };
 
-const oneLine = (text: string): string => text.replace(/\s+/g, ' ').trim();
-
 /**
  * Bring one bundle's installation in line with the bundle, through the same
  * check, install, and lifecycle-update functions the single-bundle commands use.
@@ -172,7 +190,12 @@ export function syncCodexAgentBundle(
 ): CodexSyncOutcome {
   let anchors: CodexScopeAnchors | undefined;
   try {
-    const install = buildCodexAgentBundleInstallPlan({ bundleRoot: bundle.bundleRoot, ...scope });
+    const planOptions = {
+      bundleRoot: bundle.bundleRoot,
+      ...scope,
+      readOnlyAnchors: dryRun,
+    };
+    const install = buildCodexAgentBundleInstallPlan(planOptions);
     anchors = install.anchors;
     const result = checkCodexAgentBundleInstallPlan(install);
     if (result.status === 'current') return { kind: 'done', action: 'current', anchors };
@@ -189,7 +212,20 @@ export function syncCodexAgentBundle(
       if (!dryRun) materializeCodexAgentBundleInstallPlan(install);
       return { kind: 'done', action: 'install', anchors };
     }
-    const update = buildCodexAgentBundleUpdatePlan({ bundleRoot: bundle.bundleRoot, ...scope });
+    const installed = installedPackageVersion(join(install.destinationRoot, install.receiptPath));
+    if (
+      installed !== undefined &&
+      SEMVER.test(installed) &&
+      SEMVER.test(bundle.packageVersion) &&
+      Bun.semver.order(bundle.packageVersion, installed) < 0
+    ) {
+      return {
+        kind: 'refused',
+        reason: `cached ${bundle.packageId} ${bundle.packageVersion} is older than installed ${installed}; update the plugin in Codex`,
+        anchors,
+      };
+    }
+    const update = buildCodexAgentBundleUpdatePlan(planOptions);
     anchors = update.anchors;
     const preview = previewCodexAgentBundleLifecyclePlan(update);
     if (preview.status !== 'ready') {
@@ -199,7 +235,7 @@ export function syncCodexAgentBundle(
     if (preview.actions.length === 0) {
       return {
         kind: 'refused',
-        reason: `${result.status}: ${detail}; update has nothing to change`,
+        reason: `${result.status}: ${detail}; update would change nothing, so inspect the receipt`,
         anchors,
       };
     }
@@ -258,12 +294,12 @@ export function syncInstalledCodexAgents(options: {
     }
     if (found.kind === 'skipped') {
       counts.skipped += 1;
-      lines.push({ text: `${found.key}: skip: ${found.reason}`, ok: true });
+      lines.push({ text: `${found.key}: skipped: ${found.reason}`, ok: true });
       continue;
     }
     if (found.kind === 'refused') {
       counts.refused += 1;
-      lines.push({ text: `${found.key}: refuse: ${found.reason}`, ok: false });
+      lines.push({ text: `${found.key}: refused: ${found.reason}`, ok: false });
       continue;
     }
     for (const note of found.notes) lines.push({ text: note, ok: true });
@@ -273,7 +309,7 @@ export function syncInstalledCodexAgents(options: {
     if (sharing.length > 1) {
       counts.refused += 1;
       lines.push({
-        text: `${prefix}: refuse: package id ${bundle.packageId} is shipped by ${sharing.join(' and ')}, which would share one ownership receipt`,
+        text: `${prefix}: refused: package id ${bundle.packageId} is shipped by ${sharing.join(' and ')}, which would share one ownership receipt; keep one of them enabled`,
         ok: false,
       });
       continue;
@@ -284,7 +320,7 @@ export function syncInstalledCodexAgents(options: {
     }
     if (outcome.kind === 'refused') {
       counts.refused += 1;
-      lines.push({ text: `${prefix}: refuse: ${outcome.reason}`, ok: false });
+      lines.push({ text: `${prefix}: refused: ${outcome.reason}`, ok: false });
       continue;
     }
     counts[outcome.action] += 1;

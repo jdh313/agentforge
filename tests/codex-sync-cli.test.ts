@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
+  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -54,7 +55,11 @@ const sync = (...extra: string[]) =>
   runCli('sync-codex-agents', '--scope', 'user', '--project-root', project, ...extra);
 
 /** Compile the demo fixture under a package id and version, returning its bundle directory. */
-async function compileBundle(id: string, version: string): Promise<string> {
+async function compileBundle(
+  id: string,
+  version: string,
+  mutate?: (source: string) => void,
+): Promise<string> {
   const source = mkdtempSync(join(root, 'source-'));
   cpSync(fixture, source, { recursive: true });
   for (const file of ['MARKETPLACE.yaml', 'packages/demo/PACKAGE.yaml']) {
@@ -64,6 +69,7 @@ async function compileBundle(id: string, version: string): Promise<string> {
       readFileSync(path, 'utf8').replaceAll('demo-roles', id).replace('2.3.4', version),
     );
   }
+  mutate?.(source);
   const out = join(source, 'compiled');
   const loaded = await loadMarketplaceDefinition(join(source, 'MARKETPLACE.yaml'));
   materializeCompilation(compileMarketplace(loaded, allTargets(), { outputRoot: out }), out);
@@ -163,7 +169,7 @@ describe('sync-codex-agents', () => {
     writeConfig({ 'ghost@market': true });
     const result = sync();
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('ghost@market: skip: no cached plugin content');
+    expect(result.stdout).toContain('ghost@market: skipped: no cached plugin content');
   });
 
   test('refuses a duplicate package id for both plugins while another still syncs', async () => {
@@ -201,7 +207,7 @@ describe('sync-codex-agents', () => {
 
     const result = sync();
     expect(result.exitCode).toBe(1);
-    expect(result.stdout).toContain('demo@market: refuse:');
+    expect(result.stdout).toContain('demo@market: refused:');
     expect(result.stdout).toContain('abc123, def456');
     expect(existsSync(join(codexHome, 'agents'))).toBe(false);
   });
@@ -215,7 +221,7 @@ describe('sync-codex-agents', () => {
 
     const result = sync();
     expect(result.exitCode).toBe(1);
-    expect(result.stdout).toContain('demo@market demo-roles 2.3.4: refuse: edited:');
+    expect(result.stdout).toContain('demo@market demo-roles 2.3.4: refused: edited:');
     expect(readFileSync(role, 'utf8')).toContain('# local edit');
   });
 
@@ -229,7 +235,7 @@ describe('sync-codex-agents', () => {
 
     const result = sync();
     expect(result.exitCode).toBe(1);
-    expect(result.stdout).toContain('demo-roles 2.4.0: refuse:');
+    expect(result.stdout).toContain('demo-roles 2.4.0: refused:');
     expect(readFileSync(role, 'utf8')).toContain('# local edit');
   });
 
@@ -259,5 +265,94 @@ describe('sync-codex-agents', () => {
     expect(result.exitCode).toBe(0);
     expect(existsSync(join(project, '.codex/agents/demo-roles/alpha.toml'))).toBe(true);
     expect(existsSync(alphaRole('demo-roles'))).toBe(false);
+  });
+
+  test('dry run and project scope work with a read-only config.toml target', async () => {
+    cachePlugin('demo@market', '1.0.0', await compileBundle('demo-roles', '2.3.4'));
+    const dotfiles = join(root, 'dotfiles');
+    mkdirSync(dotfiles);
+    const target = join(dotfiles, 'config.toml');
+    writeConfig({ 'demo@market': true }, target);
+    symlinkSync(target, join(codexHome, 'config.toml'));
+    chmodSync(target, 0o444);
+    chmodSync(dotfiles, 0o555);
+    try {
+      const planned = sync('--dry-run');
+      expect(planned.stderr).toBe('');
+      expect(planned.exitCode).toBe(0);
+      expect(planned.stdout).toContain('demo@market demo-roles 2.3.4: install');
+      expect(existsSync(join(codexHome, 'agents'))).toBe(false);
+
+      const projectRun = runCli(
+        'sync-codex-agents',
+        '--scope',
+        'project',
+        '--project-root',
+        project,
+      );
+      expect(projectRun.exitCode).toBe(0);
+      expect(existsSync(join(project, '.codex/agents/demo-roles/alpha.toml'))).toBe(true);
+
+      // A real write into the user scope keeps its writability check.
+      const written = sync();
+      expect(written.exitCode).toBe(1);
+      expect(written.stdout).toContain('refused:');
+      expect(written.stdout).toContain('not writable');
+    } finally {
+      chmodSync(dotfiles, 0o755);
+    }
+  });
+
+  test('one unreadable cache entry is refused without stopping the other plugins', async () => {
+    cachePlugin('demo@market', '1.0.0', await compileBundle('demo-roles', '2.3.4'));
+    const broken = join(codexHome, 'plugins/cache/broken/plug');
+    mkdirSync(broken, { recursive: true });
+    symlinkSync(join(root, 'nowhere'), join(broken, '1.0.0'));
+    writeFileSync(join(broken, '1.1.0'), 'not a directory');
+    const notDirectory = join(codexHome, 'plugins/cache/odd');
+    mkdirSync(notDirectory, { recursive: true });
+    writeFileSync(join(notDirectory, 'thing'), 'a file where a directory belongs');
+    writeConfig({ 'plug@broken': true, 'thing@odd': true, 'demo@market': true });
+
+    const result = sync();
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain('demo@market demo-roles 2.3.4: installed');
+    expect(result.stdout).toContain('thing@odd: refused:');
+    expect(existsSync(alphaRole('demo-roles'))).toBe(true);
+  });
+
+  test('refuses to downgrade an installed bundle to an older cached version', async () => {
+    const newer = join(codexHome, 'plugins/cache/market/demo/1.0.0');
+    cachePlugin('demo@market', '1.0.0', await compileBundle('demo-roles', '2.4.0'));
+    writeConfig({ 'demo@market': true });
+    expect(sync().exitCode).toBe(0);
+    rmSync(newer, { recursive: true });
+    cachePlugin('demo@market', '0.9.0', await compileBundle('demo-roles', '2.3.4'));
+
+    const result = sync();
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain(
+      'refused: cached demo-roles 2.3.4 is older than installed 2.4.0; update the plugin in Codex',
+    );
+    expect(readFileSync(join(codexHome, 'agents/.agentforge/demo-roles.json'), 'utf8')).toContain(
+      '2.4.0',
+    );
+  });
+
+  test('updates when the cached version equals the installed one but the content differs', async () => {
+    cachePlugin('demo@market', '1.0.0', await compileBundle('demo-roles', '2.3.4'));
+    writeConfig({ 'demo@market': true });
+    expect(sync().exitCode).toBe(0);
+    rmSync(join(codexHome, 'plugins/cache/market/demo/1.0.0'), { recursive: true });
+    const changed = await compileBundle('demo-roles', '2.3.4', (source) => {
+      const agent = join(source, 'packages/demo/agents/alpha.md');
+      writeFileSync(agent, `${readFileSync(agent, 'utf8')}\nExtra guidance.\n`);
+    });
+    cachePlugin('demo@market', '1.0.0', changed);
+
+    const result = sync();
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('demo@market demo-roles 2.3.4: updated');
+    expect(readFileSync(alphaRole('demo-roles'), 'utf8')).toContain('Extra guidance.');
   });
 });

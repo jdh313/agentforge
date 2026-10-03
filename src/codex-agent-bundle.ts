@@ -331,6 +331,8 @@ export interface BuildCodexAgentBundleInstallPlanOptions {
   projectRoot: string;
   homeDirectory?: string;
   codexHomeDirectory?: string;
+  /** Plan for reading only: followed anchor targets need not be writable. */
+  readOnlyAnchors?: boolean;
 }
 export interface CodexAgentBundleInstallPlan {
   bundleRoot: string;
@@ -402,7 +404,9 @@ export function buildCodexAgentBundleInstallPlan(
   });
   const destinationRoot = resolve(agentsRoot, '..');
   assertSafeDestinationRoot(destinationRoot);
-  const anchors = resolveScopeAnchors(destinationRoot);
+  const anchors = resolveScopeAnchors(destinationRoot, {
+    requireWritable: options.readOnlyAnchors !== true,
+  });
   const registrationPath = 'config.toml';
   const registration = buildRoleRegistrations(
     join(destinationRoot, registrationPath),
@@ -1974,9 +1978,23 @@ export class CodexScopeAnchorError extends Error {
 }
 
 /** Resolve each anchor once; the result is the only place a link is followed. */
-export function resolveScopeAnchors(root: string): CodexScopeAnchors {
-  const config = resolveAnchor(join(root, 'config.toml'), 'file', 'Codex role configuration');
-  const agents = resolveAnchor(join(root, 'agents'), 'directory', 'Codex agents directory');
+export function resolveScopeAnchors(
+  root: string,
+  options: { requireWritable?: boolean } = {},
+): CodexScopeAnchors {
+  const requireWritable = options.requireWritable ?? true;
+  const config = resolveAnchor(
+    join(root, 'config.toml'),
+    'file',
+    'Codex role configuration',
+    requireWritable,
+  );
+  const agents = resolveAnchor(
+    join(root, 'agents'),
+    'directory',
+    'Codex agents directory',
+    requireWritable,
+  );
   return { ...(config ? { config } : {}), ...(agents ? { agents } : {}) };
 }
 
@@ -1984,6 +2002,7 @@ function resolveAnchor(
   link: string,
   kind: 'file' | 'directory',
   label: string,
+  requireWritable: boolean,
 ): CodexScopeAnchor | undefined {
   if (!lstatSync(link, { throwIfNoEntry: false })?.isSymbolicLink()) return undefined;
   let target: string;
@@ -2002,6 +2021,7 @@ function resolveAnchor(
     );
   // The target's mode is not a precondition: like a regular config.toml, it is
   // replaced by a 0600 file through `privateDestinations`.
+  if (!requireWritable) return { link, target };
   try {
     accessSync(target, constants.W_OK);
     accessSync(dirname(target), constants.W_OK);
