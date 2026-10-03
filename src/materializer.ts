@@ -50,6 +50,60 @@ interface ManagedLocation {
   parentRoot: string;
 }
 
+/** Where a managed destination really lives, and the directory its parent walk stops at. */
+export interface ManagedDestination {
+  destination: string;
+  parentRoot: string;
+  anchor?: ManagedOutputAnchor;
+}
+
+/**
+ * The one mapping from a scope-relative managed destination to its physical
+ * path. Readers, parent-chain checks, and the publisher all go through it, so
+ * they cannot disagree about where an anchored destination lands.
+ */
+export function locateManagedDestination(
+  outputRoot: string,
+  anchors: readonly ManagedOutputAnchor[] | undefined,
+  proposed: string,
+): ManagedDestination {
+  const root = resolve(outputRoot);
+  const anchor = anchors?.find(({ destination }) =>
+    destination.endsWith('/') ? proposed.startsWith(destination) : proposed === destination,
+  );
+  if (!anchor) {
+    const destination = resolve(root, proposed);
+    requireContainedDestination(root, destination, proposed);
+    return { destination, parentRoot: root };
+  }
+  if (!anchor.destination.endsWith('/'))
+    return { destination: anchor.target, parentRoot: dirname(anchor.target), anchor };
+  const destination = resolve(anchor.target, proposed.slice(anchor.destination.length));
+  requireContainedDestination(anchor.target, destination, proposed);
+  return { destination, parentRoot: anchor.target, anchor };
+}
+
+/** What `link` resolves to right now, or `undefined` when it is dangling or gone. */
+export function currentAnchorTarget(link: string): string | undefined {
+  try {
+    return realpathSync(link);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Refuse when an anchor no longer resolves to the target it was planned against. */
+export function assertAnchorUnchanged(
+  anchor: Pick<ManagedOutputAnchor, 'link' | 'target'>,
+  verb: string,
+  hint = '',
+): void {
+  if (currentAnchorTarget(anchor.link) !== anchor.target)
+    throw new MaterializationError(
+      `refusing to ${verb}: ${anchor.link} no longer resolves to ${anchor.target}${hint}`,
+    );
+}
+
 export class MaterializationError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
@@ -156,38 +210,31 @@ export function materializeCompilationOutputChanges(
     }
     return lane;
   };
+  const usedAnchors = new Set<ManagedOutputAnchor>();
   const locate = (proposed: string): ManagedLocation => {
-    const anchor = options.anchors?.find(({ destination }) =>
-      destination.endsWith('/') ? proposed.startsWith(destination) : proposed === destination,
+    const { destination, parentRoot, anchor } = locateManagedDestination(
+      destinationRoot,
+      options.anchors,
+      proposed,
     );
     if (!anchor) {
-      const destination = resolve(destinationRoot, proposed);
-      requireContainedDestination(destinationRoot, destination, proposed);
       return {
         destination,
         staged: resolve(stagingRoot, proposed),
         backup: resolve(backupRoot, proposed),
-        parentRoot: destinationRoot,
+        parentRoot,
       };
     }
+    usedAnchors.add(anchor);
     const lane = anchorLane(anchor);
-    if (!anchor.destination.endsWith('/')) {
-      const file = basename(anchor.target);
-      return {
-        destination: anchor.target,
-        staged: resolve(lane.staging, file),
-        backup: resolve(lane.backup, file),
-        parentRoot: dirname(anchor.target),
-      };
-    }
-    const rest = proposed.slice(anchor.destination.length);
-    const destination = resolve(anchor.target, rest);
-    requireContainedDestination(anchor.target, destination, proposed);
+    const rest = anchor.destination.endsWith('/')
+      ? proposed.slice(anchor.destination.length)
+      : basename(anchor.target);
     return {
       destination,
       staged: resolve(lane.staging, rest),
       backup: resolve(lane.backup, rest),
-      parentRoot: anchor.target,
+      parentRoot,
     };
   };
 
@@ -196,19 +243,11 @@ export function materializeCompilationOutputChanges(
       writeStagedOutput(output, locate(output.destination).staged, options);
     }
     mkdirSync(destinationRoot, { recursive: true });
-    for (const anchor of options.anchors ?? []) {
-      let current: string | undefined;
-      try {
-        current = realpathSync(anchor.link);
-      } catch {
-        current = undefined;
-      }
-      if (current !== anchor.target) {
-        throw new MaterializationError(
-          `refusing to publish: ${anchor.link} no longer resolves to ${anchor.target}`,
-        );
-      }
-    }
+    // Removals resolve through anchors too, so locate them before deciding
+    // which links this call depends on. A link nothing here touches is not ours
+    // to vouch for: refusing over it would strand a lock release.
+    for (const removal of removals) locate(removal);
+    for (const anchor of usedAnchors) assertAnchorUnchanged(anchor, 'publish');
     publishManagedOutputChanges(plan.outputs, removals, locate);
   } catch (cause) {
     const detail = cause instanceof Error ? `: ${cause.message}` : '';
@@ -469,7 +508,9 @@ function renameWithinFilesystem(from: string, to: string): void {
 
 function requireRegularParentPath(root: string, parent: string, proposed: string): void {
   let current = parent;
-  while (current !== root) {
+  // Stop at the filesystem root as well: a parent that is not under `root`
+  // must not walk upward forever.
+  while (current !== root && current !== dirname(current)) {
     const entry = lstatSync(current, { throwIfNoEntry: false });
     if (entry?.isSymbolicLink() || (entry && !entry.isDirectory())) {
       throw new MaterializationError(

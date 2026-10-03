@@ -5,11 +5,11 @@ import { Command } from 'commander';
 import matter from 'gray-matter';
 import pkg from '../package.json' with { type: 'json' };
 import { checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
-import type { CodexScopeAnchors } from './codex-agent-bundle.ts';
 import {
   buildCodexAgentBundleInstallPlan,
   buildCodexAgentBundleRemovePlan,
   buildCodexAgentBundleUpdatePlan,
+  type CodexScopeAnchors,
   checkCodexAgentBundleInstallPlan,
   compileCodexAgentBundle,
   describeCodexScopeAnchors,

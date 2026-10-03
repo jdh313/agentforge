@@ -824,7 +824,7 @@ describe('compiled Codex package agent bundle', () => {
       scope: 'project',
       projectRoot: project,
     });
-    const journalPath = join(project, '.codex/agents/.agentforge/.agentforge-lifecycle.lock');
+    const journalPath = join(project, '.codex/.agentforge/.agentforge-lifecycle.lock');
     writeFileSync(
       journalPath,
       `${JSON.stringify({
@@ -868,7 +868,7 @@ describe('compiled Codex package agent bundle', () => {
       scope: 'project',
       projectRoot: project,
     });
-    const journalPath = join(project, '.codex/agents/.agentforge/.agentforge-lifecycle.lock');
+    const journalPath = join(project, '.codex/.agentforge/.agentforge-lifecycle.lock');
     writeFileSync(
       journalPath,
       `${JSON.stringify({
@@ -919,7 +919,7 @@ describe('compiled Codex package agent bundle', () => {
     const auth = join(project, '.codex/auth.json');
     writeFileSync(auth, '{"token":"keep"}\n');
     writeFileSync(
-      join(project, '.codex/agents/.agentforge/.agentforge-lifecycle.lock'),
+      join(project, '.codex/.agentforge/.agentforge-lifecycle.lock'),
       `${JSON.stringify({
         schema: 'agentforge.codex-agent-lifecycle-journal/v4',
         operation: 'remove',
@@ -990,7 +990,7 @@ describe('compiled Codex package agent bundle', () => {
     const configPath = join(configProject, '.codex/config.toml');
     const originalConfig = readFileSync(configPath, 'utf8');
     writeFileSync(
-      join(configProject, '.codex/agents/.agentforge/.agentforge-lifecycle.lock'),
+      join(configProject, '.codex/.agentforge/.agentforge-lifecycle.lock'),
       `${JSON.stringify(forgedConfig)}\n`,
     );
     const interruptedConfig = buildCodexAgentBundleRemovePlan({
@@ -1031,10 +1031,7 @@ describe('compiled Codex package agent bundle', () => {
     const retainedDocument = JSON.parse(retainedReceipt.content);
     retainedDocument.owner.packageVersion = 'forged';
     retainedReceipt.content = `${JSON.stringify(retainedDocument, null, 2)}\n`;
-    const retainedLock = join(
-      retainedProject,
-      '.codex/agents/.agentforge/.agentforge-lifecycle.lock',
-    );
+    const retainedLock = join(retainedProject, '.codex/.agentforge/.agentforge-lifecycle.lock');
     writeFileSync(retainedLock, `${JSON.stringify(forgedOwner)}\n`);
     const interruptedOwner = buildCodexAgentBundleRemovePlan({
       packageId: 'demo-roles',
@@ -1115,7 +1112,7 @@ describe('compiled Codex package agent bundle', () => {
     const foreignDefinition = join(updateProject, '.codex/agents/demo-roles/injected.toml');
     writeFileSync(foreignDefinition, 'name = "foreign"\n');
     writeFileSync(
-      join(updateProject, '.codex/agents/.agentforge/.agentforge-lifecycle.lock'),
+      join(updateProject, '.codex/.agentforge/.agentforge-lifecycle.lock'),
       `${JSON.stringify(forgedUpdate)}\n`,
     );
     const interruptedUpdate = buildCodexAgentBundleUpdatePlan({
@@ -1161,7 +1158,7 @@ describe('compiled Codex package agent bundle', () => {
     const installedAlpha = join(updateProject, '.codex/agents/demo-roles/alpha.toml');
     const originalAlpha = readFileSync(installedAlpha, 'utf8');
     writeFileSync(
-      join(updateProject, '.codex/agents/.agentforge/.agentforge-lifecycle.lock'),
+      join(updateProject, '.codex/.agentforge/.agentforge-lifecycle.lock'),
       `${JSON.stringify({
         schema: 'agentforge.codex-agent-lifecycle-journal/v4',
         operation: 'update',
@@ -1202,7 +1199,7 @@ describe('compiled Codex package agent bundle', () => {
     const removeConfig = join(removeProject, '.codex/config.toml');
     const originalRemoveConfig = readFileSync(removeConfig, 'utf8');
     writeFileSync(
-      join(removeProject, '.codex/agents/.agentforge/.agentforge-lifecycle.lock'),
+      join(removeProject, '.codex/.agentforge/.agentforge-lifecycle.lock'),
       `${JSON.stringify({
         schema: 'agentforge.codex-agent-lifecycle-journal/v4',
         operation: 'remove',
@@ -1260,7 +1257,7 @@ describe('compiled Codex package agent bundle', () => {
       projectRoot: project,
       codexHomeDirectory: codexHome,
     });
-    const lock = join(codexHome, 'agents/.agentforge/.agentforge-lifecycle.lock');
+    const lock = join(codexHome, '.agentforge/.agentforge-lifecycle.lock');
     writeFileSync(
       lock,
       `${JSON.stringify({
@@ -1467,6 +1464,29 @@ describe('compiled Codex package agent bundle', () => {
   });
 
   test('rejects install preview while a lifecycle journal locks the scope', async () => {
+    const loaded = await loadMarketplaceDefinition(join(FIXTURE, 'MARKETPLACE.yaml'));
+    const out = join(temporaryRoot, 'compiled');
+    materializeCompilation(compileMarketplace(loaded, allTargets(), { outputRoot: out }), out);
+    const bundleRoot = join(out, 'packages/demo/.agentforge/codex-agent-bundle');
+    const project = join(temporaryRoot, 'project');
+    const lock = join(project, '.codex/.agentforge/.agentforge-lifecycle.lock');
+    mkdirSync(join(project, '.codex/.agentforge'), { recursive: true });
+    writeFileSync(lock, '{"schema":"agentforge.codex-agent-lifecycle-journal/v4"}\n');
+    const preview = runCli(
+      {},
+      'preview-codex-agent',
+      bundleRoot,
+      '--scope',
+      'project',
+      '--project-root',
+      project,
+    );
+    expect(preview.exitCode).toBe(1);
+    expect(preview.stderr).toContain('incomplete lifecycle operation');
+    expect(existsSync(lock)).toBe(true);
+  });
+
+  test('still rejects install preview while a lifecycle journal sits at the pre-relocation path', async () => {
     const loaded = await loadMarketplaceDefinition(join(FIXTURE, 'MARKETPLACE.yaml'));
     const out = join(temporaryRoot, 'compiled');
     materializeCompilation(compileMarketplace(loaded, allTargets(), { outputRoot: out }), out);
@@ -1802,7 +1822,7 @@ describe('symlinked Codex scope anchors', () => {
     expect(existsSync(join(target.agents, '.agentforge/demo-roles.json'))).toBe(false);
   });
 
-  test('repairs an interrupted lifecycle journal that lives behind the agents link', async () => {
+  test('repairs an interrupted pre-relocation journal that lives behind the agents link', async () => {
     const bundleRoot = await compiledBundle();
     const codexHome = join(temporaryRoot, 'codex-home');
     const target = linkScope(codexHome, join(temporaryRoot, 'dotfiles/codex'));
@@ -1861,9 +1881,15 @@ describe('symlinked Codex scope anchors', () => {
     });
     expect(remove.status).toBe('refused');
     expect(() => materializeCodexAgentBundleLifecyclePlan(remove)).toThrow('dangling');
+    // Update refuses the same way instead of throwing, and both name the link.
+    const update = buildCodexAgentBundleUpdatePlan(userOptions(bundleRoot, codexHome));
+    expect(update.status).toBe('refused');
+    for (const plan of [remove, update])
+      expect(plan.issues[0]?.path).toBe(join(codexHome, 'config.toml'));
+    expect(update.issues[0]?.message).toContain('dangling');
   });
 
-  test('refuses anchors that resolve to the wrong type or mode, naming link and target', async () => {
+  test('refuses anchors that resolve to the wrong type, naming link and target', async () => {
     const bundleRoot = await compiledBundle();
     const wrongConfig = join(temporaryRoot, 'wrong-config');
     mkdirSync(join(temporaryRoot, 'a-dir'), { recursive: true });
@@ -1881,17 +1907,23 @@ describe('symlinked Codex scope anchors', () => {
     expect(() => buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, wrongAgents))).toThrow(
       `must resolve to a real directory: ${join(wrongAgents, 'agents')} -> ${realpathSync(file)}`,
     );
+  });
 
-    const loose = join(temporaryRoot, 'loose');
-    mkdirSync(loose, { recursive: true });
-    const looseTarget = join(temporaryRoot, 'loose-target.toml');
-    writeFileSync(looseTarget, '');
-    chmodSync(looseTarget, 0o644);
-    symlinkSync(looseTarget, join(loose, 'config.toml'));
-    expect(() => buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, loose))).toThrow(
-      'must have mode 0600',
-    );
-    expect(existsSync(join(loose, 'agents'))).toBe(false);
+  test('accepts a config target that is not mode 0600 and writes it back as 0600', async () => {
+    const bundleRoot = await compiledBundle();
+    const codexHome = join(temporaryRoot, 'codex-home');
+    const target = linkScope(codexHome, join(temporaryRoot, 'dotfiles/codex'));
+    chmodSync(target.config, 0o644);
+    const install = buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, codexHome));
+    materializeCodexAgentBundleInstallPlan(install);
+    expect(lstatSync(join(codexHome, 'config.toml')).isSymbolicLink()).toBe(true);
+    expect(readFileSync(target.config, 'utf8')).toContain('[agents."demo-roles:alpha"]');
+    expect(statSync(target.config).mode & 0o777).toBe(0o600);
+    expect(
+      checkCodexAgentBundleInstallPlan(
+        buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, codexHome)),
+      ).status,
+    ).toBe('current');
   });
 
   test('refuses a read-only target before any write', async () => {
@@ -2003,6 +2035,140 @@ describe('symlinked Codex scope anchors', () => {
     expect(lstatSync(join(project, '.codex/agents')).isSymbolicLink()).toBe(true);
     expect(existsSync(join(dotfiles, 'agents/demo-roles/beta.toml'))).toBe(true);
     expect(lstatSync(join(project, '.codex/config.toml')).isFile()).toBe(true);
+  });
+
+  test('lock and journal live at the scope root and never inside a followed target', async () => {
+    const bundleRoot = await compiledBundle();
+    const codexHome = join(temporaryRoot, 'codex-home');
+    const target = linkScope(codexHome, join(temporaryRoot, 'dotfiles/codex'));
+    const options = userOptions(bundleRoot, codexHome);
+    materializeCodexAgentBundleInstallPlan(buildCodexAgentBundleInstallPlan(options));
+    const planned = buildCodexAgentBundleUpdatePlan(options);
+    const root = join(codexHome, '.agentforge/.agentforge-lifecycle.lock');
+    expect(planned.journalPath).toBe('.agentforge/.agentforge-lifecycle.lock');
+    // Receipt stays with the definitions; the scope root gains only `.agentforge`.
+    expect(readdirSync(target.agents, { recursive: true }).join('\n')).not.toContain('lifecycle');
+    expect(existsSync(root)).toBe(false);
+  });
+
+  /** Plant the journal an interrupted update of `options` would have left, recording the anchors. */
+  function plantInterruptedUpdate(
+    bundleRoot: string,
+    codexHome: string,
+    target: { config: string; agents: string },
+  ): string {
+    const planned = buildCodexAgentBundleUpdatePlan(userOptions(bundleRoot, codexHome));
+    const journal = join(codexHome, '.agentforge/.agentforge-lifecycle.lock');
+    mkdirSync(dirname(journal), { recursive: true });
+    writeFileSync(
+      journal,
+      `${JSON.stringify({
+        schema: 'agentforge.codex-agent-lifecycle-journal/v4',
+        operation: 'update',
+        owner: { packageId: 'demo-roles' },
+        scope: 'user',
+        before: planned.preconditions,
+        receipt: planned.receiptContent,
+        unresolved: planned.unresolved,
+        absent: planned.absences,
+        after: planned.plan.outputs
+          .filter((output) => output.kind === 'generated')
+          .map(({ destination, content }) => ({ destination, content })),
+        removals: planned.removals,
+        anchors: { config: target.config, agents: target.agents },
+      })}\n`,
+    );
+    return journal;
+  }
+
+  test('refuses update, install, and repair when the agents link moved since the journal was written', async () => {
+    const bundleRoot = await compiledBundle();
+    const codexHome = join(temporaryRoot, 'codex-home');
+    const target = linkScope(codexHome, join(temporaryRoot, 'dotfiles/codex'));
+    const options = userOptions(bundleRoot, codexHome);
+    materializeCodexAgentBundleInstallPlan(buildCodexAgentBundleInstallPlan(options));
+    const journal = plantInterruptedUpdate(bundleRoot, codexHome, target);
+
+    // Repoint the agents link at a different (empty) directory.
+    const elsewhere = join(temporaryRoot, 'dotfiles/other-agents');
+    mkdirSync(elsewhere, { recursive: true });
+    rmSync(join(codexHome, 'agents'));
+    symlinkSync(elsewhere, join(codexHome, 'agents'));
+    const moved = realpathSync(elsewhere);
+
+    const update = buildCodexAgentBundleUpdatePlan(options);
+    expect(update.status).toBe('interrupted');
+    for (const plan of [
+      update,
+      buildCodexAgentBundleRemovePlan({
+        packageId: 'demo-roles',
+        scope: 'user',
+        projectRoot: options.projectRoot,
+        codexHomeDirectory: codexHome,
+      }),
+    ]) {
+      expect(plan.issues[0]?.path).toBe(join(codexHome, 'agents'));
+      expect(plan.issues[0]?.message).toContain(target.agents);
+      expect(plan.issues[0]?.message).toContain(moved);
+      expect(() => materializeCodexAgentBundleLifecyclePlan(plan)).toThrow(moved);
+      expect(() => repairCodexAgentBundleLifecyclePlan(plan)).toThrow(target.agents);
+    }
+    const install = buildCodexAgentBundleInstallPlan(options);
+    expect(() => materializeCodexAgentBundleInstallPlan(install)).toThrow(
+      `${target.agents} when the lifecycle operation was interrupted but now resolves to ${moved}`,
+    );
+    expect(existsSync(journal)).toBe(true);
+
+    // Pointing the link back makes the same journal repairable again.
+    rmSync(join(codexHome, 'agents'));
+    symlinkSync(target.agents, join(codexHome, 'agents'));
+    const restored = buildCodexAgentBundleUpdatePlan(options);
+    expect(restored.status).toBe('interrupted');
+    repairCodexAgentBundleLifecyclePlan(restored);
+    expect(existsSync(journal)).toBe(false);
+  });
+
+  test('a repointed link nothing in the call resolves through does not block a lock release', async () => {
+    const bundleRoot = await compiledBundle();
+    const codexHome = join(temporaryRoot, 'codex-home');
+    const target = linkScope(codexHome, join(temporaryRoot, 'dotfiles/codex'));
+    const install = buildCodexAgentBundleInstallPlan(userOptions(bundleRoot, codexHome));
+    const lock = join(codexHome, '.agentforge/.agentforge-lifecycle.lock');
+    mkdirSync(dirname(lock), { recursive: true });
+    writeFileSync(lock, '{}\n');
+    const other = join(temporaryRoot, 'other.toml');
+    writeFileSync(other, '');
+    rmSync(join(codexHome, 'config.toml'));
+    symlinkSync(other, join(codexHome, 'config.toml'));
+    const empty = { ...install.plan, outputs: [] };
+    materializeCompilationOutputChanges(
+      empty,
+      codexHome,
+      ['.agentforge/.agentforge-lifecycle.lock'],
+      {
+        anchors: [
+          {
+            destination: 'config.toml',
+            link: join(codexHome, 'config.toml'),
+            target: target.config,
+          },
+          { destination: 'agents/', link: join(codexHome, 'agents'), target: target.agents },
+        ],
+      },
+    );
+    expect(existsSync(lock)).toBe(false);
+    // An output that does resolve through the moved link is still refused.
+    expect(() =>
+      materializeCompilationOutputChanges(install.plan, codexHome, [], {
+        anchors: [
+          {
+            destination: 'config.toml',
+            link: join(codexHome, 'config.toml'),
+            target: target.config,
+          },
+        ],
+      }),
+    ).toThrow('no longer resolves');
   });
 });
 

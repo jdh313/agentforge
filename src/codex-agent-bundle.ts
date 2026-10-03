@@ -13,7 +13,9 @@ import type {
   ProposedOutput,
 } from './compiler.ts';
 import {
+  assertAnchorUnchanged,
   createManagedOutputLock,
+  locateManagedDestination,
   type ManagedOutputAnchor,
   materializeCompilation,
   materializeCompilationOutputChanges,
@@ -32,7 +34,14 @@ const BUNDLE_SCHEMA = 'agentforge.codex-agent-bundle/v2';
 const LEGACY_BUNDLE_SCHEMA = 'agentforge.codex-agent-bundle/v1';
 const RECEIPT_SCHEMA = 'agentforge.codex-agent-receipt/v3';
 const LIFECYCLE_JOURNAL_SCHEMA = 'agentforge.codex-agent-lifecycle-journal/v4';
-const LIFECYCLE_SCOPE_LOCK = 'agents/.agentforge/.agentforge-lifecycle.lock';
+// The lock and journal live at the logical scope root, which is always a real
+// directory, so a repointed `agents` link can never hide an interrupted
+// operation. The receipt stays under `agents/` because it travels with the
+// definitions it describes.
+const LIFECYCLE_SCOPE_LOCK = '.agentforge/.agentforge-lifecycle.lock';
+// Where releases before the relocation kept it; still honored so an operation
+// interrupted by an older build keeps blocking and stays repairable.
+const LEGACY_LIFECYCLE_SCOPE_LOCK = 'agents/.agentforge/.agentforge-lifecycle.lock';
 
 const BundleAgent = z.strictObject({
   id: CanonicalAgentName,
@@ -101,6 +110,11 @@ const LifecycleJournal = z.strictObject({
   absent: z.array(z.string().min(1)),
   after: z.array(z.strictObject({ destination: z.string().min(1), content: z.string() })),
   removals: z.array(z.string().min(1)),
+  // Each followed anchor's resolved target when the journal was written. Absent
+  // on journals from builds that never followed links.
+  anchors: z
+    .strictObject({ config: z.string().min(1).optional(), agents: z.string().min(1).optional() })
+    .optional(),
 });
 export const CodexAgentBundleDocument = {
   role: 'generated-document' as const,
@@ -459,15 +473,7 @@ export function buildCodexAgentBundleInstallPlan(
 }
 
 export function materializeCodexAgentBundleInstallPlan(install: CodexAgentBundleInstallPlan): void {
-  if (
-    lstatSync(physicalPath(install.destinationRoot, install.anchors, LIFECYCLE_SCOPE_LOCK), {
-      throwIfNoEntry: false,
-    })
-  ) {
-    throw new Error(
-      'refusing bundle installation: this Codex scope has an incomplete lifecycle operation',
-    );
-  }
+  assertNoIncompleteLifecycle(install.destinationRoot, install.anchors);
   assertAnchorsUnchanged(install.anchors);
   const check = checkCodexAgentBundleInstallPlan(install);
   if (check.status === 'current') return;
@@ -477,51 +483,43 @@ export function materializeCodexAgentBundleInstallPlan(install: CodexAgentBundle
       `refusing bundle collision: ${issue?.message ?? 'installed bundle state is unsupported'}`,
     );
   }
-  createScopeLock(
+  createManagedOutputLock(
     install.destinationRoot,
-    install.anchors,
     LIFECYCLE_SCOPE_LOCK,
     '{"schema":"agentforge.codex-agent-install-lock/v1"}\n',
   );
-  try {
-    assertAnchorsUnchanged(install.anchors);
-    const lockedCheck = checkCodexAgentBundleInstallPlan(install);
-    if (lockedCheck.status !== 'missing' || !isEmptyCodexAgentBundleInstall(install)) {
-      const issue = lockedCheck.issues[0];
-      throw new Error(
-        `refusing bundle collision: ${issue?.message ?? 'installed bundle state is unsupported'}`,
-      );
-    }
-    materializeCompilationOutputs(install.plan, install.destinationRoot, {
-      privateDestinations: ['config.toml'],
-      anchors: managedAnchors(install.anchors),
-    });
-  } finally {
-    materializeCompilationOutputChanges(
-      {
-        marketplaceId: install.plan.marketplaceId,
-        outputs: [],
-        diagnostics: [],
-        rootOutputs: [],
-        redactions: [],
-      },
-      install.destinationRoot,
-      [LIFECYCLE_SCOPE_LOCK],
-      { anchors: managedAnchors(install.anchors) },
-    );
-  }
+  runThenCleanup(
+    () => {
+      assertAnchorsUnchanged(install.anchors);
+      const lockedCheck = checkCodexAgentBundleInstallPlan(install);
+      if (lockedCheck.status !== 'missing' || !isEmptyCodexAgentBundleInstall(install)) {
+        const issue = lockedCheck.issues[0];
+        throw new Error(
+          `refusing bundle collision: ${issue?.message ?? 'installed bundle state is unsupported'}`,
+        );
+      }
+      materializeCompilationOutputs(install.plan, install.destinationRoot, {
+        privateDestinations: ['config.toml'],
+        anchors: managedAnchors(install.anchors),
+      });
+    },
+    () =>
+      materializeCompilationOutputChanges(
+        {
+          marketplaceId: install.plan.marketplaceId,
+          outputs: [],
+          diagnostics: [],
+          rootOutputs: [],
+          redactions: [],
+        },
+        install.destinationRoot,
+        [LIFECYCLE_SCOPE_LOCK],
+      ),
+  );
 }
 
 export function validateCodexAgentBundleInstallPlan(install: CodexAgentBundleInstallPlan): void {
-  if (
-    lstatSync(physicalPath(install.destinationRoot, install.anchors, LIFECYCLE_SCOPE_LOCK), {
-      throwIfNoEntry: false,
-    })
-  ) {
-    throw new Error(
-      'refusing bundle installation: this Codex scope has an incomplete lifecycle operation',
-    );
-  }
+  assertNoIncompleteLifecycle(install.destinationRoot, install.anchors);
   const check = checkCodexAgentBundleInstallPlan(install);
   if (
     check.status === 'current' ||
@@ -665,15 +663,16 @@ function hasUnsafeManagedParent(
   anchors: CodexScopeAnchors,
   proposed: string,
 ): boolean {
-  const physical = physicalPath(root, anchors, proposed);
-  const base =
-    anchors.agents && proposed.startsWith('agents/')
-      ? anchors.agents.target
-      : anchors.config && proposed === 'config.toml'
-        ? dirname(anchors.config.target)
-        : root;
-  let current = dirname(physical);
-  while (current !== base) {
+  const { destination, parentRoot } = locateManagedDestination(
+    root,
+    managedAnchors(anchors),
+    proposed,
+  );
+  let current = dirname(destination);
+  // A parent outside its own walk root is never safe, and the walk must not
+  // run past the filesystem root looking for a base it cannot reach.
+  if (current !== parentRoot && !isContainedPath(parentRoot, current)) return true;
+  while (current !== parentRoot && current !== dirname(current)) {
     const entry = lstatSync(current, { throwIfNoEntry: false });
     if (entry?.isSymbolicLink() || (entry && !entry.isDirectory())) return true;
     current = dirname(current);
@@ -759,7 +758,23 @@ export interface CodexAgentBundleLifecyclePlan extends CodexAgentBundleLifecycle
 export function buildCodexAgentBundleUpdatePlan(
   options: BuildCodexAgentBundleInstallPlanOptions,
 ): CodexAgentBundleLifecyclePlan {
-  const next = buildCodexAgentBundleInstallPlan(options);
+  let next: CodexAgentBundleInstallPlan;
+  try {
+    next = buildCodexAgentBundleInstallPlan(options);
+  } catch (cause) {
+    if (!(cause instanceof CodexScopeAnchorError)) throw cause;
+    const index = parseBundleIndex(join(resolve(options.bundleRoot), CODEX_AGENT_BUNDLE_INDEX));
+    return anchorRefusal(
+      {
+        operation: 'update',
+        destinationRoot: resolveCodexAgentDestination(options),
+        scope: options.scope,
+        packageId: index.package.id,
+        receiptPath: `agents/.agentforge/${index.package.id}.json`,
+      },
+      cause,
+    );
+  }
   const receipt = expectedReceipt(next);
   const definitions = next.plan.outputs
     .filter(
@@ -796,6 +811,7 @@ export function buildCodexAgentBundleUpdatePlan(
     scope: options.scope,
     packageId: receipt.owner.packageId,
     receiptPath: next.receiptPath,
+    anchors: next.anchors,
     newDefinitions: definitions,
     nextOwner: receipt.owner,
   });
@@ -807,12 +823,23 @@ export function buildCodexAgentBundleRemovePlan(
 ): CodexAgentBundleLifecyclePlan {
   const packageId = CanonicalAgentName.parse(options.packageId);
   const destinationRoot = resolveCodexAgentDestination(options);
+  const receiptPath = `agents/.agentforge/${packageId}.json`;
+  let anchors: CodexScopeAnchors;
+  try {
+    anchors = resolveScopeAnchors(destinationRoot);
+  } catch (cause) {
+    return anchorRefusal(
+      { operation: 'remove', destinationRoot, scope: options.scope, packageId, receiptPath },
+      cause,
+    );
+  }
   return buildLifecyclePlan({
     operation: 'remove',
     destinationRoot,
     scope: options.scope,
     packageId,
-    receiptPath: `agents/.agentforge/${packageId}.json`,
+    receiptPath,
+    anchors,
     newDefinitions: [],
   });
 }
@@ -840,12 +867,13 @@ export function materializeCodexAgentBundleLifecyclePlan(
   )
     return;
   verifyLifecyclePreconditions(lifecycle);
-  createScopeLock(
+  createManagedOutputLock(
     lifecycle.destinationRoot,
-    lifecycle.anchors,
     lifecycle.journalPath,
     journalContent(lifecycle),
-    { mode: 0o600 },
+    {
+      mode: 0o600,
+    },
   );
   // A failed final-state mutation leaves the journal in place. It prevents a
   // later operation from guessing whether the earlier operation reached its end.
@@ -919,41 +947,69 @@ function materializeLifecycleReceipt(lifecycle: CodexAgentBundleLifecyclePlan): 
   );
 }
 
+/** A lifecycle plan refused because a followed link cannot be used; it names the link, not the receipt. */
+function anchorRefusal(
+  input: {
+    operation: 'update' | 'remove';
+    destinationRoot: string;
+    scope: Extract<InstallScope, 'user' | 'project'>;
+    packageId: string;
+    receiptPath: string;
+  },
+  cause: unknown,
+): CodexAgentBundleLifecyclePlan {
+  return {
+    operation: input.operation,
+    destinationRoot: input.destinationRoot,
+    anchors: {},
+    scope: input.scope,
+    journalPath: LIFECYCLE_SCOPE_LOCK,
+    plan: emptyLifecyclePlan(input),
+    removals: [],
+    preconditions: [],
+    unresolved: [],
+    absences: [],
+    status: 'refused',
+    actions: [],
+    issues: [
+      {
+        path:
+          cause instanceof CodexScopeAnchorError
+            ? cause.link
+            : join(input.destinationRoot, input.receiptPath),
+        message: cause instanceof Error ? cause.message : 'scope anchors are unsupported',
+      },
+    ],
+  };
+}
+
 function buildLifecyclePlan(input: {
   operation: 'update' | 'remove';
   destinationRoot: string;
   scope: Extract<InstallScope, 'user' | 'project'>;
   packageId: string;
   receiptPath: string;
+  anchors: CodexScopeAnchors;
   newDefinitions: readonly OwnedDefinition[];
   nextOwner?: { packageId: string; packageVersion: string };
 }): CodexAgentBundleLifecyclePlan {
-  const journalPath = LIFECYCLE_SCOPE_LOCK;
-  let anchors: CodexScopeAnchors;
+  const anchors = input.anchors;
+  let locks: string[];
   try {
-    anchors = resolveScopeAnchors(input.destinationRoot);
+    locks = presentLifecycleLocks(input.destinationRoot, anchors);
   } catch (cause) {
     return {
-      operation: input.operation,
-      destinationRoot: input.destinationRoot,
-      anchors: {},
-      scope: input.scope,
-      journalPath,
-      plan: emptyLifecyclePlan(input),
-      removals: [],
-      preconditions: [],
-      unresolved: [],
-      absences: [],
-      status: 'refused',
-      actions: [],
+      ...anchorRefusal(input, cause),
+      anchors,
       issues: [
         {
-          path: join(input.destinationRoot, input.receiptPath),
-          message: cause instanceof Error ? cause.message : 'scope anchors are unsupported',
+          path: join(input.destinationRoot, '.agentforge'),
+          message: cause instanceof Error ? cause.message : 'lifecycle lock is unsupported',
         },
       ],
     };
   }
+  const journalPath = locks[0] ?? LIFECYCLE_SCOPE_LOCK;
   const base = {
     operation: input.operation,
     destinationRoot: input.destinationRoot,
@@ -966,12 +1022,31 @@ function buildLifecyclePlan(input: {
     unresolved: [] as readonly z.infer<typeof ReceiptAgent>[],
     absences: [] as readonly string[],
   };
-  const journal = lstatSync(physicalPath(input.destinationRoot, anchors, journalPath), {
-    throwIfNoEntry: false,
-  });
-  if (journal) {
+  if (locks.length > 1) {
+    return {
+      ...base,
+      status: 'interrupted',
+      actions: [],
+      issues: [
+        {
+          path: join(input.destinationRoot, locks[1] ?? journalPath),
+          message: `this scope holds lifecycle locks at both ${locks.join(' and ')}; inspect and remove the stale one by hand`,
+        },
+      ],
+    };
+  }
+  if (locks.length === 1) {
     try {
       const saved = readLifecycleJournal(input.destinationRoot, anchors, journalPath);
+      const moved = anchorMismatch(input.destinationRoot, anchors, saved.anchors);
+      if (moved) {
+        return {
+          ...base,
+          status: 'interrupted',
+          actions: [],
+          issues: [{ path: moved.link, message: moved.message }],
+        };
+      }
       if (
         saved.operation !== input.operation ||
         saved.owner.packageId !== input.packageId ||
@@ -1677,6 +1752,10 @@ function journalContent(lifecycle: CodexAgentBundleLifecyclePlan): string {
     absent: lifecycle.absences,
     after: outputs.map(({ destination, content }) => ({ destination, content })),
     removals: lifecycle.removals,
+    anchors: {
+      ...(lifecycle.anchors.config ? { config: lifecycle.anchors.config.target } : {}),
+      ...(lifecycle.anchors.agents ? { agents: lifecycle.anchors.agents.target } : {}),
+    },
   })}\n`;
 }
 
@@ -1882,6 +1961,18 @@ export interface CodexScopeAnchors {
   agents?: CodexScopeAnchor;
 }
 
+/** A followed link that cannot be used; `link` names the offender for refusals. */
+export class CodexScopeAnchorError extends Error {
+  readonly link: string;
+  readonly target: string | undefined;
+  constructor(message: string, link: string, target?: string) {
+    super(message);
+    this.name = 'CodexScopeAnchorError';
+    this.link = link;
+    this.target = target;
+  }
+}
+
 /** Resolve each anchor once; the result is the only place a link is followed. */
 function resolveScopeAnchors(root: string): CodexScopeAnchors {
   const config = resolveAnchor(join(root, 'config.toml'), 'file', 'Codex role configuration');
@@ -1899,21 +1990,27 @@ function resolveAnchor(
   try {
     target = realpathSync(link);
   } catch {
-    throw new Error(`${label} symbolic link is dangling: ${link}`);
+    throw new CodexScopeAnchorError(`${label} symbolic link is dangling: ${link}`, link);
   }
   const entry = statSync(target);
   const named = `${link} -> ${target}`;
   if (kind === 'file' ? !entry.isFile() : !entry.isDirectory())
-    throw new Error(
+    throw new CodexScopeAnchorError(
       `${label} symbolic link must resolve to a ${kind === 'file' ? 'regular file' : 'real directory'}: ${named}`,
+      link,
+      target,
     );
-  if (kind === 'file' && (entry.mode & 0o777) !== 0o600)
-    throw new Error(`${label} symbolic link target must have mode 0600: ${named}`);
+  // The target's mode is not a precondition: like a regular config.toml, it is
+  // replaced by a 0600 file through `privateDestinations`.
   try {
     accessSync(target, constants.W_OK);
     accessSync(dirname(target), constants.W_OK);
   } catch {
-    throw new Error(`${label} symbolic link target is not writable: ${named}`);
+    throw new CodexScopeAnchorError(
+      `${label} symbolic link target is not writable: ${named}`,
+      link,
+      target,
+    );
   }
   return { link, target };
 }
@@ -1921,26 +2018,13 @@ function resolveAnchor(
 /** Refuse when an anchor no longer resolves to the target planned against. */
 function assertAnchorsUnchanged(anchors: CodexScopeAnchors): void {
   for (const anchor of [anchors.config, anchors.agents]) {
-    if (!anchor) continue;
-    let current: string | undefined;
-    try {
-      current = realpathSync(anchor.link);
-    } catch {
-      current = undefined;
-    }
-    if (current !== anchor.target)
-      throw new Error(
-        `refusing to write: ${anchor.link} no longer resolves to ${anchor.target}; re-run to plan against the new target`,
-      );
+    if (anchor) assertAnchorUnchanged(anchor, 'write', '; re-run to plan against the new target');
   }
 }
 
 /** The on-disk path a scope-relative managed destination is read from and written to. */
 function physicalPath(root: string, anchors: CodexScopeAnchors, destination: string): string {
-  if (anchors.config && destination === 'config.toml') return anchors.config.target;
-  if (anchors.agents && destination.startsWith('agents/'))
-    return join(anchors.agents.target, destination.slice('agents/'.length));
-  return join(root, destination);
+  return locateManagedDestination(root, managedAnchors(anchors), destination).destination;
 }
 
 function managedAnchors(anchors: CodexScopeAnchors): ManagedOutputAnchor[] {
@@ -1950,22 +2034,83 @@ function managedAnchors(anchors: CodexScopeAnchors): ManagedOutputAnchor[] {
   ];
 }
 
-/** Lock and journal keep their logical `agents/.agentforge/` path; the anchor decides where it lands. */
-function createScopeLock(
+/**
+ * Logical paths of every lifecycle lock or journal in a scope, current
+ * location first. The current one sits under the scope root, never behind an
+ * anchor; the legacy one is read through whichever anchor now resolves.
+ */
+function presentLifecycleLocks(root: string, anchors: CodexScopeAnchors): string[] {
+  const directory = join(root, '.agentforge');
+  const entry = lstatSync(directory, { throwIfNoEntry: false });
+  if (entry && (entry.isSymbolicLink() || !entry.isDirectory()))
+    throw new Error(`lifecycle lock directory must be a real directory: ${directory}`);
+  return [LIFECYCLE_SCOPE_LOCK, LEGACY_LIFECYCLE_SCOPE_LOCK].filter((path) =>
+    lstatSync(physicalPath(root, anchors, path), { throwIfNoEntry: false }),
+  );
+}
+
+/** Refuse an install while any lock is held; name a moved anchor when the lock is a journal that recorded one. */
+function assertNoIncompleteLifecycle(root: string, anchors: CodexScopeAnchors): void {
+  const [held] = presentLifecycleLocks(root, anchors);
+  if (!held) return;
+  let moved: string | undefined;
+  try {
+    moved = anchorMismatch(
+      root,
+      anchors,
+      readLifecycleJournal(root, anchors, held).anchors,
+    )?.message;
+  } catch {
+    moved = undefined;
+  }
+  throw new Error(
+    `refusing bundle installation: this Codex scope has an incomplete lifecycle operation${moved ? `: ${moved}` : ''}`,
+  );
+}
+
+/** Compare a journal's recorded anchor targets with what the links resolve to now. */
+function anchorMismatch(
   root: string,
   anchors: CodexScopeAnchors,
-  destination: string,
-  content: string,
-  options: { mode?: number } = {},
-): void {
-  if (anchors.agents && destination.startsWith('agents/'))
-    createManagedOutputLock(
-      anchors.agents.target,
-      destination.slice('agents/'.length),
-      content,
-      options,
-    );
-  else createManagedOutputLock(root, destination, content, options);
+  recorded: { config?: string | undefined; agents?: string | undefined } | undefined,
+): { link: string; message: string } | undefined {
+  if (!recorded) return undefined;
+  for (const role of ['config', 'agents'] as const) {
+    const was = recorded[role];
+    const now = anchors[role]?.target;
+    if (was === now) continue;
+    const link = anchors[role]?.link ?? join(root, role === 'config' ? 'config.toml' : 'agents');
+    return {
+      link,
+      message: `${link} resolved to ${was ?? 'a real path (not a symbolic link)'} when the lifecycle operation was interrupted but now resolves to ${now ?? 'a real path (not a symbolic link)'}; restore the link before retrying or repairing`,
+    };
+  }
+  return undefined;
+}
+
+/**
+ * Run `body`, then `cleanup`. A cleanup failure never replaces the error
+ * `body` raised: the primary error surfaces with the cleanup failure appended.
+ */
+function runThenCleanup(body: () => void, cleanup: () => void): void {
+  try {
+    body();
+  } catch (primary) {
+    try {
+      cleanup();
+    } catch (failure) {
+      const detail = failure instanceof Error ? failure.message : String(failure);
+      if (primary instanceof Error) {
+        primary.message = `${primary.message}; additionally, cleanup failed: ${detail}`;
+        throw primary;
+      }
+      throw new Error(`${String(primary)}; additionally, cleanup failed: ${detail}`, {
+        cause: primary,
+      });
+    }
+    throw primary;
+  }
+  cleanup();
 }
 
 /** Human-readable `<role>: <link> -> <target>` lines for each followed anchor. */

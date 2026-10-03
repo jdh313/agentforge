@@ -60,7 +60,7 @@ describe('Codex agent lifecycle CLI', () => {
       expect(preview.exitCode).toBe(0);
       expect(preview.stdout).toContain('remove:');
 
-      const lock = 'agents/.agentforge/.agentforge-lifecycle.lock';
+      const lock = '.agentforge/.agentforge-lifecycle.lock';
       createManagedOutputLock(destination, lock, 'another scope mutation\n');
       expect(runCli(env, 'remove-codex-agent', 'demo-roles', ...options).exitCode).toBe(1);
       expect(existsSync(join(destination, 'agents/demo-roles/alpha.toml'))).toBe(true);
