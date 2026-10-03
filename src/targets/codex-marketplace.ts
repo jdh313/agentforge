@@ -225,8 +225,25 @@ export function compileCodexPublication(input: PublicationCompilation): TargetCo
   const payloads = input.packages.map((packageInput) =>
     compilePackagePayload(input, packageInput, PAYLOAD_POLICY),
   );
+  const bundleHooks = new Map(
+    input.packages
+      .filter((packageInput) => packageInput.codexAgentBundle)
+      .map((packageInput) => [
+        packageInput.id,
+        compileCodexAgentBundleCheckHook(packageInput, input),
+      ]),
+  );
   const packages = input.packages.map((packageInput, index) =>
-    compilePackage(input, packageInput, materializedHookPaths(payloads[index])),
+    compilePackage(
+      input,
+      packageInput,
+      [
+        ...new Set([
+          ...materializedHookPaths(payloads[index]),
+          ...(bundleHooks.get(packageInput.id)?.hookPaths ?? []),
+        ]),
+      ].toSorted(compareStrings),
+    ),
   );
   const bundles = input.packages
     .filter((packageInput) => packageInput.codexAgentBundle)
@@ -234,7 +251,10 @@ export function compileCodexPublication(input: PublicationCompilation): TargetCo
       const packageDirectory = relativePackageDirectory(input.marketplace.path, packageInput.path);
       return {
         ...compileCodexAgentBundleOutputs(packageInput, packageDirectory),
-        setupOutputs: compileCodexAgentBundleSetupSkill(packageInput, packageDirectory),
+        setupOutputs: [
+          ...compileCodexAgentBundleSetupSkill(packageInput, packageDirectory),
+          ...(bundleHooks.get(packageInput.id)?.outputs ?? []),
+        ],
       };
     });
   const marketplace = parseDocument(
@@ -331,6 +351,92 @@ function compileCodexAgentBundleSetupSkill(
   ];
 }
 
+const CODEX_AGENT_CHECK_HOOK = 'hooks/agentforge-codex-agents.json';
+const CODEX_AGENT_CHECK_SCRIPT = '.agentforge/check-codex-agents.sh';
+// Two read-only `check-codex-agent` runs; far under Codex's default hook
+// budget and under the SessionEnd cap's order of magnitude (ndr:bm3m2j).
+const CODEX_AGENT_CHECK_TIMEOUT_SECONDS = 10;
+
+// A SessionStart hook that tells the user when this package's agent roles are
+// not registered or not current. Its own hook file and manifest entry, never
+// merged into an author's hooks.json (ndr:pz1x3e). Generated outputs carry no
+// executable bit, so the command runs the script through `sh`, as the setup
+// skill does.
+function compileCodexAgentBundleCheckHook(
+  packageInput: CompilationPackage,
+  input: PublicationCompilation,
+): { outputs: ProposedOutput[]; hookPaths: string[] } {
+  const packageDirectory = relativePackageDirectory(input.marketplace.path, packageInput.path);
+  const configuration = parseDocument(
+    CodexHookConfiguration,
+    {
+      description: `Reports when ${packageInput.id} Codex agent roles are not registered or current.`,
+      hooks: {
+        SessionStart: [
+          {
+            hooks: [
+              {
+                type: 'command',
+                command: `sh "\${PLUGIN_ROOT}/${CODEX_AGENT_CHECK_SCRIPT}"`,
+                timeout: CODEX_AGENT_CHECK_TIMEOUT_SECONDS,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    `agent role check hook for package "${packageInput.id}"`,
+  );
+  return {
+    outputs: [
+      {
+        kind: 'generated',
+        packageId: packageInput.id,
+        destination: `${packageDirectory}/${CODEX_AGENT_CHECK_HOOK}`,
+        content: serialize(configuration),
+      },
+      {
+        kind: 'generated',
+        packageId: packageInput.id,
+        destination: `${packageDirectory}/${CODEX_AGENT_CHECK_SCRIPT}`,
+        content: codexAgentBundleCheckScript(packageInput.id),
+      },
+    ],
+    hookPaths: [`./${CODEX_AGENT_CHECK_HOOK}`],
+  };
+}
+
+function shellSingleQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function codexAgentBundleCheckScript(packageId: string): string {
+  const quotedPackageId = shellSingleQuote(packageId);
+  return `#!/bin/sh
+# Read-only SessionStart check: at most one line on stdout, always exit 0.
+package_id=${quotedPackageId}
+script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
+plugin_root=\${PLUGIN_ROOT:-$(dirname "$script_dir")}
+agentforge_bin=\${AGENTFORGE_BIN:-agentforge}
+
+if ! command -v "$agentforge_bin" >/dev/null 2>&1; then
+  echo "$package_id: agentforge not found; install a release from https://github.com/jdh313/agentforge/releases to register agent roles"
+  exit 0
+fi
+
+bundle_root="$plugin_root/.agentforge/codex-agent-bundle"
+if ! "$agentforge_bin" check-codex-agent "$bundle_root" --scope user >/dev/null 2>&1; then
+  echo "$package_id agent roles are not current for user: run agentforge sync-codex-agents --scope user"
+  exit 0
+fi
+if [ -f "$PWD/.codex/agents/.agentforge/$package_id.json" ] &&
+  ! "$agentforge_bin" check-codex-agent "$bundle_root" --scope project --project-root "$PWD" >/dev/null 2>&1; then
+  echo "$package_id agent roles are not current for project: run agentforge sync-codex-agents --scope project"
+fi
+exit 0
+`;
+}
+
 function codexAgentBundleSetupInstructions(agents: readonly { identity: string }[]): string {
   const knownRoles = agents.map(({ identity }) => `- \`${identity}\``).join('\n');
   return `# Set up Codex agent roles
@@ -394,6 +500,11 @@ receipt-based script action; do not clean up roles automatically.
 Project registration needs write access to \`<project-root>/.codex\`. If a
 managed permission profile denies that directory, request access or run this
 visible script in a terminal authorized to write it, then rerun \`check\`.
+
+## Register every installed plugin at once
+
+\`agentforge sync-codex-agents --scope user\` registers or updates the roles of
+every installed plugin in one step. The per-plugin script above still works.
 
 ## Use a registered role
 
