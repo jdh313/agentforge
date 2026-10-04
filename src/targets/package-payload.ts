@@ -369,6 +369,14 @@ function observeState(
 
 function survives(retention: RetentionCheck, content: string): boolean {
   if (retention.kind === 'body-literal') return content.includes(retention.literal);
+  if (retention.kind === 'json-key') {
+    try {
+      const document: unknown = JSON.parse(content);
+      return typeof document === 'object' && document !== null && retention.key in document;
+    } catch {
+      return false;
+    }
+  }
   try {
     return matter(content).data[retention.key] !== undefined;
   } catch {

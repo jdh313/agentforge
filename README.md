@@ -308,7 +308,12 @@ targets:
   artifact bodies and text resource files: `mcp-tool-reference` (an `mcp__*`
   tool name), `body-template-variable` (`$ARGUMENTS`, `$1`–`$9`,
   `${CLAUDE_*}`), `body-shell-injection` (`` !`…` `` and ` ```! `), and
-  `body-file-reference` (an `@dir/file` reference). Two things this scan
+  `body-file-reference` (an `@dir/file` reference). In a `hook` artifact:
+  `hook-module` (a `modules` list of Claude Code function-hook modules — a
+  "mod"). Codex hooks are shell commands only, so Codex output carries no
+  `modules` and a modules-only `hooks.json` emits nothing; declare it
+  `stripped`, and keep the module and its `types` file in
+  `targets.claude.payloads` so Codex receives neither. Two things this scan
   deliberately does not see: `$1`–`$9` inside a shell resource — a file under
   `scripts/` or named `*.sh` / `*.bash` — is that script's own positional
   argument, and a file marked by `documents` is exempt whatever it contains.
@@ -364,6 +369,10 @@ targets:
 - `native` accepts any JSON-compatible object. A future compiler applies it
   last, with unrestricted last-write-wins behavior, including native `name` and
   `version` fields.
+- `targets.claude.native.types` names a mod's session-state declaration file
+  (`claude plugin validate` requires it once a function-hook module writes
+  state). It must be a `./`-relative path that resolves to a file the package
+  ships on Claude, or compilation fails.
 
 ### `MARKETPLACE.yaml`
 

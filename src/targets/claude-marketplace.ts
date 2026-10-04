@@ -1,3 +1,4 @@
+import { posix } from 'node:path';
 import { z } from 'zod';
 import { parseAgentBehavior, parseCommandBehavior } from '../agent-command.ts';
 import {
@@ -5,6 +6,7 @@ import {
   type CompilationPackage,
   type MarketplaceRegistryHandle,
   type PackageManifestHandle,
+  type ProposedOutput,
   type PublicationCompilation,
   type TargetCompilationResult,
 } from '../compiler.ts';
@@ -43,6 +45,10 @@ export const ClaudePluginManifest = z.looseObject({
   license: z.string().min(1).optional(),
   keywords: z.array(z.string().min(1)).optional(),
   defaultEnabled: z.boolean().optional(),
+  // The declaration file naming a mod's session-state contract (`interface
+  // PluginState`). `claude plugin validate` rejects a function-hook module that
+  // writes state the manifest's `types` does not declare.
+  types: z.string().min(1).optional(),
 });
 
 const ClaudeMarketplacePlugin = ClaudePluginManifest.extend({
@@ -104,6 +110,9 @@ export function compileClaudePublication(input: PublicationCompilation): TargetC
   const payloads = input.packages.map((packageInput) =>
     compilePackagePayload(input, packageInput, PAYLOAD_POLICY),
   );
+  for (const [index, { manifest, packageDirectory, packageId }] of packages.entries()) {
+    assertTypesShipped(manifest, packageId, packageDirectory, payloads[index]?.outputs ?? []);
+  }
   const marketplace = parseDocument(
     ClaudeMarketplace,
     deepMerge(
@@ -162,6 +171,7 @@ function compilePackage(input: PublicationCompilation, packageInput: Compilation
   const packageDirectory = relativePackageDirectory(input.marketplace.path, packageInput.path);
   return {
     packageId: packageInput.id,
+    packageDirectory,
     destination: `${packageDirectory}/.claude-plugin/plugin.json`,
     source: `./${packageDirectory}`,
     manifest: parseDocument(
@@ -170,6 +180,31 @@ function compilePackage(input: PublicationCompilation, packageInput: Compilation
       `plugin document for package "${packageInput.id}"`,
     ),
   };
+}
+
+// `types` is a path Claude Code resolves against the plugin root, so it must be
+// one the compiled package actually ships. A path to nothing passes the
+// manifest schema and fails only when Claude Code loads the plugin.
+function assertTypesShipped(
+  manifest: z.infer<typeof ClaudePluginManifest>,
+  packageId: string,
+  packageDirectory: string,
+  outputs: readonly ProposedOutput[],
+): void {
+  if (manifest.types === undefined) return;
+  const declared = manifest.types;
+  const resolved = posix.normalize(declared);
+  if (!declared.startsWith('./') || resolved.startsWith('../') || resolved === '..') {
+    throw new CompilationError(
+      `invalid Claude plugin document for package "${packageId}": types: ${JSON.stringify(declared)} must be a "./"-relative path inside the plugin`,
+    );
+  }
+  const destination = `${packageDirectory}/${resolved}`;
+  if (!outputs.some((output) => output.destination === destination)) {
+    throw new CompilationError(
+      `invalid Claude plugin document for package "${packageId}": types: ${JSON.stringify(declared)} names no file the package ships; add it to targets.claude.payloads`,
+    );
+  }
 }
 
 function serialize(document: unknown): string {

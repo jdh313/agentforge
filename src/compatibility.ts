@@ -18,7 +18,8 @@ import type { ConstructSurface, TargetName } from './types.ts';
 // would couple the check to a message's wording.
 export type RetentionCheck =
   | { kind: 'frontmatter-key'; key: string }
-  | { kind: 'body-literal'; literal: string };
+  | { kind: 'body-literal'; literal: string }
+  | { kind: 'json-key'; key: string };
 
 export interface DetectedConstruct {
   construct: ClaudeOnlyConstruct;
@@ -112,6 +113,7 @@ export function detectClaudeOnlyConstructs(input: DetectionInput): DetectionResu
       if (artifactType === 'command') {
         pushToolFilter(detected, artifact, artifactType, 'allowed-tools', 'command-tools-filter');
       }
+      if (artifactType === 'hook') pushHookModules(detected, artifact, artifactType);
       pushTranslatedFrontmatter(translated, artifact, artifactType, target, surface);
       if (!exemptDocuments.has(artifact.path)) {
         scanBody(
@@ -296,6 +298,35 @@ function pushToolFilter(
     sourcePath: artifact.path,
     detail: `${artifactType} frontmatter declares ${key}: ${tools}`,
     retention: { kind: 'frontmatter-key', key },
+  });
+}
+
+// A hook configuration that names function-hook modules. Structured, so the
+// prose scan never reads it; the key is the construct, whatever it lists.
+function pushHookModules(
+  detected: DetectedConstruct[],
+  artifact: LoadedArtifact,
+  artifactType: string,
+): void {
+  let document: unknown;
+  try {
+    document = JSON.parse(artifact.content);
+  } catch {
+    // Malformed JSON fails open here; the hook translator reports it with the
+    // parse error, which is the better message.
+    return;
+  }
+  if (typeof document !== 'object' || document === null || !('modules' in document)) return;
+  const modules = (document as { modules: unknown }).modules;
+  const listed = Array.isArray(modules) ? modules.join(', ') : String(modules);
+  const index = artifact.content.split('\n').findIndex((text) => text.includes('"modules"'));
+  detected.push({
+    construct: 'hook-module',
+    artifactType,
+    sourcePath: artifact.path,
+    ...(index === -1 ? {} : { line: index + 1 }),
+    detail: `hook configuration declares function-hook modules: ${listed}`,
+    retention: { kind: 'json-key', key: 'modules' },
   });
 }
 

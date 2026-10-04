@@ -87,10 +87,20 @@ const ClaudeHookGroup = z.looseObject({
   hooks: z.array(ClaudeHookHandler).min(1),
 });
 
-const ClaudeHookDocument = z.looseObject({
-  description: z.string().min(1).optional(),
-  hooks: z.record(z.string(), z.array(ClaudeHookGroup)),
-});
+// Claude Code accepts two hook forms in one document: classic `hooks` (shell
+// handlers per event) and `modules` (function-hook modules run in-process).
+// Codex has a form for the first only; `modules` reaches the declared-loss gate
+// as `hook-module` and never reaches Codex output.
+const ClaudeHookDocument = z
+  .looseObject({
+    description: z.string().min(1).optional(),
+    hooks: z.record(z.string(), z.array(ClaudeHookGroup)).optional(),
+    modules: z.array(z.string().min(1)).min(1).optional(),
+  })
+  .refine(
+    (document) => document.hooks !== undefined || document.modules !== undefined,
+    'declare "hooks", "modules", or both',
+  );
 
 const CodexHookHandler = z
   .looseObject({
@@ -737,7 +747,7 @@ function translateHookDocument({
     });
   }
 
-  for (const [event, groups] of Object.entries(source.hooks)) {
+  for (const [event, groups] of Object.entries(source.hooks ?? {})) {
     const support = supportFor('codex', 'hook', event);
     const eventLocation = locateEvents
       ? locateHookEventKey(artifact.path, artifact.content, event)
@@ -826,7 +836,9 @@ function translateHookDocument({
   if (translatedEvents.length === 0) {
     // Say so rather than dropping the artifact silently: a hook that projects
     // nothing is a reviewable fact, not an absence.
-    if (Object.keys(source.hooks).length === 0) {
+    // A modules-only document is not empty: its loss is the declared-loss
+    // gate's to report, as `hook-module`.
+    if (Object.keys(source.hooks ?? {}).length === 0 && source.modules === undefined) {
       diagnostics.push({
         code: 'empty-hook-configuration',
         severity: 'note',

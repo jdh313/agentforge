@@ -70,6 +70,10 @@ export const CLAUDE_ONLY_CONSTRUCTS = [
   // agents the same package declares rather than against `@`-shape, so the
   // entry covers a confirmed reference and never a prose mention (ndr:c5haze).
   'body-agent-reference',
+  // A hook configuration's `modules` list: Claude Code function-hook modules
+  // (TypeScript run in-process). Codex hooks are shell commands only, so the
+  // list has no form there and the mod does not run.
+  'hook-module',
 ] as const;
 
 export type ClaudeOnlyConstruct = (typeof CLAUDE_ONLY_CONSTRUCTS)[number];
