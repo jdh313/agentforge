@@ -1,3 +1,19 @@
+# [1.3.0](https://github.com/jdh313/agentforge/compare/v1.2.0...v1.3.0) (2026-10-04)
+
+
+### Bug Fixes
+
+* **codex:** harden symlink anchor lifecycle locks and journals ([40d9a84](https://github.com/jdh313/agentforge/commit/40d9a8435f2e3e6fae8e7abaf6c6cd378b232d00))
+* **codex:** harden sync-codex-agents discovery and the agent role check hook ([34dd33f](https://github.com/jdh313/agentforge/commit/34dd33f799f0fbf9e9f34048039e06f7fc6cf575))
+
+
+### Features
+
+* **codex:** add sync-codex-agents for installed plugin bundles ([d6162f5](https://github.com/jdh313/agentforge/commit/d6162f56a2c18ebc5240f9a9e0c2ce831d3012ff))
+* **codex:** follow symlinked config and agents anchors in bundle lifecycle ([1d8745b](https://github.com/jdh313/agentforge/commit/1d8745bce27a9dfb21b9638e048fef803097eff0))
+* **codex:** ship a session-start agent role check with bundle packages ([08974ce](https://github.com/jdh313/agentforge/commit/08974ce3eb4f4894ad430dccd8948d6bb1ba9063))
+* **marketplace:** ship Claude function-hook mods from Codex-enrolled packages ([da3b67b](https://github.com/jdh313/agentforge/commit/da3b67bd8996cc3117dd879fb342b51d83de9a57))
+
 # [1.2.0](https://github.com/jdh313/agentforge/compare/v1.1.0...v1.2.0) (2026-09-30)
 
 
