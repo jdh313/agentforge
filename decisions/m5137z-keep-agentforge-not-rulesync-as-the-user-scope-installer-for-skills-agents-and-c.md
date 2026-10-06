@@ -15,8 +15,8 @@ binds: []
 supersedes: []
 superseded_by: []
 derived_from:
-  - ~/rulesync-trial/REPORT.md (sandboxed rulesync v24.0.0 trial, 2026-10-05)
-  - ~/rulesync-trial/VERIFY.md (independent re-test of four findings)
+  - Sandboxed rulesync v24.0.0 trial with an independent re-test, 2026-10-05
+    (trial artifacts not retained; findings recorded in Context)
 informed_by:
   - hjnabw
   - f1s7gm
