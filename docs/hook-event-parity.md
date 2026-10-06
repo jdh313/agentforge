@@ -260,6 +260,27 @@ Note also that matchers are **unanchored** regexes: `"Read"` would also match a
 tool named `ReadFile`. The doc's own examples anchor (`^Bash$`), and authors
 should.
 
+## Failure behavior — observed 2026-10-06
+
+Observed on codex-cli 0.160.0 with a trusted hook, `codex exec`, and a harmless
+`echo` (`docs/commit-runtime-acceptance.md` gate 5). Every failure of the hook
+itself let the command run:
+
+- **Exit 1** — fail-open. Only exit 2 blocked; the hook's stderr did not reach
+  the model.
+- **Missing command path** — fail-open, no warning in the `--json` stream or the
+  model's reply.
+- **Timeout** — a 10 s hook with `timeout: 5` added about 5 s to the turn, not
+  10 s, and the command ran: the timeout is enforced and non-blocking. This is
+  inferred from turn durations; Codex records no per-hook timing.
+
+A guard therefore cannot fail closed on Codex. The same run showed a `Bash`
+`PreToolUse` payload carrying `session_id`, `turn_id`, `transcript_path`, `cwd`,
+`hook_event_name`, `model`, `permission_mode`, `tool_name`, `tool_input.command`
+and `tool_use_id`, and a user-level hook's environment carrying neither
+`PLUGIN_ROOT` nor `CLAUDE_PLUGIN_ROOT` (that is not evidence about a plugin
+hook's environment).
+
 ## Not an enforcement boundary
 
 Codex states plainly: *"Some specialized tool paths can opt out of the default
