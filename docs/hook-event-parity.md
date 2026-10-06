@@ -271,10 +271,12 @@ itself let the command run:
   and JSON-output decisions were not tested. The hook's stderr did not reach
   the model.
 - **Missing command path** — fail-open, no warning in the `--json` stream,
-  stderr, or the model's reply. For the plugin hook the script was removed from
-  the installed plugin root while `hooks.json` and the trust record stayed as
+  stderr, or the model's reply. For the plugin hook the script was renamed away
+  (`probe.sh` to `probe.sh.bak`) inside the installed plugin root while `hooks.json` and the trust record stayed as
   they were, and the hook fired again once the script was restored, with no new
-  trust step.
+  trust step. That this is fail-open rather than a silent untrusted skip rests
+  on trust being unaffected during the run, which is inferred for both hooks,
+  not observed.
 - **Timeout** — a 10 s hook with `timeout: 5` made the exec tool call take 5.1 s
   (plugin hook) and the command ran: the timeout is enforced and non-blocking.
   Codex records no per-hook timing; the tool call's wall time brackets it.

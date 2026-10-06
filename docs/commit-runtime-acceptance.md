@@ -164,10 +164,14 @@ reference), so Commit does not depend on the answer. The `PLUGIN_DATA` directory
 did not exist on disk after the runs (`<CODEX_HOME>/plugins/data` absent): the
 value is a path Codex exports, not evidence that Codex creates it. For every
 other `PLUGIN_`/`CLAUDE_`/`CODEX_` variable the probe recorded names, not values,
-so "only these four plugin variables" is not claimed. The shell that launched
+so "only these four plugin variables" is not claimed. The names lists show no
+other `PLUGIN_` or `CODEX_` name, and no `CLAUDE_` name beyond those inherited
+from the launching shell. The shell that launched
 `codex exec` had none of the four `PLUGIN_ROOT`/`PLUGIN_DATA`/`CLAUDE_PLUGIN_*`
-names (checked beforehand; `dumps/launch-env-names.txt`), so they were not
-inherited.
+names (captured in the same shell just after the runs;
+`dumps/launch-env-names.txt`). In the same runs the user-level env-dump hook saw
+none of the four, so Codex sets them for the plugin hook rather than passing
+them through.
 
 ### Gate 4 — Blocking: Passed
 
@@ -287,26 +291,31 @@ Evidence: per-mode `p-<mode>.jsonl` and `p-<mode>.err`,
 per run where the hook ran, and the matching session rollouts for the wall times.
 `stderr` held only `Reading additional input from stdin...` in every run.
 
-- **Exit 1 is fail-open for the plugin hook.** The hook ran (log line) and exited
-  1 with stderr text; the command still ran and the reply was the bare output.
+- **Exit 1 is fail-open for the plugin hook.** The hook ran with `mode=exit1`
+  recorded in its log, so it took the branch that writes stderr and exits 1
+  (exit status not captured); the command still ran and the reply was the bare output.
   The probe's stderr did not reach the model. Exit 2 blocking was not re-tested
   for the plugin hook here (gate 4 used Commit's guard).
 - **A missing plugin hook command is fail-open and silent.** No hook ran, the
   command ran, and no warning appeared in the `--json` stream, `codex exec`
   stderr, or the reply. Whether that is a fail-open on a trusted hook or a silent
-  skip of an untrusted one is decided by `off2`: with `probe.sh` restored and
-  `hooks.json` and `config.toml` untouched, the hook fired again with no new
-  trust step. Trust was therefore intact after the `missing` run. Trust being
-  intact *during* the `missing` run is inferred (nothing that writes trust ran
-  between the runs), not observed.
+  skip of an untrusted one is inferred, not observed. `off2` shows trust held
+  after the run: with `probe.sh` restored and `hooks.json` and `config.toml`
+  untouched, the hook fired again with no new trust step. That it held *during*
+  the `missing` run rests on Codex documenting trust as a hash of the hook
+  *definition* (the unchanged `hooks.json` entry), not of the script file. If
+  the hash covered the script, a silent untrusted skip would look identical.
 - **The 5 s timeout is enforced for the plugin hook.** The `sleep10` run's exec
   tool call took 5.1 s against 0.1 to 0.2 s in the other modes, the command ran,
-  and `duration_ms` was about 4 s above the other four runs. Codex stopped
+  and `duration_ms` was 3.5 to 4.9 s above the other four runs. Codex stopped
   waiting at about 5 s and let the command run. Whether the `sleep` process was
   killed was not checked.
 - The user-level and plugin hooks behaved the same on all three failure modes in
   these runs. That is an observation of two hooks, not a statement of Codex's
-  implementation; the capability row and vendor docs name no failure rule.
+  implementation; the vendor docs name no rule for a command hook's non-zero exit, missing
+  command, or timeout (they do say a `PreToolUse` hook returning unsupported
+  fields is marked failed and the tool call continues, and that a managed MCP
+  hook's error or timeout can fail without blocking).
 
 ## Test-environment notes
 
@@ -337,8 +346,9 @@ root, so `--out` stays inside it (the `root-manifest` precondition).
    step looks like a passing install with no guard.
 8. Run each gate as
    `CODEX_HOME=$A/codex-home codex exec --json --skip-git-repo-check --sandbox workspace-write -C $A/project '<prompt>' </dev/null`.
-   Never pass `--dangerously-*`, and never edit the trusted `hooks.json` or the
-   plugin cache.
+   Never pass `--dangerously-*`, and never edit the trusted `hooks.json`, and never edit
+   the plugin cache except the `hookprobe` `missing` rename (which leaves
+   `hooks.json` untouched).
 
 ## Reproduce the plugin-hook probe
 
@@ -373,7 +383,7 @@ tested paths, not an enforcement boundary** (`docs/hook-event-parity.md` § Not
 an enforcement boundary): other tool paths can opt out of the hook path, only
 the `Bash` path with a literal `git reset --hard` was exercised, and every
 failure of a user-level hook and of a test plugin's hook (exit 1, missing
-command, timeout) let the command through; Commit's own guard was not put into a
+command, timeout) let the command through (missing: inferred, see gate 5); Commit's own guard was not put into a
 failure mode. A guard written for this
 projection can block only by running to completion and signalling a block (exit
 2 observed) and must not rely on failing closed.
