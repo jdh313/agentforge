@@ -262,11 +262,12 @@ should.
 
 ## Failure behavior — observed 2026-10-06
 
-Observed on codex-cli 0.160.0 with a trusted hook, `codex exec`, and a harmless
+Observed on codex-cli 0.160.0 with a trusted user-level hook, `codex exec`, and a harmless
 `echo` (`docs/commit-runtime-acceptance.md` gate 5). Every failure of the hook
 itself let the command run:
 
-- **Exit 1** — fail-open. Only exit 2 blocked; the hook's stderr did not reach
+- **Exit 1** — fail-open. Exit 2 blocked (gate 4); exit 1 did not; other codes
+  and JSON-output decisions were not tested. The hook's stderr did not reach
   the model.
 - **Missing command path** — fail-open, no warning in the `--json` stream or the
   model's reply.
@@ -274,7 +275,9 @@ itself let the command run:
   10 s, and the command ran: the timeout is enforced and non-blocking. This is
   inferred from turn durations; Codex records no per-hook timing.
 
-A guard therefore cannot fail closed on Codex. The same run showed a `Bash`
+Codex does not fail closed: a hook that cannot run (missing) or overruns its
+timeout lets the command through, so a guard can block only by running to
+completion and signalling a block (exit 2 observed). The same run showed a `Bash`
 `PreToolUse` payload carrying `session_id`, `turn_id`, `transcript_path`, `cwd`,
 `hook_event_name`, `model`, `permission_mode`, `tool_name`, `tool_input.command`
 and `tool_use_id`, and a user-level hook's environment carrying neither

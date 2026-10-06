@@ -147,11 +147,12 @@ as separate package hook files, with mandatory activation-scope-loss diagnostics
 blocking acceptance, including tool-name matcher gaps, remains part of this
 milestone rather than being implied by successful compilation.
 
-The Commit runtime gates are recorded in
-[`commit-runtime-acceptance.md`](commit-runtime-acceptance.md): on codex-cli
-0.160.0 (2026-10-06) it verifies install and executable mode, hook trust,
-`${PLUGIN_ROOT}` resolution, destructive-command blocking, and fail-open
-failure behavior, with plugin-hook environment presence still unknown.
+Commit's runtime gates are recorded in
+[`commit-runtime-acceptance.md`](commit-runtime-acceptance.md). On codex-cli
+0.160.0 (2026-10-06), install and executable mode, hook trust, `${PLUGIN_ROOT}`
+resolution, destructive-command blocking, and failure behavior (all fail open,
+for a user-level probe) passed; whether Codex exports `PLUGIN_ROOT` to a plugin
+hook is still open.
 
 ## 1.0 — corpus acceptance and publication
 

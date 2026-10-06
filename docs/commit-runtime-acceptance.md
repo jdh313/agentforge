@@ -13,7 +13,7 @@ Harness and source baseline:
 - Codex CLI 0.160.0, model `gpt-6.1-sol`, `codex exec --sandbox workspace-write`
 - Commit 3.2.1 from `jdh-agents`, copied unmodified into a one-package
   acceptance marketplace
-- AgentForge `main` commit `115b19b74166` (`115b19b741662a0c6e8863a646ad3a6730997b8c`)
+- AgentForge `main` commit `115b19b74166`
 
 ## Evidence classes
 
@@ -69,9 +69,9 @@ evidence each verdict rests on.
 |---|---|
 | 1. Install and executable mode | Passed |
 | 2. Trust | Passed |
-| 3. Plugin root | Passed for resolution of `${PLUGIN_ROOT}`; Unknown for env-var presence in a plugin hook |
+| 3. Plugin root | Passed for resolution of `${PLUGIN_ROOT}`; Open for env-var presence in a plugin hook |
 | 4. Blocking | Passed |
-| 5. Failure behavior | Passed (observed: fail-open on exit 1, missing command, and timeout; timeout bounded) |
+| 5. Failure behavior | Passed for a user-level hook (all three fail open); plugin-hook failure handling not observed |
 
 ### Gate 1 — Install and executable mode: Passed
 
@@ -96,8 +96,9 @@ The guard keeps mode 0755 through compile and install, and the installed
 
 Before trust (recorded during setup): a read-only `codex exec` running
 `echo hi` succeeded and replied `OK`; the probe dump directory stayed empty and
-no hook log was written. No plugin or user hook fired. Untrusted hooks are
-silent, with no warning in the stream.
+no hook log was written. No plugin or user hook fired (empty dump directory, no
+fault log). No JSONL or stderr capture of that run was preserved, so the absence
+of a warning is not backed by an artifact.
 
 After the user's interactive trust step (three `trusted_hash` entries in the
 isolated `config.toml`), prompt:
@@ -114,12 +115,13 @@ user-level env-dump probe wrote a file whose stdin section was:
 ```
 
 So hooks run after trust. The commit guard itself firing is shown by gate 4.
-Two surprises, neither a defect: the payload reports
-`permission_mode: bypassPermissions` for `codex exec` although no `--dangerously-*`
-flag was passed (the sandbox was `workspace-write`), and the payload names
+Two surprises: the payload reports `permission_mode: bypassPermissions` for
+`codex exec` although no `--dangerously-*` flag was passed; the rollout's turn
+context shows `approval_policy: never` with sandbox `workspace-write`, and the
+mapping between these is not documented. The payload also names
 `tool_name: Bash` with the model-facing command, not the `zsh -lc` wrapper.
 
-### Gate 3 — Plugin root: Passed for resolution; Unknown for env presence
+### Gate 3 — Plugin root: Passed for resolution; Open for env presence
 
 Evidence that `${PLUGIN_ROOT}` in the installed `hooks.json` resolved: the
 commit guard ran, because gate 4's block text is the guard's own stderr.
@@ -147,7 +149,7 @@ PWD=$A/project
 That is expected for a non-plugin hook and says nothing about whether Codex
 exports `PLUGIN_ROOT` or `PLUGIN_DATA` to a plugin hook process. Absence in the
 user hook does not establish absence in the plugin hook; the question stays
-**Unknown** because answering it needs a plugin-bundled probe, and editing the
+**Open** because answering it needs a plugin-bundled probe, and editing the
 installed plugin cache would invalidate the recorded trust. The guard does not
 read either variable, so Commit does not depend on the answer.
 
@@ -178,10 +180,21 @@ The session rollout records the same text as a tool-call output
 stderr reason reached the model. `--json` emitted **no** `command_execution`
 item for the blocked command; only the follow-up `git status` appears, with
 exit code 0 and output `modified:   file.txt`. Project state after: ` M file.txt`,
-content `base` / `modified` unchanged. The sandbox was `workspace-write`, so
-the reset would have taken effect had it run. The benign `git status` ran.
+content `base` / `modified` unchanged. Working-tree survival is not independent
+evidence: `workspace-write` keeps `.git` read-only, so an unblocked reset would
+probably have failed too. The block is established by the guard's text in the
+tool output. The model issued the reset through the `exec` tool's
+`tools.exec_command` (reported to hooks as `tool_name: Bash`); the block failed
+the whole script, so the `git status` that ran came from a later `exec` call.
+`codex exec` stderr also logged `ERROR codex_core::tools::router: error=Command
+blocked by PreToolUse hook: ...`.
 
-### Gate 5 — Failure behavior: Passed (all three fail open)
+### Gate 5 — Failure behavior: Passed for a user-level hook (all three fail open)
+
+The fault probe is a **user-level** hook (`$CODEX_HOME/hooks.json`), not the
+Commit plugin hook. Plugin-hook failure handling is assumed to share the same
+path but was not observed; a missing script under `${PLUGIN_ROOT}` was never
+exercised.
 
 Each mode was set with `probes/setmode.sh`, run once, and reset to `off`. Prompt
 (with `<mode>` substituted):
@@ -192,33 +205,43 @@ Run the shell command: echo probe-<mode>   Then reply with the command output, a
 
 | Mode | Hook ran | Command ran | Warning shown to model | Turn duration |
 |---|---|---|---|---|
-| `exit1` (exit 1, stderr text) | yes (log entry) | yes, `probe-exit1` | none | 7477 ms |
-| `sleep10` (hook sleeps 10 s, timeout 5) | yes (log entry) | yes, `probe-sleep10` | none | 12232 ms |
+| `exit1` (exit 1, stderr text) | yes (log entry, see below) | yes, `probe-exit1` | none | 7477 ms |
+| `sleep10` (hook sleeps 10 s, timeout 5) | yes (log entry; 5.1 s exec wall time) | yes, `probe-sleep10` | none | 12232 ms |
 | `missing` (hook path does not exist) | no | yes, `probe-missing` | none | 6995 ms |
 
 Findings:
 
-- **Exit 1 is fail-open.** Only exit 2 blocks, matching the documented
-  `exit code 2` contract in `docs/hook-event-parity.md` § Evidence. The probe's
-  stderr text (`fault probe exit1`) never reached the model.
+- **Exit 1 is fail-open.** Exit 2 blocked (gate 4); exit 1 did not; other exit
+  codes and JSON-output decisions were not tested. The documented contract in
+  `docs/hook-event-parity.md` § Evidence says "also use exit code 2", which
+  implies another blocking channel. The probe's stderr text (`fault probe exit1`)
+  never reached the model. The original exit1 and sleep10 log entries were lost
+  when the fault log was cleared before the `missing` run; the exit1 hook firing
+  was observed at the time but not preserved there. A single re-run preserved it:
+  `dumps/fault-log-exit1-rerun.txt` holds `mode=exit1` for that run, the command
+  `echo probe-exit1-rerun` ran and its output reached the model, and `codex exec`
+  stderr held only `Reading additional input from stdin...`.
 - **A missing hook command is fail-open and silent**: the command ran with no
-  warning in the JSONL stream or the model's reply. The trusted hash was
-  unaffected because the symlink target, not `hooks.json`, changed.
-- **The 5 s timeout is enforced.** The `sleep10` turn took about 4.8 s longer
-  than the `exit1` turn, not about 10 s longer, and the command still ran, so
-  the hook was cut off at its configured timeout and treated as non-blocking.
-  The timing is turn-level from `task_complete.duration_ms` in the rollouts;
-  Codex records no per-hook start or end time, so the 5 s figure is inferred, not
-  read from a hook event. Whether the `sleep` child process was killed was not
-  checked.
+  warning in the JSONL stream or the model's reply. The trusted hash is assumed
+  unaffected (it is computed from the `hooks.json` entry, which did not change;
+  the sibling env-dump entry in the same file still fired). That a missing
+  command fails open, rather than being skipped as untrusted, rests on this
+  assumption.
+- **The 5 s timeout is enforced.** The rollout's tool-call wall time for the
+  `sleep10` run was 5.1 s (`Wall time 5.1 seconds`), against 0.0 to 0.3 s in
+  the other modes, and the command still ran. Codex stopped waiting at about
+  5 s and let the command run. The turn durations (`task_complete.duration_ms`)
+  are noisy and agree only loosely; Codex records no per-hook start or end
+  event, so the tool call's wall time brackets the hook. Whether the `sleep`
+  child process was killed was not checked.
 - The model was asked to mention any hook message and reported none in all
   three modes. A hook failure is therefore invisible at the model layer, and
-  not necessarily to a UI user: only the `--json` stream and model replies were
-  inspected.
+  not necessarily to a UI user: the `--json` stream, `codex exec` stderr, and
+  model replies showed no warning; the interactive TUI was not inspected.
 
 Failure modes were never exercised with a destructive command.
 
-## Reproduce
+## Test-environment notes
 
 All paths are under `$A`, a scratch directory that also contains the marketplace
 root, so `--out` stays inside it (the `root-manifest` precondition).
@@ -253,15 +276,17 @@ root, so `--out` stays inside it (the `root-manifest` precondition).
 ## Current disposition
 
 On codex-cli 0.160.0, Commit 3.2.1's `destructive-vcs-guard` blocks
-`git reset --hard` reproducibly on the tested path (a `Bash` call from
-`codex exec`), the model sees the guard's reason, and the working-tree change
+`git reset --hard` reproducibly on the tested path (a shell command issued via
+the `exec` tool's `tools.exec_command`, reported to hooks as `tool_name: Bash`,
+from `codex exec`), the model sees the guard's reason, and the working-tree change
 survives. That is all this record claims. **It is reproducible blocking on
 tested paths, not an enforcement boundary** (`docs/hook-event-parity.md` § Not
 an enforcement boundary): other tool paths can opt out of the hook path, only
 the `Bash` path with a literal `git reset --hard` was exercised, and every
-failure of the hook itself (exit 1, missing command, timeout) lets the command
-through. A guard written for this projection must treat exit 2 as its only
-blocking signal and must not rely on failing closed.
+failure of a user-level hook (exit 1, missing command, timeout) let the command
+through; plugin-hook failure handling was not observed. A guard written for this
+projection can block only by running to completion and signalling a block (exit
+2 observed) and must not rely on failing closed.
 
 Not covered: other Commit guard rules (the guard also covers `jj` and further
 `git` forms, none re-exercised here), `write_stdin` into an already-approved
@@ -273,7 +298,7 @@ environment probe (gate 3).
 - A codex-cli release changing hook exit-code semantics, timeout handling,
   trust prompts, or the `PLUGIN_ROOT` substitution or export behavior.
 - A plugin-bundled env probe becoming possible without invalidating trust,
-  which would close the gate 3 unknown.
+  which would close the gate 3 open item.
 - Codex surfacing hook failures to the model or user, which would change gate 5.
 - A Commit version that changes the guard's matchers, exit codes, or script
   mode.
