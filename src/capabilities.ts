@@ -60,6 +60,16 @@ interface CapabilityRow {
   // state or a context-aware caller needs to evaluate (ndr:k58f71).
   gated?: Readonly<Record<string, SupportGate>>;
   unsupported: readonly string[];
+  // Tool-name vocabulary, for a surface whose constructs name a tool a runtime
+  // may or may not expose (a hook `matcher`). Optional and separate from the
+  // token lists above: those answer "may this construct appear", this answers
+  // "does the target's runtime call a tool by this name". `supportedPrefixes`
+  // admits a namespace (`mcp__`) whose members cannot be enumerated.
+  tools?: {
+    supported: readonly string[];
+    supportedPrefixes?: readonly string[];
+    unsupported: readonly string[];
+  };
   source: string;
 }
 
@@ -120,6 +130,25 @@ const CODEX_HOOK_EVENTS = [
   'SessionStart',
   'SessionEnd',
 ] as const;
+
+// The `codex/hook` tool-name vocabulary, as a matcher sees it. Supported names
+// are the aliases Codex's hooks reference lists; unsupported names are Claude
+// tools with no alias there. Anything else resolves `unknown` (ndr:szdn5s). See
+// the row's `source` for the citations, including why `Task` is unsupported.
+const CODEX_HOOK_TOOLS = {
+  supported: ['Bash', 'Edit', 'Write', 'apply_patch'],
+  supportedPrefixes: ['mcp__'],
+  unsupported: [
+    'Task',
+    'Read',
+    'Grep',
+    'Glob',
+    'WebFetch',
+    'WebSearch',
+    'NotebookEdit',
+    'TodoWrite',
+  ],
+} as const;
 
 // One row per (target, surface). Each carries a doc citation so a future reader
 // can check the claim rather than trusting the table. Checked in deliberately —
@@ -208,8 +237,9 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
       // Claude event names that moment, so including it would make the list
       // answer a different question than `supportFor` asks of it.
       unsupported: ['Notification', 'WorktreeCreate', 'WorktreeRemove'],
+      tools: CODEX_HOOK_TOOLS,
       source:
-        'codex-cli 0.154.0 binary, `HookEventsToml` field set. Event set re-verified 2026-09-17; first established 2026-08-09 against 0.147.0, unchanged except that 0.154.0 adds the Codex-only `Interrupt`. Probe: `strings -a "$(readlink -f "$(which codex)")" | grep -o \'trusted_hash[A-Za-z]\\{0,140\\}\' | sort -u`. The maximal hook-context blob reads PreToolUse PermissionRequest PostToolUse PreCompact PostCompact SessionStart SessionEnd UserPromptSubmit SubagentStart SubagentStop Stop Interrupt; shorter blobs are string-interning artifacts of the same set, and their union adds nothing. `Interrupt` carries its own dedicated error strings (`Interrupt hook returned non-JSON stdout`), so it is a real event rather than an adjacency artifact. `Notification` occurs 189 times in the binary overall and in zero hook blobs — the hook-adjacent hits are `HookStartedNotification` / `HookCompletedNotification`, Codex\'s internal IPC types announcing that a hook ran, not a configurable trigger — so its absence is a finding rather than an omission. `WorktreeCreate` / `WorktreeRemove` are likewise absent from every hook blob while running live as Claude hooks in ~/.claude/settings.json, which is what makes them established rather than merely unlisted. Supersedes the manual 0.146.0 check that left no artifact in the repo. `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` translated entry added for ndr:61cmc9: https://developers.openai.com/codex/plugins/build states "Plugin hook commands receive the Codex-specific environment variables PLUGIN_ROOT and PLUGIN_DATA... along with CLAUDE_PLUGIN_ROOT and CLAUDE_PLUGIN_DATA for backward compatibility," explicitly scoped to hook command execution (and separately, Agent Plugins MCP stdio `cwd`, per the codex-cli 0.154.0 binary\'s validation-error strings). Verified 2026-09-17. SECOND SOURCE, added 2026-09-17: https://learn.chatgpt.com/docs/hooks (canonical https://developers.openai.com/codex/hooks) is Codex\'s published hooks reference, and it corroborates the binary independently on both the event set and the exit-code contract — "Exit `0` with no output is treated as success and Codex continues" and "You can also use exit code `2` and write the blocking reason to `stderr`". It documents no meaning for exit 1 or any other non-zero code, and no general fail-open/fail-closed rule for a crashing or timed-out hook, so a guard script\'s posture is not specified by the runtime it targets. It further establishes two facts the binary alone could not settle: `matcher` is honored ("The `matcher` field is a regex string that filters when hooks fire") on PreToolUse, PostToolUse, PreCompact, PostCompact, SessionStart, SubagentStart, SubagentStop and PermissionRequest; and Codex deliberately speaks Claude\'s tool vocabulary in matchers — shell commands and unified exec both "Match as `Bash`", `apply_patch` matches `apply_patch`/`Edit`/`Write`, `spawn_agent` also matches `Agent`, and MCP tools match their own `mcp__*` names. This is why a Claude-authored `matcher: "Bash"` fires on Codex, confirmed live against codex-cli 0.154.0 on 2026-09-17. It is NOT total: a Claude tool name with no alias (notably `Task`, whose Codex counterpart is `Agent`) compiles cleanly and matches nothing, and hosted tools such as `WebSearch` "don\'t use the local function-tool hook path" at all. Reporting that gap needs a per-(target, surface) tool-name vocabulary the table does not yet carry, so it is recorded in docs/hook-event-parity.md rather than detected. The page also states hooks are experimental, disabled by default, unavailable on Windows, and that some tool paths can opt out: "Treat tool hooks as a useful guardrail, not a complete enforcement boundary."',
+        'codex-cli 0.154.0 binary, `HookEventsToml` field set. Event set re-verified 2026-09-17; first established 2026-08-09 against 0.147.0, unchanged except that 0.154.0 adds the Codex-only `Interrupt`. Probe: `strings -a "$(readlink -f "$(which codex)")" | grep -o \'trusted_hash[A-Za-z]\\{0,140\\}\' | sort -u`. The maximal hook-context blob reads PreToolUse PermissionRequest PostToolUse PreCompact PostCompact SessionStart SessionEnd UserPromptSubmit SubagentStart SubagentStop Stop Interrupt; shorter blobs are string-interning artifacts of the same set, and their union adds nothing. `Interrupt` carries its own dedicated error strings (`Interrupt hook returned non-JSON stdout`), so it is a real event rather than an adjacency artifact. `Notification` occurs 189 times in the binary overall and in zero hook blobs — the hook-adjacent hits are `HookStartedNotification` / `HookCompletedNotification`, Codex\'s internal IPC types announcing that a hook ran, not a configurable trigger — so its absence is a finding rather than an omission. `WorktreeCreate` / `WorktreeRemove` are likewise absent from every hook blob while running live as Claude hooks in ~/.claude/settings.json, which is what makes them established rather than merely unlisted. Supersedes the manual 0.146.0 check that left no artifact in the repo. `${CLAUDE_PLUGIN_ROOT}`/`${CLAUDE_PLUGIN_DATA}` translated entry added for ndr:61cmc9: https://developers.openai.com/codex/plugins/build states "Plugin hook commands receive the Codex-specific environment variables PLUGIN_ROOT and PLUGIN_DATA... along with CLAUDE_PLUGIN_ROOT and CLAUDE_PLUGIN_DATA for backward compatibility," explicitly scoped to hook command execution (and separately, Agent Plugins MCP stdio `cwd`, per the codex-cli 0.154.0 binary\'s validation-error strings). Verified 2026-09-17. SECOND SOURCE, added 2026-09-17: https://learn.chatgpt.com/docs/hooks (canonical https://developers.openai.com/codex/hooks) is Codex\'s published hooks reference, and it corroborates the binary independently on both the event set and the exit-code contract — "Exit `0` with no output is treated as success and Codex continues" and "You can also use exit code `2` and write the blocking reason to `stderr`". It documents no meaning for exit 1 or any other non-zero code, and no general fail-open/fail-closed rule for a crashing or timed-out hook, so a guard script\'s posture is not specified by the runtime it targets. It further establishes two facts the binary alone could not settle: `matcher` is honored ("The `matcher` field is a regex string that filters when hooks fire") on PreToolUse, PostToolUse, PreCompact, PostCompact, SessionStart, SubagentStart, SubagentStop and PermissionRequest; and Codex deliberately speaks Claude\'s tool vocabulary in matchers — shell commands and unified exec both "Match as `Bash`", `apply_patch` matches `apply_patch`/`Edit`/`Write`, `spawn_agent` also matches `Agent` (as documented; contradicted live, see MATCHER TOOL NAMES below), and MCP tools match their own `mcp__*` names. This is why a Claude-authored `matcher: "Bash"` fires on Codex, confirmed live against codex-cli 0.154.0 on 2026-09-17. It is NOT total: a Claude tool name with no alias (notably `Task`) compiles cleanly and matches nothing, and hosted tools such as `WebSearch` "don\'t use the local function-tool hook path" at all. That gap is reported through the `tools` vocabulary on this row (see MATCHER TOOL NAMES below). The page also states hooks are experimental, disabled by default, unavailable on Windows, and that some tool paths can opt out: "Treat tool hooks as a useful guardrail, not a complete enforcement boundary." MATCHER TOOL NAMES (`tools`), added 2026-10-06 for ndr:61cmc9: the coverage table above is the source for the supported aliases (`Bash`, `Edit`, `Write`, `apply_patch`, and any `mcp__*` name). The unsupported list is Claude tools the table gives no alias. `Task` is established by docs/reports/codex-spawn-agent-hook-probe.md rather than by the table, which says `spawn_agent` also matches `Agent`: live on codex-cli 0.160.0 the subagent tool_name is `collaborationspawn_agent`, a matcher of `Agent` never fired, and the prompt reaches the hook encrypted. `WebSearch` is a hosted tool outside the local function-tool hook path. `Read`, `Grep`, `Glob`, `WebFetch`, `NotebookEdit`, `TodoWrite` are absent from the table, so they are listed on that absence alone; the hook doc is a summarized-fetch source, which is why a name outside both lists resolves `unknown` rather than unsupported.',
     },
   ],
   [
@@ -259,6 +289,22 @@ export function supportFor(target: TargetName, surface: ConstructSurface, token:
   if (condition !== undefined) return { state: 'gated', condition };
   if (row.supported.includes(token)) return 'supported';
   if (row.unsupported.includes(token)) return 'unsupported';
+  return 'unknown';
+}
+
+// Whether a target's runtime exposes a tool under this name, for the surface
+// whose constructs name tools (today only `codex/hook`, via a matcher). A
+// surface with no `tools` vocabulary answers `unknown`, never `supported`.
+export function toolSupportFor(
+  target: TargetName,
+  surface: ConstructSurface,
+  name: string,
+): 'supported' | 'unsupported' | 'unknown' {
+  const tools = CAPABILITIES.get(`${target}/${surface}`)?.tools;
+  if (!tools) return 'unknown';
+  if (tools.supported.includes(name)) return 'supported';
+  if (tools.supportedPrefixes?.some((prefix) => name.startsWith(prefix))) return 'supported';
+  if (tools.unsupported.includes(name)) return 'unsupported';
   return 'unknown';
 }
 

@@ -350,6 +350,86 @@ describe('Codex hook diagnostic source locations', () => {
   });
 });
 
+// Matcher tool names are checked against the `codex/hook` row's tool-name
+// vocabulary. A name outside Codex's tool set compiles and never fires, so it
+// is reported; the matcher itself is emitted unchanged.
+describe('Codex hook matcher tool names', () => {
+  const LOCATIONS_FIXTURE = join(
+    import.meta.dir,
+    'fixtures',
+    'definitions',
+    'codex-hook-locations',
+    'MARKETPLACE.yaml',
+  );
+
+  async function compileMatchers() {
+    const loaded = await loadMarketplaceDefinition(LOCATIONS_FIXTURE);
+    const plan = compileMarketplace(loaded, [
+      { target: 'claude', compilePublication: () => ({ outputs: [] }) },
+      codexMarketplaceAdapter,
+    ]);
+    const diagnostics = plan.diagnostics.filter(
+      (candidate) =>
+        candidate.provenance.packageId === 'matchers' &&
+        (candidate.code === 'unsupported-hook-matcher-tool' ||
+          candidate.code === 'unclassified-hook-matcher-tool'),
+    );
+    return { plan, diagnostics };
+  }
+
+  test('reports matcher "Task" as unsupported, pointing at the matcher line', async () => {
+    const { diagnostics } = await compileMatchers();
+    const task = diagnostics.find((candidate) => candidate.message.includes('"Task"'));
+    expect(task).toMatchObject({ code: 'unsupported-hook-matcher-tool', severity: 'warning' });
+    // Fixture line 5 is `"matcher": "Task"`.
+    expect(task?.locations).toEqual([
+      expect.objectContaining({
+        path: expect.stringContaining('matchers/hooks/hooks.json'),
+        line: 5,
+      }),
+    ]);
+  });
+
+  test('reports nothing for "^Bash$|Edit" and flags "Frobnicate" as unclassified', async () => {
+    const { diagnostics } = await compileMatchers();
+    expect(diagnostics.some((candidate) => candidate.message.includes('^Bash$|Edit'))).toBe(false);
+    const unknown = diagnostics.find((candidate) => candidate.message.includes('"Frobnicate"'));
+    expect(unknown).toMatchObject({ code: 'unclassified-hook-matcher-tool', severity: 'warning' });
+    expect(unknown?.locations).toEqual([expect.objectContaining({ line: 13 })]);
+  });
+
+  test('splits only on top-level pipes, admits mcp__ names, and skips regex syntax', async () => {
+    const { diagnostics } = await compileMatchers();
+    const mixed = diagnostics.filter((candidate) =>
+      candidate.message.includes('"mcp__fs__read|(Read|Grep)|Glob"'),
+    );
+    // `mcp__fs__read` is supported and `(Read|Grep)` is a group, not a name;
+    // only the top-level `Glob` alternative is a tool name here.
+    expect(mixed).toHaveLength(1);
+    expect(mixed[0]).toMatchObject({ code: 'unsupported-hook-matcher-tool' });
+    expect(mixed[0]?.message).toContain('"Glob"');
+    expect(diagnostics.some((candidate) => candidate.message.includes('".*"'))).toBe(false);
+    expect(diagnostics).toHaveLength(3);
+  });
+
+  test('emits every matcher unchanged', async () => {
+    const { plan } = await compileMatchers();
+    const output = findGenerated(plan.outputs, (destination) =>
+      destination.endsWith('/matchers/hooks/hooks.json'),
+    );
+    const emitted = JSON.parse(output?.content as string).hooks.PreToolUse.map(
+      (group: { matcher: string }) => group.matcher,
+    );
+    expect(emitted).toEqual([
+      'Task',
+      '^Bash$|Edit',
+      'Frobnicate',
+      'mcp__fs__read|(Read|Grep)|Glob',
+      '.*',
+    ]);
+  });
+});
+
 function findGenerated(
   outputs: readonly unknown[],
   matches: (destination: string) => boolean,

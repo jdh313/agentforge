@@ -54,6 +54,8 @@ export type DiagnosticCode =
   | 'translated-construct'
   | 'unsupported-hook-event'
   | 'unclassified-hook-event'
+  | 'unsupported-hook-matcher-tool'
+  | 'unclassified-hook-matcher-tool'
   | 'translated-hook-handler-args'
   | 'hook-timeout-capped-by-runtime'
   | 'artifact-hook-scope-widened'

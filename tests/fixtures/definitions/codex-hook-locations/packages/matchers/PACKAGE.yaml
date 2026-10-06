@@ -1,0 +1,15 @@
+schema: agentforge.package/v1
+id: matchers
+defaults:
+  name: matchers
+  version: 1.0.0
+  description: Fixture package exercising hook matcher tool diagnostics.
+artifacts:
+  - type: hook
+    pattern: hooks/hooks.json
+targets:
+  codex:
+    native:
+      interface:
+        displayName: Matchers
+        category: Developer Tools

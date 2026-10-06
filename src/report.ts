@@ -53,6 +53,7 @@ const DISPOSITION_BY_CODE: Readonly<Record<DiagnosticCode, Disposition>> = {
   'claude-only-body-feature': 'lost-undeclared',
   'unsupported-artifact-projection': 'lost-undeclared',
   'unsupported-hook-event': 'lost-undeclared',
+  'unsupported-hook-matcher-tool': 'lost-undeclared',
   'declared-loss': 'lost-declared',
   'translated-construct': 'carried-form-changed',
   'translated-hook-handler-args': 'carried-form-changed',
@@ -76,6 +77,7 @@ const DISPOSITION_BY_CODE: Readonly<Record<DiagnosticCode, Disposition>> = {
   'unclassified-body-construct': 'not-established',
   'unrecognized-frontmatter-key': 'not-established',
   'unclassified-hook-event': 'not-established',
+  'unclassified-hook-matcher-tool': 'not-established',
 };
 
 // Order the reader scans in: confirmed losses first, unknowns last — a scale,

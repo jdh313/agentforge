@@ -206,7 +206,7 @@ doc's tool coverage table:
 | Unified exec (`exec_command`) | `Bash` |
 | `apply_patch` | `apply_patch`, `Edit`, or `Write` |
 | MCP tools | the MCP tool name, e.g. `mcp__filesystem__read_file` |
-| Other local function tools | the function tool name, e.g. `update_plan`; `spawn_agent` also matches `Agent` |
+| Other local function tools | the function tool name, e.g. `update_plan`; the doc also claims `spawn_agent` matches `Agent`, which codex-cli 0.160.0 contradicts (see below) |
 | Hosted tools, such as `WebSearch` | *not matchable — outside the local function-tool hook path* |
 
 This is why `commit`'s `matcher: "Bash"` fires under Codex even though Codex's
@@ -214,24 +214,40 @@ own tools are `shell` / `local_shell` / `exec_command`. Confirmed live against
 codex-cli 0.154.0 on 2026-09-17: a Claude-authored `PreToolUse` guard with
 `matcher: "Bash"` blocked a destructive command in a real `codex exec` session.
 
-### What survives — narrower, and deferred
+### What survives — detected, not rewritten
 
 The aliasing is deliberate but **not total**. A Claude tool name with no Codex
-alias compiles cleanly and matches nothing:
+alias compiles cleanly and matches nothing. The compiler now reports this: the
+`codex/hook` capability row carries a tool-name vocabulary (`tools`), and
+`translateHookConfiguration` checks each tool name in a group's `matcher`
+against it, emitting a warning and leaving the matcher unchanged:
 
-- **`Task`** is the sharpest case. Claude's subagent tool is `Task`; Codex
-  aliases `spawn_agent` to **`Agent`**. `matcher: "Task"` therefore never fires
-  under Codex while looking entirely correct.
+- `unsupported-hook-matcher-tool` — an **established** absence. Listed names:
+  `Task`, `Read`, `Grep`, `Glob`, `WebFetch`, `WebSearch`, `NotebookEdit`,
+  `TodoWrite`. Disposition: lost, undeclared.
+- `unclassified-hook-matcher-tool` — a name the row neither lists nor
+  prefix-admits (`Frobnicate`). "We have never ruled on this", not "Codex lacks
+  it". Disposition: not established. Neither code gates the compile.
+
+Supported names are `Bash`, `Edit`, `Write`, `apply_patch`, and anything
+starting `mcp__`. A matcher is split on top-level `|`, an optional leading `^`
+and trailing `$` are stripped per alternative, and an alternative is read as a
+tool name only when it is `[A-Za-z0-9_]+`. Any other regex syntax (`.*`,
+`(Read|Grep)`) is skipped silently. The diagnostic points at the matcher's line
+in `hooks.json`, falling back to the event key line when the matcher text cannot
+be found.
+
+- **`Task`** is the sharpest case, and the hooks reference is wrong about it.
+  The doc says `spawn_agent` also matches `Agent`, so `Task` to `Agent` looked
+  like a rewrite. A live probe on codex-cli 0.160.0
+  ([`docs/reports/codex-spawn-agent-hook-probe.md`](reports/codex-spawn-agent-hook-probe.md))
+  found the subagent `tool_name` is `collaborationspawn_agent`, a matcher of
+  `Agent` never fired, and the prompt reaches the hook encrypted. `Task` stays a
+  reported loss, not a translation.
 - `Read`, `Grep`, `Glob`, `WebFetch`, `NotebookEdit`, `TodoWrite` have no listed
-  alias either.
-- Hosted tools are outside the hook path, which no projection can fix.
-
-Detecting this needs a per-`(target, surface)` **tool-name vocabulary** — the
-matcher analogue of what `CODEX_HOOK_EVENTS` does for event names. The
-capability table carries token lists, not vocabulary mappings, so this is a
-table-shape change rather than a row addition, and it is recorded here rather
-than detected. Until it exists, a matcher naming a Claude-only tool is a silent
-no-op on Codex.
+  alias; they are listed on that absence, from a summarized-fetch doc.
+- `WebSearch` is a hosted tool outside the local function-tool hook path, which
+  no projection can fix.
 
 Note also that matchers are **unanchored** regexes: `"Read"` would also match a
 tool named `ReadFile`. The doc's own examples anchor (`^Bash$`), and authors
@@ -252,7 +268,7 @@ claim reproducible blocking on tested paths, never enforcement.
 
 ## Where to look
 
-`src/capabilities.ts` — `CODEX_HOOK_EVENTS` and the `codex/hook` row.
+`src/capabilities.ts` — `CODEX_HOOK_EVENTS`, `CODEX_HOOK_TOOLS`, `toolSupportFor`, and the `codex/hook` row.
 `src/targets/codex-marketplace.ts` — `translateHookConfiguration`'s three-way
 branch on `supportFor`. `docs/limitations.md` — L-009, the gap this table closes
 the evidence side of.

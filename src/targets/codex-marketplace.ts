@@ -2,7 +2,7 @@ import { basename, dirname } from 'node:path';
 import matter from 'gray-matter';
 import { z } from 'zod';
 import { parseAgentBehavior, parseCommandBehavior } from '../agent-command.ts';
-import { supportFor, translationsFor } from '../capabilities.ts';
+import { supportFor, toolSupportFor, translationsFor } from '../capabilities.ts';
 import { compileCodexAgentBundleOutputs } from '../codex-agent-bundle.ts';
 import {
   CompilationError,
@@ -783,7 +783,43 @@ function translateHookDocument({
     }
 
     translatedEvents.push(event);
+    let matcherCursor = eventLocation?.line === undefined ? 0 : eventLocation.line - 1;
     hooks[event] = groups.map((group) => {
+      if (group.matcher !== undefined) {
+        const matcherLocation = locateEvents
+          ? locateHookMatcher(artifact.path, artifact.content, group.matcher, matcherCursor)
+          : undefined;
+        matcherCursor = matcherLocation?.line ?? matcherCursor;
+        const location = matcherLocation ?? eventLocation;
+        for (const tool of matcherToolNames(group.matcher)) {
+          const toolSupport = toolSupportFor('codex', 'hook', tool);
+          if (toolSupport === 'supported') continue;
+          // Same split as the event branch above, for the same reason
+          // (ndr:szdn5s): "Codex has no tool by this name" and "we have never
+          // ruled on this name" are different facts. Neither gates, and the
+          // matcher is emitted unchanged either way: rewriting a matcher is a
+          // translation the capability row does not carry (ndr:61cmc9).
+          diagnostics.push(
+            toolSupport === 'unsupported'
+              ? {
+                  code: 'unsupported-hook-matcher-tool',
+                  severity: 'warning',
+                  packageId: packageInput.id,
+                  message: `Hook matcher "${group.matcher}" for "${event}" in ${relativePath} names the Claude tool "${tool}", which Codex does not expose to hooks; the hook is emitted unchanged and will not fire for it.`,
+                  retainedSource: { artifactType, sourcePath: artifact.path },
+                  ...(location === undefined ? {} : { locations: [location] }),
+                }
+              : {
+                  code: 'unclassified-hook-matcher-tool',
+                  severity: 'warning',
+                  packageId: packageInput.id,
+                  message: `Hook matcher "${group.matcher}" for "${event}" in ${relativePath} names "${tool}", which the "codex/hook" capability table row does not classify, so whether Codex exposes a tool by that name is unestablished; the hook is emitted unchanged. Add a table row entry once confirmed.`,
+                  retainedSource: { artifactType, sourcePath: artifact.path },
+                  ...(location === undefined ? {} : { locations: [location] }),
+                },
+          );
+        }
+      }
       const handlers = group.hooks.map((handler) => {
         if (handler.args !== undefined) {
           diagnostics.push({
@@ -1038,6 +1074,58 @@ function locateHookEventKey(
   const keyPattern = new RegExp(`"${escapeRegExp(event)}"\\s*:`);
   const lines = content.split('\n');
   for (let index = lines.length - 1; index >= 0; index--) {
+    if (keyPattern.test(lines[index])) {
+      return { path: sourcePath, line: index + 1 };
+    }
+  }
+  return undefined;
+}
+
+// Tool names a matcher regex addresses. Matchers are regexes, so only an
+// alternative that is a bare name (after an optional `^` / `$` anchor) is read
+// as a tool; any other regex syntax is skipped silently rather than guessed at,
+// because a pattern is not a name the vocabulary can classify (ndr:c5haze).
+// Splits on top-level `|` only, so an alternation inside a group stays whole.
+function matcherToolNames(matcher: string): string[] {
+  const alternatives: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (let index = 0; index < matcher.length; index++) {
+    const char = matcher[index];
+    if (char === '\\') {
+      current += char + (matcher[index + 1] ?? '');
+      index++;
+      continue;
+    }
+    if (char === '(' || char === '[') depth++;
+    else if ((char === ')' || char === ']') && depth > 0) depth--;
+    if (char === '|' && depth === 0) {
+      alternatives.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  alternatives.push(current);
+  const names = alternatives
+    .map((alternative) => alternative.replace(/^\^/, '').replace(/\$$/, ''))
+    .filter((name) => /^[A-Za-z0-9_]+$/.test(name));
+  return [...new Set(names)];
+}
+
+// First line at or after `fromLine` (0-based index) whose `"matcher"` key holds
+// exactly this string. Scans forward from the event key, unlike
+// `locateHookEventKey`, because several groups under one event may share a
+// matcher and each should resolve to its own line.
+function locateHookMatcher(
+  sourcePath: string,
+  content: string,
+  matcher: string,
+  fromLine: number,
+): SourceLocation | undefined {
+  const keyPattern = new RegExp(`"matcher"\\s*:\\s*${escapeRegExp(JSON.stringify(matcher))}`);
+  const lines = content.split('\n');
+  for (let index = fromLine; index < lines.length; index++) {
     if (keyPattern.test(lines[index])) {
       return { path: sourcePath, line: index + 1 };
     }

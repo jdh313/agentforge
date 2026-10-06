@@ -682,6 +682,15 @@ each other. A reviewer reading for table-sourced facts would find one and stop.
 The gap surfaced only when a package needed an answer the table could not be
 asked for, and the correct answer had to be recovered from a vendor binary.
 
+**Amendment, 2026-10-06.** Matcher tool names are now detected. The `codex/hook`
+row carries an optional `tools` vocabulary, and a hook `matcher` naming a Claude
+tool Codex does not expose reports `unsupported-hook-matcher-tool` (or
+`unclassified-hook-matcher-tool` for a name nobody has ruled on); the matcher is
+emitted unchanged. The `Agent` alias for `spawn_agent` that the hooks reference
+documents did not hold on codex-cli 0.160.0, so `Task` is reported rather than
+rewritten (`docs/reports/codex-spawn-agent-hook-probe.md`). See
+`docs/hook-event-parity.md` § Matcher.
+
 ---
 
 ## L-010 — Codex plugin packages cannot register agent roles
