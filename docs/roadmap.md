@@ -150,9 +150,11 @@ milestone rather than being implied by successful compilation.
 Commit's runtime gates are recorded in
 [`commit-runtime-acceptance.md`](commit-runtime-acceptance.md). On codex-cli
 0.160.0 (2026-10-06), install and executable mode, hook trust, `${PLUGIN_ROOT}`
-resolution, destructive-command blocking, and failure behavior (all fail open,
-for a user-level probe) passed; whether Codex exports `PLUGIN_ROOT` to a plugin
-hook is still open.
+resolution, and destructive-command blocking passed. Failure behavior (exit 1,
+missing command, timeout: all fail open) was observed for a user-level probe and
+for a hook of a test plugin, and that plugin hook was observed to receive
+`PLUGIN_ROOT`, `PLUGIN_DATA` and their `CLAUDE_*` aliases; Commit's own guard
+was not put into a failure mode or an env probe.
 
 ## 1.0 — corpus acceptance and publication
 
