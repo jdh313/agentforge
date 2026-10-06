@@ -784,14 +784,32 @@ function translateHookDocument({
 
     translatedEvents.push(event);
     let matcherCursor = eventLocation?.line === undefined ? 0 : eventLocation.line - 1;
+    // A matcher is only searched for before the next event's key, so a group
+    // whose source text does not match its parsed value cannot resolve to a
+    // matcher under a later event.
+    const matcherEnd =
+      locateEvents && eventLocation?.line !== undefined
+        ? nextEventKeyIndex(artifact.path, artifact.content, source, event, eventLocation.line)
+        : undefined;
     hooks[event] = groups.map((group) => {
       if (group.matcher !== undefined) {
         const matcherLocation = locateEvents
-          ? locateHookMatcher(artifact.path, artifact.content, group.matcher, matcherCursor)
+          ? locateHookMatcher(
+              artifact.path,
+              artifact.content,
+              group.matcher,
+              matcherCursor,
+              matcherEnd,
+            )
           : undefined;
         matcherCursor = matcherLocation?.line ?? matcherCursor;
         const location = matcherLocation ?? eventLocation;
-        for (const tool of matcherToolNames(group.matcher)) {
+        // Only these events filter on `tool_name`; on the rest the matcher
+        // names a session source, compaction trigger, or agent type.
+        const toolNames = TOOL_NAME_MATCHER_EVENTS.has(event)
+          ? matcherToolNames(group.matcher)
+          : [];
+        for (const tool of toolNames) {
           const toolSupport = toolSupportFor('codex', 'hook', tool);
           if (toolSupport === 'supported') continue;
           // Same split as the event branch above, for the same reason
@@ -968,8 +986,8 @@ function translateArtifactHooks(
       packageId: packageInput.id,
       message:
         artifactType === 'skill'
-          ? `Skill hooks in ${relativePath} activate only after that skill is invoked on Claude, but Codex loads ./${destinationRelativePath} for the whole enabled package; the hook can fire before or without skill invocation. Tool-name matcher gaps remain documented in docs/hook-event-parity.md (L-009).`
-          : `Agent hooks in ${relativePath} run only while that agent is active on Claude, but Codex loads ./${destinationRelativePath} for the whole enabled package; the hook can fire in the main thread and other agents. Tool-name matcher gaps remain documented in docs/hook-event-parity.md (L-009).`,
+          ? `Skill hooks in ${relativePath} activate only after that skill is invoked on Claude, but Codex loads ./${destinationRelativePath} for the whole enabled package; the hook can fire before or without skill invocation. Tool-name matcher gaps are reported as hook matcher diagnostics (docs/hook-event-parity.md, L-009).`
+          : `Agent hooks in ${relativePath} run only while that agent is active on Claude, but Codex loads ./${destinationRelativePath} for the whole enabled package; the hook can fire in the main thread and other agents. Tool-name matcher gaps are reported as hook matcher diagnostics (docs/hook-event-parity.md, L-009).`,
       retainedSource: { artifactType, sourcePath: artifact.path },
     },
   ];
@@ -1084,11 +1102,13 @@ function locateHookEventKey(
 // Tool names a matcher regex addresses. Matchers are regexes, so only an
 // alternative that is a bare name (after an optional `^` / `$` anchor) is read
 // as a tool; any other regex syntax is skipped silently rather than guessed at,
-// because a pattern is not a name the vocabulary can classify (ndr:c5haze).
-// Splits on top-level `|` only, so an alternation inside a group stays whole.
+// because a pattern is not a name the vocabulary can classify (ndr:szdn5s).
+// Splits on top-level `|` only, so an alternation inside a group stays whole;
+// inside a `[...]` class, `(`, `)` and `|` are literal members, not structure.
 function matcherToolNames(matcher: string): string[] {
   const alternatives: string[] = [];
   let depth = 0;
+  let inClass = false;
   let current = '';
   for (let index = 0; index < matcher.length; index++) {
     const char = matcher[index];
@@ -1097,8 +1117,16 @@ function matcherToolNames(matcher: string): string[] {
       index++;
       continue;
     }
-    if (char === '(' || char === '[') depth++;
-    else if ((char === ')' || char === ']') && depth > 0) depth--;
+    if (inClass) {
+      // A `]` directly after `[` or `[^` is a literal member.
+      const opener = current.slice(-1) === '[' || current.slice(-2) === '[^';
+      if (char === ']' && !opener) inClass = false;
+      current += char;
+      continue;
+    }
+    if (char === '[') inClass = true;
+    else if (char === '(') depth++;
+    else if (char === ')' && depth > 0) depth--;
     if (char === '|' && depth === 0) {
       alternatives.push(current);
       current = '';
@@ -1113,8 +1141,35 @@ function matcherToolNames(matcher: string): string[] {
   return [...new Set(names)];
 }
 
-// First line at or after `fromLine` (0-based index) whose `"matcher"` key holds
-// exactly this string. Scans forward from the event key, unlike
+// Tool events: the hook events whose `matcher` filters on `tool_name`.
+const TOOL_NAME_MATCHER_EVENTS: ReadonlySet<string> = new Set([
+  'PreToolUse',
+  'PostToolUse',
+  'PermissionRequest',
+]);
+
+// 0-based index of the first line after this event's key line that holds
+// another declared event's key, or undefined when none does.
+function nextEventKeyIndex(
+  sourcePath: string,
+  content: string,
+  source: { hooks?: Record<string, unknown> },
+  event: string,
+  eventLine: number,
+): number | undefined {
+  let end: number | undefined;
+  for (const other of Object.keys(source.hooks ?? {})) {
+    if (other === event) continue;
+    const line = locateHookEventKey(sourcePath, content, other)?.line;
+    if (line !== undefined && line > eventLine && (end === undefined || line - 1 < end)) {
+      end = line - 1;
+    }
+  }
+  return end;
+}
+
+// First line at or after `fromLine` (0-based index), and before `toLine`
+// (exclusive, when given), whose `"matcher"` key holds exactly this string. Scans forward from the event key, unlike
 // `locateHookEventKey`, because several groups under one event may share a
 // matcher and each should resolve to its own line.
 function locateHookMatcher(
@@ -1122,10 +1177,12 @@ function locateHookMatcher(
   content: string,
   matcher: string,
   fromLine: number,
+  toLine?: number,
 ): SourceLocation | undefined {
   const keyPattern = new RegExp(`"matcher"\\s*:\\s*${escapeRegExp(JSON.stringify(matcher))}`);
   const lines = content.split('\n');
-  for (let index = fromLine; index < lines.length; index++) {
+  const end = Math.min(toLine ?? lines.length, lines.length);
+  for (let index = fromLine; index < end; index++) {
     if (keyPattern.test(lines[index])) {
       return { path: sourcePath, line: index + 1 };
     }

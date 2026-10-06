@@ -589,7 +589,15 @@ than a generic sentence that is technically true.
 > now exists in the table and the adapter's `Set` is gone. The 0.147.0
 > re-verification also confirmed the old list was **correct**, which is the point
 > worth keeping: this entry was never about a wrong answer, it was about an
-> unciteable one.
+> unciteable one. Amended 2026-10-06: matcher tool names are now detected. The
+> `codex/hook` row carries an optional `tools` vocabulary, and a hook `matcher`
+> naming a Claude tool Codex does not expose reports
+> `unsupported-hook-matcher-tool` (or `unclassified-hook-matcher-tool` for a name
+> nobody has ruled on) on the tool events; the matcher is emitted unchanged. The
+> `Agent` alias for `spawn_agent` that the hooks reference documents did not hold
+> on codex-cli 0.160.0, so `Task` is reported rather than rewritten
+> (`docs/reports/codex-spawn-agent-hook-probe.md`). See
+> `docs/hook-event-parity.md` § Matcher.
 
 **Gap.** `ConstructSurface` admits `skill` and `prompt` only, so the capability
 table has no `hook` surface and `supportFor` cannot be asked whether a hook event
@@ -681,15 +689,6 @@ demonstrates the correct pattern and the incorrect one within twenty lines of
 each other. A reviewer reading for table-sourced facts would find one and stop.
 The gap surfaced only when a package needed an answer the table could not be
 asked for, and the correct answer had to be recovered from a vendor binary.
-
-**Amendment, 2026-10-06.** Matcher tool names are now detected. The `codex/hook`
-row carries an optional `tools` vocabulary, and a hook `matcher` naming a Claude
-tool Codex does not expose reports `unsupported-hook-matcher-tool` (or
-`unclassified-hook-matcher-tool` for a name nobody has ruled on); the matcher is
-emitted unchanged. The `Agent` alias for `spawn_agent` that the hooks reference
-documents did not hold on codex-cli 0.160.0, so `Task` is reported rather than
-rewritten (`docs/reports/codex-spawn-agent-hook-probe.md`). See
-`docs/hook-event-parity.md` § Matcher.
 
 ---
 

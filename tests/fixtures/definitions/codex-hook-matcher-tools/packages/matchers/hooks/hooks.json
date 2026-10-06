@@ -1,0 +1,52 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [{ "type": "command", "command": "echo task" }]
+      },
+      {
+        "matcher": "^Bash$|Edit",
+        "hooks": [{ "type": "command", "command": "echo ok" }]
+      },
+      {
+        "matcher": "Frobnicate",
+        "hooks": [{ "type": "command", "command": "echo unknown" }]
+      },
+      {
+        "matcher": "mcp__fs__read|(Read|Grep)|Glob",
+        "hooks": [{ "type": "command", "command": "echo mixed" }]
+      },
+      {
+        "matcher": ".*",
+        "hooks": [{ "type": "command", "command": "echo regex" }]
+      },
+      {
+        "matcher": "[(]|Agent",
+        "hooks": [{ "type": "command", "command": "echo class" }]
+      },
+      {
+        "matcher": "update_plan|spawn_agent",
+        "hooks": [{ "type": "command", "command": "echo vocabulary" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "\u0054ask",
+        "hooks": [{ "type": "command", "command": "echo escaped" }]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Task",
+        "hooks": [{ "type": "command", "command": "echo shared" }]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [{ "type": "command", "command": "echo session" }]
+      }
+    ]
+  }
+}

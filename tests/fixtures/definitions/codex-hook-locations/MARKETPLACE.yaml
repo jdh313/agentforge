@@ -11,4 +11,4 @@ publications:
     destination: .agents/plugins/marketplace.json
     enrollment:
       mode: include
-      packages: [located, duplicated, matchers]
+      packages: [located, duplicated]

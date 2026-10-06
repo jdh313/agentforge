@@ -206,8 +206,11 @@ doc's tool coverage table:
 | Unified exec (`exec_command`) | `Bash` |
 | `apply_patch` | `apply_patch`, `Edit`, or `Write` |
 | MCP tools | the MCP tool name, e.g. `mcp__filesystem__read_file` |
-| Other local function tools | the function tool name, e.g. `update_plan`; the doc also claims `spawn_agent` matches `Agent`, which codex-cli 0.160.0 contradicts (see below) |
+| Other local function tools | the function tool name, e.g. `update_plan`; `spawn_agent` also matches `Agent` |
 | Hosted tools, such as `WebSearch` | *not matchable — outside the local function-tool hook path* |
+
+The table above is the hooks reference's own claim. Observed on codex-cli
+0.160.0, the `spawn_agent` / `Agent` alias does not hold (see `Task` below).
 
 This is why `commit`'s `matcher: "Bash"` fires under Codex even though Codex's
 own tools are `shell` / `local_shell` / `exec_command`. Confirmed live against
@@ -223,23 +226,27 @@ alias compiles cleanly and matches nothing. The compiler now reports this: the
 against it, emitting a warning and leaving the matcher unchanged:
 
 - `unsupported-hook-matcher-tool` — an **established** absence. Listed names:
-  `Task`, `Read`, `Grep`, `Glob`, `WebFetch`, `WebSearch`, `NotebookEdit`,
+  `Task`, `Agent`, `Read`, `Grep`, `Glob`, `WebFetch`, `WebSearch`, `NotebookEdit`,
   `TodoWrite`. Disposition: lost, undeclared.
 - `unclassified-hook-matcher-tool` — a name the row neither lists nor
   prefix-admits (`Frobnicate`). "We have never ruled on this", not "Codex lacks
   it". Disposition: not established. Neither code gates the compile.
 
-Supported names are `Bash`, `Edit`, `Write`, `apply_patch`, and anything
+The check runs only on the tool events (`PreToolUse`, `PostToolUse`,
+`PermissionRequest`); on the other events a matcher filters a session source,
+compaction trigger, or agent type, not a tool name. Supported names are `Bash`,
+`Edit`, `Write`, `apply_patch`, `update_plan`, `spawn_agent`, and anything
 starting `mcp__`. A matcher is split on top-level `|`, an optional leading `^`
 and trailing `$` are stripped per alternative, and an alternative is read as a
 tool name only when it is `[A-Za-z0-9_]+`. Any other regex syntax (`.*`,
-`(Read|Grep)`) is skipped silently. The diagnostic points at the matcher's line
-in `hooks.json`, falling back to the event key line when the matcher text cannot
-be found.
+`(Read|Grep)`) is skipped silently (inside a `[...]` class, `(`, `)` and `|`
+are literal, not structure). The diagnostic points at the matcher's line in
+`hooks.json`, searched only within that event's block, and falls back to the
+event key line when the matcher text cannot be found there.
 
 - **`Task`** is the sharpest case, and the hooks reference is wrong about it.
-  The doc says `spawn_agent` also matches `Agent`, so `Task` to `Agent` looked
-  like a rewrite. A live probe on codex-cli 0.160.0
+  The hooks reference says `spawn_agent` also matches `Agent`, so `Task` to
+  `Agent` looked like a rewrite. A live probe on codex-cli 0.160.0
   ([`docs/reports/codex-spawn-agent-hook-probe.md`](reports/codex-spawn-agent-hook-probe.md))
   found the subagent `tool_name` is `collaborationspawn_agent`, a matcher of
   `Agent` never fired, and the prompt reaches the hook encrypted. `Task` stays a

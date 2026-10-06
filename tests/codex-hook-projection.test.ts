@@ -358,7 +358,7 @@ describe('Codex hook matcher tool names', () => {
     import.meta.dir,
     'fixtures',
     'definitions',
-    'codex-hook-locations',
+    'codex-hook-matcher-tools',
     'MARKETPLACE.yaml',
   );
 
@@ -379,7 +379,10 @@ describe('Codex hook matcher tool names', () => {
 
   test('reports matcher "Task" as unsupported, pointing at the matcher line', async () => {
     const { diagnostics } = await compileMatchers();
-    const task = diagnostics.find((candidate) => candidate.message.includes('"Task"'));
+    const task = diagnostics.find(
+      (candidate) =>
+        candidate.message.includes('"Task"') && candidate.message.includes('"PreToolUse"'),
+    );
     expect(task).toMatchObject({ code: 'unsupported-hook-matcher-tool', severity: 'warning' });
     // Fixture line 5 is `"matcher": "Task"`.
     expect(task?.locations).toEqual([
@@ -409,7 +412,41 @@ describe('Codex hook matcher tool names', () => {
     expect(mixed[0]).toMatchObject({ code: 'unsupported-hook-matcher-tool' });
     expect(mixed[0]?.message).toContain('"Glob"');
     expect(diagnostics.some((candidate) => candidate.message.includes('".*"'))).toBe(false);
-    expect(diagnostics).toHaveLength(3);
+    expect(diagnostics).toHaveLength(6);
+  });
+
+  test('reads a name after a character class containing "(" and classifies Agent as unsupported', async () => {
+    const { diagnostics } = await compileMatchers();
+    const agent = diagnostics.find((candidate) => candidate.message.includes('"[(]|Agent"'));
+    expect(agent).toMatchObject({ code: 'unsupported-hook-matcher-tool' });
+    expect(agent?.message).toContain('"Agent"');
+    expect(agent?.locations).toEqual([expect.objectContaining({ line: 25 })]);
+  });
+
+  test('treats update_plan and spawn_agent as supported', async () => {
+    const { diagnostics } = await compileMatchers();
+    expect(diagnostics.some((candidate) => candidate.message.includes('update_plan'))).toBe(false);
+  });
+
+  test('emits nothing for a SessionStart matcher such as "startup|resume"', async () => {
+    const { diagnostics } = await compileMatchers();
+    expect(diagnostics.some((candidate) => candidate.message.includes('"SessionStart"'))).toBe(
+      false,
+    );
+    expect(diagnostics.some((candidate) => candidate.message.includes('startup'))).toBe(false);
+  });
+
+  test('keeps a matcher location inside its own event block', async () => {
+    const { diagnostics } = await compileMatchers();
+    // The PostToolUse matcher is written `\u0054ask`, so its source text does
+    // not match the parsed value; the next event's literal "Task" must not
+    // capture it. It falls back to the PostToolUse key line (33).
+    const post = diagnostics.find((candidate) => candidate.message.includes('"PostToolUse"'));
+    expect(post?.locations).toEqual([expect.objectContaining({ line: 33 })]);
+    const permission = diagnostics.find((candidate) =>
+      candidate.message.includes('"PermissionRequest"'),
+    );
+    expect(permission?.locations).toEqual([expect.objectContaining({ line: 41 })]);
   });
 
   test('emits every matcher unchanged', async () => {
@@ -426,6 +463,8 @@ describe('Codex hook matcher tool names', () => {
       'Frobnicate',
       'mcp__fs__read|(Read|Grep)|Glob',
       '.*',
+      '[(]|Agent',
+      'update_plan|spawn_agent',
     ]);
   });
 });
