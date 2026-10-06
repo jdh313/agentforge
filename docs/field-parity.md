@@ -1,8 +1,8 @@
 # Field parity: skill and agent
 
 Every frontmatter field the canonical `SKILL.md` and `AGENT.md` schemas accept,
-what each one becomes on Claude Code and on Codex, and — where it is dropped —
-whether any field on the other side could ever carry it. The last group in each
+what each one becomes on Claude Code, on Codex and (skills only) on Pi, and —
+where it is dropped — whether any field on the other side could ever carry it. The last group in each
 table reads the other way: harness fields no canonical key can set.
 
 **Sources, and what outranks this file.** Rows are read off `src/schema.ts`
@@ -14,7 +14,8 @@ are authoritative; this file is a reading of them at one moment and goes stale
 the way any table does. Verified against **codex-cli 0.155.1** and **Claude Code
 2.1.274**, 2026-09-21; the Agent `skills` row retains its codex-cli 0.154.0
 live A/B evidence (L-013), while role selection and project discovery were
-re-verified on 0.155.1 (L-011 and L-012).
+re-verified on 0.155.1 (L-011 and L-012). The Pi column was read off `src/targets/pi.ts`,
+the `pi/skill` capability row, and Pi's `docs/skills.md` on 2026-10-06.
 
 **Not in scope here:** why a row is the way it is (NDR ledger, cited as
 `ndr:<id>` from the source files themselves), what is unbuildable (
@@ -46,51 +47,57 @@ one translated invocation policy. Codex's only other declarative surface for a
 skill is the `agents/openai.yaml` sidecar, whose known keys are
 `interface.display_name`, `interface.short_description` and
 `policy.allow_implicit_invocation` — so that file is the one place a future
-mapping could land.
+mapping could land. Pi implements Agent Skills and retains four keys natively:
+`name`, `description`, `allowed-tools` and `disable-model-invocation`. Its
+documented frontmatter has no other field a Claude-only key could land in.
 
-### Shared by both harnesses
+### Shared by all three harnesses
 
-| Canonical field | Claude | Codex |
-| --- | --- | --- |
-| `name` <br> lowercase, ≤64 chars | **Native** — `name` | **Native** — `name` |
-| `description` <br> required | **Native** — `description` | **Native** — `description` |
-| `disable-model-invocation` <br> boolean | **Native** — `disable-model-invocation` | **Translated** — `agents/openai.yaml` → `policy.allow_implicit_invocation: false`. Sidecar file, not frontmatter. Skill stays runnable from the `$` picker (L-004). |
-| `body` <br> markdown below frontmatter | **Native** — SKILL.md body | **Native** — SKILL.md body. No templating: `$ARGUMENTS`, `${CLAUDE_*}`, `` !`…` `` reach the model as literal text and warn. |
+| Canonical field | Claude | Codex | Pi |
+| --- | --- | --- | --- |
+| `name` <br> lowercase, ≤64 chars | **Native** — `name` | **Native** — `name` | **Native** — `name`; also the `/skill:name` command. |
+| `description` <br> required | **Native** — `description` | **Native** — `description` | **Native** — `description` |
+| `disable-model-invocation` <br> boolean | **Native** — `disable-model-invocation` | **Translated** — `agents/openai.yaml` → `policy.allow_implicit_invocation: false`. Sidecar file, not frontmatter. Skill stays runnable from the `$` picker (L-004). | **Native** — `disable-model-invocation`. Hides the skill from automatic model selection. |
+| `body` <br> markdown below frontmatter | **Native** — SKILL.md body | **Native** — SKILL.md body. No templating: `$ARGUMENTS`, `${CLAUDE_*}`, `` !`…` `` reach the model as literal text and warn. | **Native** — SKILL.md body. No templating, same warnings as Codex. Text typed after `/skill:name` is appended as a user request, not substituted into the body. |
 
-### Claude-only
+### Claude-first
 
-| Canonical field | Claude | Codex |
-| --- | --- | --- |
-| `allowed-tools` <br> string \| string[] | **Native** — `allowed-tools` | **No analogue.** No tool allowlist on a Codex skill or in `openai.yaml`; `sandbox_mode` is agent-role only and cannot back a per-tool guarantee (L-002). |
-| `disallowed-tools` | **Native** — `disallowed-tools` | **No analogue.** No denylist on any Codex skill surface. |
-| `when_to_use` | **Native** — `when_to_use` | **Blocked** → `interface.short_description` (openai.yaml), the one Codex field that steers when a skill surfaces. Currently fed from `description` on the marketplace path, so a mapping has to decide which key wins. |
-| `argument-hint` | **Native** — `argument-hint` | **No analogue** on the skill surface. Codex substitutes arguments on its *prompt* surface only, which is a different artifact, not a field a skill can set. |
-| `arguments` | **Native** — `arguments` | **No analogue.** Same reason as `argument-hint`: a Codex skill takes no invocation-time argument. |
-| `user-invocable` | **Native** — `user-invocable` | **Blocked** → the `policy:` block beside `allow_implicit_invocation`, if Codex ever documents the inverse switch. No key hiding a skill from the `$` picker is known today. |
-| `model` | **Native** — `model` | **Blocked.** Nothing at skill level — Codex pins a model per *agent role* (`model`), not per skill. Reachable only by authoring the same behavior as an agent. |
-| `effort` <br> low \| medium \| high \| xhigh \| max | **Native** — `effort` | **Blocked.** Nothing at skill level; `model_reasoning_effort` exists on the agent role, where agentforge already translates this same key. |
-| `context` <br> fork | **Native** — `context` | **No analogue.** Context forking is a Claude Code execution mode with no Codex declarative form. |
-| `agent` | **Native** — `agent` | **No analogue** on the skill/plugin surface: a plugin registers no Codex agent role (L-010). Standalone Codex roles are selectable, but a skill cannot name one declaratively through this field. |
-| `hooks` | **Native** — `hooks` | **Translated with scope loss** → a separate package hook file and manifest entry during marketplace compilation. Codex loads it for the whole enabled package, including before the skill is invoked; standalone leaf rendering still drops it. `once` is stripped with a warning. Event and matcher parity are tracked in [hook-event-parity.md](hook-event-parity.md) (L-009; ndr:pz1x3e). |
-| `paths` | **Native** — `paths` | **No analogue.** No path-scoping key on any Codex skill surface. |
-| `shell` <br> bash \| powershell | **Native** — `shell` | **No analogue**, and moot on Codex: hooks are unavailable on Windows there, so the PowerShell half has no runtime. |
+| Canonical field | Claude | Codex | Pi |
+| --- | --- | --- | --- |
+| `allowed-tools` <br> string \| string[] | **Native** — `allowed-tools` | **No analogue.** No tool allowlist on a Codex skill or in `openai.yaml`; `sandbox_mode` is agent-role only and cannot back a per-tool guarantee (L-002). | **Native** — `allowed-tools`. Pi documents it as experimental. |
+| `disallowed-tools` | **Native** — `disallowed-tools` | **No analogue.** No denylist on any Codex skill surface. | **No analogue.** Pi's tool field is an allowlist only; nothing removes one named tool. |
+| `when_to_use` | **Native** — `when_to_use` | **Blocked** → `interface.short_description` (openai.yaml), the one Codex field that steers when a skill surfaces. Currently fed from `description` on the marketplace path, so a mapping has to decide which key wins. | **Blocked** → `description`, Pi's only routing field. Concatenating into it rewrites the text the author wrote for every target; `targets.pi.description` is the manual route today. |
+| `argument-hint` | **Native** — `argument-hint` | **No analogue** on the skill surface. Codex substitutes arguments on its *prompt* surface only, which is a different artifact, not a field a skill can set. | **No analogue.** Pi appends whatever follows `/skill:name` as a user request; no field declares or hints at that text. |
+| `arguments` | **Native** — `arguments` | **No analogue.** Same reason as `argument-hint`: a Codex skill takes no invocation-time argument. | **No analogue.** No named arguments and no substitution: trailing text arrives as one appended request. |
+| `user-invocable` | **Native** — `user-invocable` | **Blocked** → the `policy:` block beside `allow_implicit_invocation`, if Codex ever documents the inverse switch. No key hiding a skill from the `$` picker is known today. | **No analogue.** Every Pi skill is reachable as `/skill:name`; no documented field hides it. |
+| `model` | **Native** — `model` | **Blocked.** Nothing at skill level — Codex pins a model per *agent role* (`model`), not per skill. Reachable only by authoring the same behavior as an agent. | **No analogue.** No per-skill model key, and agentforge projects no agent artifact to Pi that could carry one. |
+| `effort` <br> low \| medium \| high \| xhigh \| max | **Native** — `effort` | **Blocked.** Nothing at skill level; `model_reasoning_effort` exists on the agent role, where agentforge already translates this same key. | **No analogue.** Same reason as `model`. |
+| `context` <br> fork | **Native** — `context` | **No analogue.** Context forking is a Claude Code execution mode with no Codex declarative form. | **No analogue.** Pi loads a skill into the current conversation; no documented key forks it. |
+| `agent` | **Native** — `agent` | **No analogue** on the skill/plugin surface: a plugin registers no Codex agent role (L-010). Standalone Codex roles are selectable, but a skill cannot name one declaratively through this field. | **No analogue.** agentforge projects no `agent` artifact to Pi (`src/targets/pi.ts` declares `artifacts.skill` alone), so there is no role to name. |
+| `hooks` | **Native** — `hooks` | **Translated with scope loss** → a separate package hook file and manifest entry during marketplace compilation. Codex loads it for the whole enabled package, including before the skill is invoked; standalone leaf rendering still drops it. `once` is stripped with a warning. Event and matcher parity are tracked in [hook-event-parity.md](hook-event-parity.md) (L-009; ndr:pz1x3e). | **No analogue.** Pi skill frontmatter has no hooks key, and agentforge compiles no Pi package that could carry a hook file. |
+| `paths` | **Native** — `paths` | **No analogue.** No path-scoping key on any Codex skill surface. | **No analogue.** No path-scoping key. Pi resolves relative file references against the skill directory, which is a different operation. |
+| `shell` <br> bash \| powershell | **Native** — `shell` | **No analogue**, and moot on Codex: hooks are unavailable on Windows there, so the PowerShell half has no runtime. | **No analogue**, and moot: Pi runs no `` !`…` `` injection, so there is nothing to pick a shell for. |
 
 ### No canonical field — the harness reads it, agentforge cannot set it
 
-| Canonical field | Claude | Codex |
-| --- | --- | --- |
-| *none* | n/a — Claude derives a skill's display label from `name`; there is no separate display field to miss. | **Unmapped** — `agents/openai.yaml` → `interface.display_name`. Emitted on the marketplace path, humanized from `name`. An author cannot give a Codex skill a display name that differs from its slug. |
-| *none* | n/a | **Unmapped** — `agents/openai.yaml` → `interface.short_description`. Emitted from `description`. It is also the standing candidate for `when_to_use` above, which is why a canonical key of its own has to decide which value wins. |
+| Canonical field | Claude | Codex | Pi |
+| --- | --- | --- | --- |
+| *none* | n/a — Claude derives a skill's display label from `name`; there is no separate display field to miss. | **Unmapped** — `agents/openai.yaml` → `interface.display_name`. Emitted on the marketplace path, humanized from `name`. An author cannot give a Codex skill a display name that differs from its slug. | n/a — `name` doubles as the display name. |
+| *none* | n/a | **Unmapped** — `agents/openai.yaml` → `interface.short_description`. Emitted from `description`. It is also the standing candidate for `when_to_use` above, which is why a canonical key of its own has to decide which value wins. | n/a |
+| *none* | Not checked here. | Not checked here. | **Unmapped** — `license` · `compatibility` · `metadata`. Agent Skills fields Pi documents; `src/schema.ts` enumerates none of them, so each reports `unrecognized-frontmatter-key` and is stripped. |
 
 ### Authoring layer — never emitted anywhere
 
-| Canonical field | Both targets |
+| Canonical field | All targets |
 | --- | --- |
 | `targets.<name>` <br> per-target override block | **Consumed.** Deep-merged over the top level for that target, then removed. `targets.<name>.body` replaces the body wholesale; no partial templating. |
 
 ## Agent
 
 `AGENT.md` · file layout · Claude `.md` / Codex `.toml`
+
+No Pi column: agentforge projects no `agent` artifact to Pi, and Pi agent
+support is deferred beyond 1.0 ([roadmap.md](roadmap.md)).
 
 Claude emits Markdown frontmatter under the same key names its own loader reads.
 Codex's `AgentRoleOverrides` set has nine fields: `developer_instructions`,
