@@ -185,11 +185,6 @@ was not put into a failure mode or an env probe.
   naming another package's agent. Widening it is Fibery Charting #23, and is
   deliberately outside 1.0.
 - Use Commit for hooks, executable scripts, payloads, and blocking.
-- `attention-workflow` is out of 1.0 scope. It is unused, and is slated for
-  removal from `jdh-agents` rather than for a verified support boundary, so
-  proving where its structural guarantee survives projection buys nothing.
-  Until it is removed it stays in the corpus and compiles like any other
-  package; 1.0 simply makes no claim about it.
 - Compile, check, publish, and install the complete `jdh-agents` corpus.
 - Retire redundant generated native maintenance only after the replacement
   workflow passes its runtime acceptance gates.
@@ -202,13 +197,7 @@ artifacts, and behavior verified in a fresh harness.
 Open work lives in Fibery Project Tracking tasks, ordered by their `Sequence`
 field. As of 2026-10-07 the AgentForge tasks still open are:
 
-- #133 — decide who owns Codex skill `interface.short_description`.
-- #134 — add canonical keys for unmapped Codex agent-role fields, or rule them
-  out.
-- #135 — enumerate the three Claude observer loader keys, or leave them
-  unrecognized.
 - #137 — expose Codex-native agent sandbox and approval configuration.
-- #118 and #124 — post-1.0: verified agent support for OpenCode, Pi and later
-  runtimes; removal of `attention-workflow` from `jdh-agents`.
+- #118 — post-1.0: verified agent support for OpenCode, Pi and later runtimes.
 
 Check Fibery before trusting this list; it is a snapshot.
