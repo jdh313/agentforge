@@ -30,7 +30,7 @@ No row is supported solely because its native file compiled or validated.
 | Package discovery | Observed in the fresh runtime init event | Plugin loads skills and other supported components | Not applicable |
 | Named agent registration | Observed by direct selection and parent delegation | Unsupported: package `agents/*.md` is inert procedure text | Observed for a synthetic project role in `.codex/agents` on 0.155.1; the real Librarian role was not rerun |
 | Model | Observed Sonnet selection in runtime usage metadata | Unsupported | Documented and emitted; not re-observed in the 0.155.1 marker probe |
-| Effort | Declared as `medium`; effective value was not exposed by the Claude result | Unsupported | Documented and emitted; not re-observed in the 0.155.1 marker probe |
+| Effort | Observed: plugin agents pinned `low` and `max` ran at those values under a `medium` parent (transcript `perTurnEffort`, Claude Code 2.1.292) | Unsupported | Documented and emitted; not re-observed in the 0.155.1 marker probe |
 | Turn limit | Observed in a spawned synthetic agent stopped after its configured two turns | Unsupported | Unsupported by the current Codex projection |
 | Tool/read-only enforcement | Top-level tools were scoped, but `Bash(obsidian-cli *)` did not prevent a delegated child from executing `pwd` | Unsupported and declared as stripped | Unsupported by the current projection; parent sandbox still applies |
 | Delegation and isolation | Observed in a distinct `librarian:vault-reader` child with one `Read` call | Impossible through the package role | Explicit custom-role behavior observed through a unique instruction marker; Librarian's file-read workflow was not rerun |
@@ -175,6 +175,23 @@ resource-resolution failure. It does not change the existing negative finding
 for Claude user/project leaf agents, whose loader still receives the token
 literally.
 
+### Claude plugin agent effort (2026-10-07)
+
+Two synthetic canonical agents, `probe-low` (`effort: low`) and `probe-max`
+(`effort: max`), were rendered with `agentforge render --target claude` and
+loaded as an inline plugin (`--plugin-dir`) on Claude Code 2.1.292. A headless
+parent ran at `--effort medium` and dispatched each in the foreground. Neither
+`Agent` call passed an `effort` argument.
+
+The session transcripts record the effective effort per turn: the parent's
+turns carry `"perTurnEffort":"medium"`, the `effortprobe:probe-low` child's
+`"low"`, and the `effortprobe:probe-max` child's `"max"`. Because each child
+differs from the inherited session value, the frontmatter pin is what set it.
+
+This is the runtime's own record of the effort it applied, not a captured API
+request body. That is still observed runtime evidence, because the transcript is
+written by the harness rather than by the model.
+
 ### Historical Codex leaf agent probe (0.154.0)
 
 AgentForge installed and checked the synthetic leaf successfully. A persistent
@@ -249,8 +266,9 @@ The ticket cannot honestly pass as one cross-runtime parity claim.
 
 - Claude package registration, model selection, scoped tools, delegation,
   isolation, spawned-agent turn limiting, plugin-root resolution, and
-  background-child continuity have positive runtime evidence. Effort remains
-  unverified, and Bash-pattern enforcement has negative runtime evidence.
+  background-child continuity have positive runtime evidence. Effort has
+  positive runtime evidence from a synthetic probe (2026-10-07), and
+  Bash-pattern enforcement has negative runtime evidence.
 - Claude follow-up parity is conditional: the caller must spawn the persistent
   reader in the background. A foreground child cannot be resumed on the tested
   release despite returning an agent ID.
