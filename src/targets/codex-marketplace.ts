@@ -1271,7 +1271,7 @@ function translateCommandSkill({
         kind: 'generated',
         packageId: packageInput.id,
         destination: `${skillDirectory}/agents/openai.yaml`,
-        content: codexSkillPolicy(command.name, command.description),
+        content: codexSkillPolicy(command.name, command.shortDescription),
       },
     ],
     diagnostics: [
@@ -1286,11 +1286,16 @@ function translateCommandSkill({
   };
 }
 
-function codexSkillPolicy(name: string, description: string): string {
+// `shortDescription` is the author's `short-description` and nothing else: the
+// UI blurb is never derived from `description`, which drives model selection.
+// Absent, the key is omitted and Codex falls back to its own default.
+function codexSkillPolicy(name: string, shortDescription?: string): string {
   return [
     'interface:',
     `  display_name: ${JSON.stringify(humanize(name))}`,
-    `  short_description: ${JSON.stringify(description)}`,
+    ...(shortDescription === undefined
+      ? []
+      : [`  short_description: ${JSON.stringify(shortDescription)}`]),
     'policy:',
     '  allow_implicit_invocation: false',
     '',

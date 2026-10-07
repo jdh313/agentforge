@@ -42,6 +42,9 @@ export type DiagnosticCode =
   // and an unrecognized key supports neither half of that claim. Whether it was
   // retained or dropped is in the detail — the kind names what we do not know.
   | 'unrecognized-frontmatter-key'
+  // `short-description` outside Codex's documented 25-64 character range. A
+  // warning, not a rejection: the value is still emitted as written.
+  | 'codex-short-description-length'
   // A construct the target supports only when a typed condition holds.
   // Distinct from every kind above, which reports an unconditional target
   // outcome: this warning carries the gate rather than averaging over it, and
@@ -75,6 +78,7 @@ export type WarningKind = Extract<
   | 'claude-only-body-feature'
   | 'unclassified-body-construct'
   | 'unrecognized-frontmatter-key'
+  | 'codex-short-description-length'
   | 'construct-support-gated'
 >;
 

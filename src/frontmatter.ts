@@ -31,6 +31,16 @@ const ACCEPTANCE: Readonly<
       source:
         'Claude Code and Pi skill frontmatter. Codex accepts the behavior through agents/openai.yaml translation.',
     },
+    // Retained by no target: Codex receives it by translation to
+    // `agents/openai.yaml` `interface.short_description` (capability table),
+    // exactly like `disable-model-invocation` on Codex (ndr:vj6z18). Empty
+    // membership is what marks a key translation-only; see
+    // `isTranslationOnlyKey`.
+    'short-description': {
+      targets: [],
+      source:
+        'Codex skill sidecar `interface.short_description` (codex-cli 0.160.0 embedded skill-creator docs: human-facing UI blurb, 25-64 chars). No other harness has a field for it.',
+    },
     when_to_use: claudeOnly(),
     'argument-hint': claudeOnly(),
     arguments: claudeOnly(),
@@ -153,6 +163,15 @@ export function acceptedFrontmatterKeys(
       .filter(([, acceptance]) => acceptance.targets.includes(target))
       .map(([key]) => key),
   );
+}
+
+// A key no target retains in frontmatter, so it exists only to be translated.
+// Its absence from a non-translating target is not a loss of anything that
+// target owns, which is why the stripped-key warning (worded as a Claude-owned
+// loss) must not name it.
+export function isTranslationOnlyKey(artifact: ArtifactType, key: string): boolean {
+  const acceptance = ACCEPTANCE[artifact][key];
+  return acceptance !== undefined && acceptance.targets.length === 0;
 }
 
 export function frontmatterAcceptanceSource(

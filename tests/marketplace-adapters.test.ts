@@ -307,7 +307,6 @@ describe('native marketplace adapters', () => {
     ).toEqual({
       interface: {
         display_name: 'Spec Flow',
-        short_description: 'Drive a change through the spec-flow contract lifecycle.',
       },
       policy: { allow_implicit_invocation: false },
     });

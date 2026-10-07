@@ -41,6 +41,7 @@ export const CanonicalSkillFrontmatter = z.looseObject({
   'argument-hint': z.string().optional(),
   arguments: z.union([z.string(), z.array(z.string())]).optional(),
   'disable-model-invocation': z.boolean().optional(),
+  'short-description': z.string().optional(),
   'user-invocable': z.boolean().optional(),
   'allowed-tools': z.union([z.string(), z.array(z.string())]).optional(),
   'disallowed-tools': z.union([z.string(), z.array(z.string())]).optional(),

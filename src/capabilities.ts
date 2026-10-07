@@ -95,6 +95,8 @@ const CLAUDE_TOKENS = [
 // below for why the plugin-root variables do not share this row (ndr:61cmc9).
 const CODEX_SKILL_TRANSLATIONS: Readonly<Record<string, string>> = {
   'disable-model-invocation': 'agents/openai.yaml',
+  // UI-only blurb (`interface.short_description`); routing stays on `description`.
+  'short-description': 'agents/openai.yaml',
 };
 
 // `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}` are documented only as

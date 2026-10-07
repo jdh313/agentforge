@@ -43,9 +43,11 @@ agentforge writes to is a claim the harness reads it (ndr:d17fnt).
 `SKILL.md` · directory layout · `scripts/` `references/` `assets/`
 
 Claude retains every key it defines. Codex takes the two Agent Skills fields plus
-one translated invocation policy. Codex's only other declarative surface for a
-skill is the `agents/openai.yaml` sidecar, whose known keys are
-`interface.display_name`, `interface.short_description` and
+two translated keys (invocation policy and `short-description`). Codex's only
+other declarative surface for a skill is the `agents/openai.yaml` sidecar, whose
+known keys are `interface.display_name`, `interface.short_description`,
+`interface.icon_small`, `interface.icon_large`, `interface.brand_color`,
+`interface.default_prompt`, `dependencies.tools[]` and
 `policy.allow_implicit_invocation` — so that file is the one place a future
 mapping could land. Pi implements Agent Skills and retains four keys natively:
 `name`, `description`, `allowed-tools` and `disable-model-invocation`. Its
@@ -66,7 +68,7 @@ documented frontmatter has no other field a Claude-only key could land in.
 | --- | --- | --- | --- |
 | `allowed-tools` <br> string \| string[] | **Native** — `allowed-tools` | **No analogue.** No tool allowlist on a Codex skill or in `openai.yaml`; `sandbox_mode` is agent-role only and cannot back a per-tool guarantee (L-002). | **Native** — `allowed-tools`. Pi documents it as experimental. |
 | `disallowed-tools` | **Native** — `disallowed-tools` | **No analogue.** No denylist on any Codex skill surface. | **No analogue.** Pi's tool field is an allowlist only; nothing removes one named tool. |
-| `when_to_use` | **Native** — `when_to_use` | **Blocked** → `interface.short_description` (openai.yaml), the one Codex field that steers when a skill surfaces. Currently fed from `description` on the marketplace path, so a mapping has to decide which key wins. | **Blocked** → `description`, Pi's only routing field. Concatenating into it rewrites the text the author wrote for every target; `targets.pi.description` is the manual route today. |
+| `when_to_use` | **Native** — `when_to_use` | **Blocked** → `description`, Codex's only routing field (`interface.short_description` is a UI blurb and does not steer selection). Concatenating into it rewrites the text the author wrote for every target; `targets.codex.description` is the manual route today. | **Blocked** → `description`, Pi's only routing field. Concatenating into it rewrites the text the author wrote for every target; `targets.pi.description` is the manual route today. |
 | `argument-hint` | **Native** — `argument-hint` | **No analogue** on the skill surface. Codex substitutes arguments on its *prompt* surface only, which is a different artifact, not a field a skill can set. | **No analogue.** Pi appends whatever follows `/skill:name` as a user request; no field declares or hints at that text. |
 | `arguments` | **Native** — `arguments` | **No analogue.** Same reason as `argument-hint`: a Codex skill takes no invocation-time argument. | **No analogue.** No named arguments and no substitution: trailing text arrives as one appended request. |
 | `user-invocable` | **Native** — `user-invocable` | **Blocked** → the `policy:` block beside `allow_implicit_invocation`, if Codex ever documents the inverse switch. No key hiding a skill from the `$` picker is known today. | **No analogue.** Every Pi skill is reachable as `/skill:name`; no documented field hides it. |
@@ -78,12 +80,17 @@ documented frontmatter has no other field a Claude-only key could land in.
 | `paths` | **Native** — `paths` | **No analogue.** No path-scoping key on any Codex skill surface. | **No analogue.** No path-scoping key. Pi resolves relative file references against the skill directory, which is a different operation. |
 | `shell` <br> bash \| powershell | **Native** — `shell` | **No analogue**, and moot on Codex: hooks are unavailable on Windows there, so the PowerShell half has no runtime. | **No analogue**, and moot: Pi runs no `` !`…` `` injection, so there is nothing to pick a shell for. |
 
+### Codex-first
+
+| Canonical field | Claude | Codex | Pi |
+| --- | --- | --- | --- |
+| `short-description` <br> string, optional | **No analogue.** Claude Code skill frontmatter has no UI-blurb field; the listing text comes from `description`. Stripped silently, not reported: Claude never owned the key. | **Translated** — `agents/openai.yaml` → `interface.short_description` (JSON-quoted), in the same sidecar as the invocation policy. Codex documents 25-64 characters; outside that range emits `codex-short-description-length` and still writes the value as given. UI-only: `description` alone drives implicit selection (codex-cli 0.160.0). Never derived from `description`; unset, the key is omitted. | **No analogue.** Pi's skill frontmatter has no UI-blurb field, so the key is stripped silently. |
+
 ### No canonical field — the harness reads it, agentforge cannot set it
 
 | Canonical field | Claude | Codex | Pi |
 | --- | --- | --- | --- |
-| *none* | n/a — Claude derives a skill's display label from `name`; there is no separate display field to miss. | **Unmapped** — `agents/openai.yaml` → `interface.display_name`. Emitted on the marketplace path, humanized from `name`. An author cannot give a Codex skill a display name that differs from its slug. | n/a — `name` doubles as the display name. |
-| *none* | n/a | **Unmapped** — `agents/openai.yaml` → `interface.short_description`. Emitted from `description`. It is also the standing candidate for `when_to_use` above, which is why a canonical key of its own has to decide which value wins. | n/a |
+| *none* | n/a — Claude derives a skill's display label from `name`; there is no separate display field to miss. | **Unmapped** — `agents/openai.yaml` → `interface.display_name`. Emitted on the marketplace path only, humanized from `name`; no author has needed a label that differs from the slug, so no canonical key exists yet. | n/a — `name` doubles as the display name. |
 | *none* | Not checked here. | Not checked here. | **Unmapped** — `license` · `compatibility` · `metadata`. Agent Skills fields Pi documents; `src/schema.ts` enumerates none of them, so each reports `unrecognized-frontmatter-key` and is stripped. |
 
 ### Authoring layer — never emitted anywhere

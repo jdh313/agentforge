@@ -14,7 +14,7 @@ import {
 import { frontmatterOffset } from './compatibility.ts';
 import type { CompilationPlan, DesiredOutput, SourceLocation } from './compiler.ts';
 import { deepMerge } from './deep-merge.ts';
-import { acceptedFrontmatterKeys } from './frontmatter.ts';
+import { acceptedFrontmatterKeys, isTranslationOnlyKey } from './frontmatter.ts';
 import { materializeCompilation } from './materializer.ts';
 import { ARTIFACT_DEFS } from './schema.ts';
 import { getArtifactConfig } from './targets/registry.ts';
@@ -167,6 +167,11 @@ const detectGatedBodyConstructs = (
   }));
 };
 
+// codex-cli 0.160.0 embedded skill-creator docs: interface.short_description is
+// a "Human-facing short UI blurb (25-64 chars)".
+const SHORT_DESCRIPTION_MIN = 25;
+const SHORT_DESCRIPTION_MAX = 64;
+
 const pickKeys = (
   obj: Record<string, unknown>,
   allowed: ReadonlySet<string>,
@@ -278,6 +283,7 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
         artifactDef.canonicalKeys.has(key) &&
         !acceptedKeys.has(key) &&
         !externallyProjectedFrontmatterKeys.has(key) &&
+        !isTranslationOnlyKey(artifact, key) &&
         supportFor(target, artifactConfig.surface, key) !== 'translated',
     );
     if (claudeOnlyPresent.length > 0) {
@@ -373,15 +379,38 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
     artifact === 'skill' && merged['disable-model-invocation'] === true
       ? translationFor(target, artifactConfig.surface, 'disable-model-invocation')
       : undefined;
+  const shortDescription =
+    artifact === 'skill' && typeof merged['short-description'] === 'string'
+      ? merged['short-description']
+      : undefined;
+  const shortDescriptionPath =
+    shortDescription === undefined
+      ? undefined
+      : translationFor(target, artifactConfig.surface, 'short-description');
+  if (shortDescription !== undefined && shortDescriptionPath !== undefined) {
+    const length = [...shortDescription].length;
+    if (length < SHORT_DESCRIPTION_MIN || length > SHORT_DESCRIPTION_MAX) {
+      warnings.push({
+        kind: 'codex-short-description-length',
+        target,
+        detail: `short-description is ${length} characters; Codex documents ${SHORT_DESCRIPTION_MIN}-${SHORT_DESCRIPTION_MAX} for interface.short_description, emitted as written`,
+      });
+    }
+  }
+  // One sidecar holds every translated key that lands in it, so two keys
+  // sharing a destination cannot emit two competing files.
+  const sidecarPath = invocationPolicyPath ?? shortDescriptionPath;
+  const sidecarLines: string[] = [];
+  if (shortDescriptionPath !== undefined) {
+    sidecarLines.push('interface:', `  short_description: ${JSON.stringify(shortDescription)}`);
+  }
+  if (invocationPolicyPath !== undefined) {
+    sidecarLines.push('policy:', '  allow_implicit_invocation: false');
+  }
   const generatedFiles =
-    invocationPolicyPath === undefined
+    sidecarPath === undefined
       ? []
-      : [
-          {
-            relativePath: invocationPolicyPath,
-            content: 'policy:\n  allow_implicit_invocation: false\n',
-          },
-        ];
+      : [{ relativePath: sidecarPath, content: `${sidecarLines.join('\n')}\n` }];
   const sourceDir = dirname(sourcePath);
   const installIncludesResources =
     installScope === undefined ||

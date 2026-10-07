@@ -12,6 +12,7 @@ const CommandFrontmatter = z.looseObject({
   description: z.string().min(1),
   'argument-hint': z.string().min(1).optional(),
   'allowed-tools': ToolList.optional(),
+  'short-description': z.string().min(1).optional(),
 });
 
 interface CanonicalBehavior {
@@ -63,6 +64,8 @@ export function agentExecutionFrom(fields: {
 
 export interface CanonicalCommandBehavior extends CanonicalBehavior {
   kind: 'command';
+  // Codex-only UI blurb (`interface.short_description`); never derived from `description`.
+  shortDescription?: string;
   invocation: {
     argumentHint?: string;
     allowedTools?: string | string[];
@@ -89,6 +92,9 @@ export function parseCommandBehavior(sourcePath: string, source: string): Canoni
   return {
     kind: 'command',
     ...parsed.common,
+    ...(parsed.data['short-description'] === undefined
+      ? {}
+      : { shortDescription: parsed.data['short-description'] }),
     invocation: {
       ...(parsed.data['argument-hint'] === undefined
         ? {}

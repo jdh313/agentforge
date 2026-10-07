@@ -73,6 +73,8 @@ const DISPOSITION_BY_CODE: Readonly<Record<DiagnosticCode, Disposition>> = {
   // established no-op, not a loss (nothing existed to lose) and not carried
   // (there is no output). See `nothing-to-carry` above (ndr:bqh2gz).
   'empty-hook-configuration': 'nothing-to-carry',
+  // Emitted exactly as written; only the documented UI range is not enforced.
+  'codex-short-description-length': 'carried-unenforced',
   'unclassified-construct': 'not-established',
   'unclassified-body-construct': 'not-established',
   'unrecognized-frontmatter-key': 'not-established',
