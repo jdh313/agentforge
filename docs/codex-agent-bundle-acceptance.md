@@ -300,6 +300,50 @@ context). Missing or stale roles point at `sync-codex-agents`; edited,
 conflicted, or unsupported roles point at `check-codex-agent` for review. It
 always exits 0 and never writes. Codex asks the user to trust the hook once.
 
+## Role-scoped sandbox and approval acceptance
+
+Fibery #137. Question: does Codex apply a role's `sandbox_mode` and
+`approval_policy` to a spawned child? Result: **no**. Last exercised
+2026-10-07 on codex-cli 0.160.0, Bun 1.4.2. See L-014.
+
+Fixtures (canonical `AGENT.md`, compiled with `compile-codex-agent` and
+installed with `install-codex-agent --scope project` into a throwaway project;
+isolated `CODEX_HOME` with a trusted-project entry and a linked `auth.json`
+that was neither printed nor copied; `~/.codex` untouched):
+
+- `agentforge:ro-probe`: `sandbox-mode: read-only`, `approval-policy: on-request`;
+  instruction: create `ro-probe-output.txt` with a shell command and report
+  `WRITE_OK` or `WRITE_FAILED <error>`. Emitted TOML carried
+  `sandbox_mode = "read-only"` and `approval_policy = "on-request"`.
+- `ctl:ww-control`: `sandbox-mode: workspace-write`, `approval-policy: never`;
+  same instruction for `ww-control-output.txt`. A second package id was
+  needed because one package id cannot own two bundles in one scope.
+
+Each probe is a fresh `codex exec --json --skip-git-repo-check` whose parent
+calls `spawn_agent` with the exact `agent_type`. The child's rollout JSONL
+`turn_context` records the sandbox and approval policy actually applied.
+
+| Run | Parent policy | Role | Child applied | Child write |
+| --- | --- | --- | --- | --- |
+| 1 | `--sandbox workspace-write`, approval `never` | `ro-probe` (read-only, on-request) | workspace-write, `never` | succeeded; file contains `RO_WROTE` |
+| 1 | same | `ctl:ww-control` (workspace-write, never) | workspace-write, `never` | succeeded |
+| 2 | `--sandbox read-only`, approval `never` | `ctl:ww-control` (workspace-write, never) | read-only, `never` | `WRITE_FAILED ... operation not permitted` |
+| 3 | `CODEX_HOME/config.toml` `sandbox_mode = "workspace-write"`, `approval_policy = "never"`, no CLI flag | `ro-probe` | workspace-write, `never` | succeeded |
+
+Reading it: a role cannot narrow (run 1, run 3) and cannot widen (run 2) the
+parent's policy. Run 3 removes the confound that a CLI `--sandbox` flag
+outranks a role's configuration layer, since the parent's policy there is a
+config-file layer like the role's. In every run `session_meta.agent_role`
+named the role and the child followed its instructions, so the role was loaded
+and only these two settings went unapplied. The `ctl:ww-control` row of run 1
+is not a discriminator (the role matches the parent); runs 1 `ro-probe`, 2 and
+3 are. Approval policy was observed only as the recorded `turn_context` value:
+`exec` is non-interactive, so an approval prompt itself could not be provoked.
+
+Not tested: interactive sessions (`codex` TUI), a role selected as the main
+thread rather than spawned, and any codex-cli other than 0.160.0. Probe files
+lived under `/private/tmp/claude-501/` and are not preserved.
+
 ## Boundaries
 
 Codex reads project configuration only for a trusted project. The runtime probe

@@ -92,6 +92,11 @@ export const CanonicalAgentFrontmatter = z.looseObject({
   // Codex-only; see the translation-only rows in `src/frontmatter.ts`.
   'reasoning-summary': z.enum(['auto', 'concise', 'detailed', 'none']).optional(),
   verbosity: z.enum(['low', 'medium', 'high']).optional(),
+  // Codex-only, authored explicitly (ndr:bqyqfd): never derived from `tools`,
+  // `disallowedTools` or `permissionMode`. `untrusted` is rejected by codex-cli
+  // 0.160.0 and `on-failure` is deprecated, so neither is accepted.
+  'sandbox-mode': z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
+  'approval-policy': z.enum(['on-request', 'never']).optional(),
   tools: ToolList.optional(),
 
   disallowedTools: ToolList.optional(),

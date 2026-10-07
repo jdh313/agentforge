@@ -100,6 +100,23 @@ const ACCEPTANCE: Readonly<
       source:
         'Codex agent role TOML `model_verbosity` (AgentRoleOverrides, codex-cli 0.154.0; values low/medium/high from the codex-cli 0.160.0 `Verbosity` enum). Codex ignores it on a model without verbosity support. Claude Code subagent frontmatter has no counterpart.',
     },
+    // Explicit Codex-native policy (ndr:bqyqfd's separate contract): authored
+    // on purpose, never inferred from `tools`, `disallowedTools` or
+    // `permissionMode`, which stay claude-only below. Translation-only like the
+    // two above. Values: codex-cli 0.160.0 `SandboxMode` and `AskForApproval`;
+    // `untrusted` is rejected by that binary and `on-failure` is documented
+    // deprecated, so neither is accepted. The table-shaped `granular` form is
+    // not modeled.
+    'sandbox-mode': {
+      targets: [],
+      source:
+        'Codex agent role TOML `sandbox_mode` (flattened role config layer; values read-only/workspace-write/danger-full-access from the codex-cli 0.160.0 `SandboxMode` enum). Claude Code subagent frontmatter has no counterpart. Authored explicitly, never derived from tools/disallowedTools/permissionMode (ndr:bqyqfd).',
+    },
+    'approval-policy': {
+      targets: [],
+      source:
+        'Codex agent role TOML `approval_policy` (flattened role config layer; string values on-request/never from the codex-cli 0.160.0 `AskForApproval` enum and the Codex config reference). `untrusted` is rejected by 0.160.0 and `on-failure` is documented deprecated. Claude Code subagent frontmatter has no counterpart. Authored explicitly, never derived from permissionMode (ndr:bqyqfd).',
+    },
     // Codex agent roles have no tool-allowlist key (verified against the
     // agent-roles/plugin-manifest field sets in codex-cli 0.154.0), so tool
     // access stays unenforced on Codex; the constraint remains claude-only here.
@@ -112,7 +129,8 @@ const ACCEPTANCE: Readonly<
     // model_reasoning_summary, model_verbosity, personality, service_tier,
     // skills, features — and `codexAgentDocument.serialize` emits five of them
     // (developer_instructions, plus model, model_reasoning_effort,
-    // model_reasoning_summary and model_verbosity when set),
+    // model_reasoning_summary and model_verbosity when set), plus the flattened
+    // config-layer keys `sandbox_mode` and `approval_policy` when set,
     // alongside name and description. A key with no field to land in is a
     // confirmed loss on Codex, which is what `claude-only-frontmatter-stripped`
     // states; that is a stronger and more useful claim than reporting a key

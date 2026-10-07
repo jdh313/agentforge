@@ -27,6 +27,8 @@ export type CanonicalAgentEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export type CanonicalAgentReasoningSummary = 'auto' | 'concise' | 'detailed' | 'none';
 export type CanonicalAgentVerbosity = 'low' | 'medium' | 'high';
+export type CanonicalAgentSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
+export type CanonicalAgentApprovalPolicy = 'on-request' | 'never';
 
 export interface CanonicalAgentExecution {
   model?: string;
@@ -34,6 +36,8 @@ export interface CanonicalAgentExecution {
   effort?: CanonicalAgentEffort;
   reasoningSummary?: CanonicalAgentReasoningSummary;
   verbosity?: CanonicalAgentVerbosity;
+  sandboxMode?: CanonicalAgentSandboxMode;
+  approvalPolicy?: CanonicalAgentApprovalPolicy;
   tools?: string | string[];
 }
 
@@ -46,6 +50,20 @@ const CANONICAL_EFFORTS = new Set<string>(['low', 'medium', 'high', 'xhigh', 'ma
 
 const CANONICAL_REASONING_SUMMARIES = new Set<string>(['auto', 'concise', 'detailed', 'none']);
 const CANONICAL_VERBOSITIES = new Set<string>(['low', 'medium', 'high']);
+const CANONICAL_SANDBOX_MODES = new Set<string>([
+  'read-only',
+  'workspace-write',
+  'danger-full-access',
+]);
+const CANONICAL_APPROVAL_POLICIES = new Set<string>(['on-request', 'never']);
+
+function isCanonicalSandboxMode(value: unknown): value is CanonicalAgentSandboxMode {
+  return typeof value === 'string' && CANONICAL_SANDBOX_MODES.has(value);
+}
+
+function isCanonicalApprovalPolicy(value: unknown): value is CanonicalAgentApprovalPolicy {
+  return typeof value === 'string' && CANONICAL_APPROVAL_POLICIES.has(value);
+}
 
 function isCanonicalReasoningSummary(value: unknown): value is CanonicalAgentReasoningSummary {
   return typeof value === 'string' && CANONICAL_REASONING_SUMMARIES.has(value);
@@ -70,6 +88,8 @@ export function agentExecutionFrom(fields: {
   effort?: unknown;
   'reasoning-summary'?: unknown;
   verbosity?: unknown;
+  'sandbox-mode'?: unknown;
+  'approval-policy'?: unknown;
   tools?: unknown;
 }): CanonicalAgentExecution {
   return {
@@ -80,6 +100,12 @@ export function agentExecutionFrom(fields: {
       ? { reasoningSummary: fields['reasoning-summary'] }
       : {}),
     ...(isCanonicalVerbosity(fields.verbosity) ? { verbosity: fields.verbosity } : {}),
+    ...(isCanonicalSandboxMode(fields['sandbox-mode'])
+      ? { sandboxMode: fields['sandbox-mode'] }
+      : {}),
+    ...(isCanonicalApprovalPolicy(fields['approval-policy'])
+      ? { approvalPolicy: fields['approval-policy'] }
+      : {}),
     ...(fields.tools !== undefined ? { tools: fields.tools as string | string[] } : {}),
   };
 }

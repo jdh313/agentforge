@@ -1717,6 +1717,27 @@ describe('compiled Codex package agent bundle', () => {
     expect(role).toContain('model_verbosity = "low"');
   });
 
+  test('carries sandbox-mode and approval-policy through the definition schema', () => {
+    const source = join(temporaryRoot, 'scoped');
+    mkdirSync(source);
+    writeFileSync(
+      join(source, 'AGENT.md'),
+      '---\nname: scoped\ndescription: Scoped role.\nsandbox-mode: read-only\napproval-policy: never\n---\n\nReturn scoped.\n',
+    );
+    const bundleRoot = join(temporaryRoot, 'scoped-bundle');
+    compileCodexAgentBundle({ sourceDir: source, packageId: 'agentforge', outputRoot: bundleRoot });
+    const project = join(temporaryRoot, 'scoped-project');
+    materializeCodexAgentBundleInstallPlan(
+      buildCodexAgentBundleInstallPlan({ bundleRoot, scope: 'project', projectRoot: project }),
+    );
+    const roles = readdirSync(join(project, '.codex/agents'), { recursive: true }).map(String);
+    const toml = roles.find((entry) => entry.endsWith('.toml'));
+    if (toml === undefined) throw new Error('no installed role definition');
+    const role = readFileSync(join(project, '.codex/agents', toml), 'utf8');
+    expect(role).toContain('sandbox_mode = "read-only"');
+    expect(role).toContain('approval_policy = "never"');
+  });
+
   test('keeps v1 TOML registration escaping and compile diagnostics', () => {
     const source = join(temporaryRoot, 'del');
     mkdirSync(source);

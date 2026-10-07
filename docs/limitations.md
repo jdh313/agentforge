@@ -1000,3 +1000,53 @@ which emits `name`, `description`, `model`, `model_reasoning_effort` and
 `developer_instructions` and never `skills`. `tests/render.test.ts` — "reports
 the Claude agent fields as a confirmed loss on Codex" asserts `skills` is among
 the stripped keys. `docs/field-parity.md` — the Agent `skills` row.
+
+
+## L-014 — Codex applies no role-scoped `sandbox_mode` or `approval_policy` to a spawned child
+
+**Gap.** A Codex agent role can carry `sandbox_mode` and `approval_policy` (the
+role file is a flattened Codex configuration layer), and AgentForge emits both
+from the explicit, translation-only canonical keys `sandbox-mode` and
+`approval-policy`. codex-cli 0.160.0 loads the role but the spawned child keeps
+the parent session's sandbox and approval policy. The emitted values change
+nothing at runtime.
+
+**Manifests as.** An agent declaring `sandbox-mode: read-only` renders to TOML
+carrying `sandbox_mode = "read-only"`, the role is registered and selectable,
+and the child's shell can still write the workspace when the parent session is
+`workspace-write`. The reverse also holds: a role declaring `workspace-write`
+under a `read-only` parent cannot write. No warning is raised at compile time,
+because the output is exactly the native form (ndr:mqt5dv).
+
+**Affects.** Codex leaf `agent` projection and the standalone Codex agent bundle
+(`sandbox_mode`, `approval_policy` in the role TOML), for every canonical agent
+that sets either key.
+
+**Evidence.** Fresh runtime probe 2026-10-07, codex-cli 0.160.0, isolated
+`CODEX_HOME`, project `.codex/agents` roles installed with
+`install-codex-agent` and selected through `spawn_agent` `agent_type`. Method
+and results are in `docs/codex-agent-bundle-acceptance.md` § Role-scoped
+sandbox and approval acceptance. The child's rollout `turn_context` recorded the
+parent's `sandbox_policy` and `approval_policy` in every run, including when the
+parent's policy came from `config.toml` rather than a CLI flag. The role itself
+was loaded (`session_meta.agent_role` names it and its instructions ran). The
+codex-cli source states roles "may customize the child or reduce its
+capabilities, but never replace the parent session's authority"
+(`core/src/agent/role.rs`, per L-013), which is consistent with the result but
+was not re-read against 0.160.0; the observation does not depend on it.
+
+**Status.** by-design. Emitting the exact native fields is deliberate (Fibery
+#137, ndr:bqyqfd's separate contract for explicit Codex-native configuration);
+that Codex does not apply them is upstream behavior AgentForge reports here
+rather than hides or emulates (ndr:e0w650). An author who needs a restricted
+child must restrict the parent session.
+
+**Revisit trigger.** A codex-cli release whose spawned child turn context
+records the role's `sandbox_mode` or `approval_policy`. Re-run the probe in the
+acceptance record: the read-only role under a `workspace-write` parent must
+fail the write.
+
+**Where to look.** `src/targets/codex.ts` — `codexAgentDocument.serialize`.
+`src/frontmatter.ts` — the `sandbox-mode` and `approval-policy` rows.
+`tests/agent-codex-policy-fields.test.ts`. `docs/field-parity.md` — the Agent
+rows.

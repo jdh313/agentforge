@@ -16,8 +16,8 @@ const CodexOutputFrontmatter = z.object({
 
 // Mirrors the accepted-key set `src/frontmatter.ts` grants Codex for the
 // `agent` artifact (name, description, effort; the translation-only
-// `reasoning-summary` and `verbosity` ride the merged bag via
-// `agentExecutionFrom`, not this schema) — this validates the leaf
+// `reasoning-summary`, `verbosity`, `sandbox-mode` and `approval-policy` ride
+// the merged bag via `agentExecutionFrom`, not this schema) — this validates the leaf
 // projection's merged frontmatter bag, not the emitted TOML field names,
 // which `codexAgentDocument.serialize` below renames on the way out. `model`
 // is deliberately absent: it never reaches Codex through the merged bag (see
@@ -102,10 +102,12 @@ export function codexTomlString(value: string, sourcePath: string, field: string
 // manifest field sets, so `maxTurns` and `tools` are never emitted here; the
 // shared leaf pipeline already reports both as `claude-only-frontmatter-stripped`
 // once `src/frontmatter.ts` withholds them from Codex's accepted-key set.
-// `sandbox_mode` is available through the flattened role config layer but is
-// deliberately never set from `tools`, `disallowedTools`, or `permissionMode`:
-// filesystem/network sandboxing cannot preserve named-tool or source approval
-// policy. Those fields are permanent losses on this projection (ndr:bqyqfd).
+// `sandbox_mode` and `approval_policy` come from the explicit translation-only
+// canonical keys `sandbox-mode` and `approval-policy` and from nothing else:
+// they are never set from `tools`, `disallowedTools`, or `permissionMode`,
+// because filesystem/network sandboxing cannot preserve named-tool or source
+// approval policy. Those three fields are permanent losses on this projection
+// (ndr:bqyqfd).
 const codexAgentDocument: NativeAgentDocument = {
   extension: '.toml',
   serialize(behavior: CanonicalAgentBehavior, { sourcePath }: NativeAgentDocumentContext) {
@@ -129,6 +131,14 @@ const codexAgentDocument: NativeAgentDocument = {
     }
     if (behavior.execution.verbosity !== undefined) {
       lines.push(`model_verbosity = ${string(behavior.execution.verbosity, 'model_verbosity')}`);
+    }
+    if (behavior.execution.sandboxMode !== undefined) {
+      lines.push(`sandbox_mode = ${string(behavior.execution.sandboxMode, 'sandbox_mode')}`);
+    }
+    if (behavior.execution.approvalPolicy !== undefined) {
+      lines.push(
+        `approval_policy = ${string(behavior.execution.approvalPolicy, 'approval_policy')}`,
+      );
     }
     lines.push(
       `developer_instructions = ${string(behavior.instructions.trim(), 'developer_instructions')}`,

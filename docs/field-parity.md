@@ -34,7 +34,7 @@ built yet ([roadmap.md](roadmap.md)).
 | **Ruled out** | An Unmapped field that was considered for a canonical key and declined. The cell gives the reason and the trigger that reopens it. |
 
 Blocked and No analogue are both reported as `claude-only-frontmatter-stripped`,
-except a translation-only key (retained by no target, e.g. `short-description`, `reasoning-summary`, `verbosity`),
+except a translation-only key (retained by no target, e.g. `short-description`, `reasoning-summary`, `verbosity`, `sandbox-mode`, `approval-policy`),
 which reports nothing where it is not translated.
 The split is a judgement about the destination, not a distinction agentforge's
 diagnostics make. A **Blocked** row moves to Native or Translated only once the
@@ -115,12 +115,16 @@ Codex's `AgentRoleOverrides` set has nine fields: `developer_instructions`,
 `personality`, `service_tier`, `skills`, and `features`. `serialize` emits
 `model_reasoning_summary` and `model_verbosity` from the translation-only
 canonical keys `reasoning-summary` and `verbosity`; `personality` and
-`service_tier` are Ruled out below. `skills` shares a name
+`service_tier` are Ruled out below. The flattened config-layer keys
+`sandbox_mode` and `approval_policy` are emitted from the translation-only
+canonical keys `sandbox-mode` and `approval-policy` (explicit Codex-native
+authoring, not translation; see the rows below). `skills` shares a name
 with a canonical key but not its meaning: a role can use it only to remove
 skills from the child (L-013). A role file is a flattened Codex configuration
 layer and can therefore carry fields such as `sandbox_mode`, but sharing a
 document does not make their operations equivalent to source agent policy
-(ndr:bqyqfd).
+(ndr:bqyqfd). That is why the two policy keys are authored for Codex on
+purpose and never derived from `tools`, `disallowedTools` or `permissionMode`.
 
 ### Shared by both harnesses
 
@@ -131,6 +135,8 @@ document does not make their operations equivalent to source agent policy
 | `effort` <br> low \| medium \| high \| xhigh \| max | **Native** — `effort` | **Translated** — `model_reasoning_effort`. All five canonical values are accepted Codex reasoning levels. |
 | `reasoning-summary` <br> auto \| concise \| detailed \| none | **No analogue.** Claude Code subagent frontmatter has no reasoning-summary control. Stripped silently, not reported: Claude never owned the key. | **Translated** — `model_reasoning_summary`. Values are the codex-cli 0.160.0 `ReasoningSummary` enum; an invalid value is rejected by the canonical schema before projection. Codex-only (translation-only key, retained by no target). |
 | `verbosity` <br> low \| medium \| high | **No analogue.** Claude Code subagent frontmatter has no verbosity control. Stripped silently, not reported: Claude never owned the key. | **Translated** — `model_verbosity`. Values are the codex-cli 0.160.0 `Verbosity` enum. Codex ignores it on a model without verbosity support (the binary logs "model_verbosity is set but ignored as the model does not support verbosity"), so agentforge emits it as written and raises no warning. Codex-only (translation-only key). |
+| `sandbox-mode` <br> read-only \| workspace-write \| danger-full-access | **No analogue.** Claude Code subagent frontmatter has no sandbox control. Stripped silently, not reported: Claude never owned the key. | **Translated** — `sandbox_mode`. Explicit Codex-native authoring, not translation from `tools`, `disallowedTools` or `permissionMode`, which stay No analogue and never influence this field (ndr:bqyqfd). Values are the codex-cli 0.160.0 `SandboxMode` enum; an invalid value is rejected by the canonical schema, at top level or under `targets.codex`. Codex-only (translation-only key). **Not applied at runtime by codex-cli 0.160.0:** a spawned child keeps the parent session's sandbox (L-014). The `sandbox_workspace_write` table and `permission_profile` are not modeled. |
+| `approval-policy` <br> on-request \| never | **No analogue.** Claude Code subagent frontmatter has no approval-policy field. Stripped silently, not reported: Claude never owned the key. | **Translated** — `approval_policy`, string forms only. Explicit Codex-native authoring, not translation from `permissionMode` (ndr:bqyqfd). `untrusted` is rejected by codex-cli 0.160.0 ("no longer supported") and `on-failure` is accepted by that binary but documented deprecated, so neither is admitted; the table-shaped `granular` form is not modeled. Codex-only (translation-only key). **Not applied at runtime by codex-cli 0.160.0** (L-014). |
 | `model` | **Native** — `model` | **Translated** — `model`, only from `targets.codex.model`. A bare top-level `model:` is a Claude model name and is stripped rather than leaked into Codex's namespace (L-008). |
 | `body` <br> markdown below frontmatter | **Native** — Markdown body | **Translated** — `developer_instructions`. TOML string, required non-blank. No substitution of any kind — an agent role has no invocation-time argument. |
 
@@ -161,7 +167,7 @@ document does not make their operations equivalent to source agent policy
 | *none* | n/a — Claude's `color` is presentation, not tone; not the same field. | **Ruled out** — `personality`. In the override set, never emitted. A tone preset with no Claude counterpart, so a canonical key would be authored Codex-first with nothing for Claude to do. Revisit when an author needs a Codex-tuned tone. |
 | *none* | n/a | **Ruled out** — `service_tier`. In the override set, never emitted. An account-level billing/latency pin, not agent behavior, with no Claude counterpart in frontmatter. Revisit if Codex makes it role-meaningful. |
 | *none* | n/a | **Unmapped** — `features`. A role may disable selected Codex runtime features; no canonical field expresses this subtractive feature map. |
-| *none* | n/a | **Unmapped** — `sandbox_mode`. Available in a role's flattened Codex configuration layer and deliberately unset by source-policy projection. An explicit Codex-native authoring surface can expose it honestly as a separate future feature (ndr:bqyqfd). |
+| *none* | n/a | **Unmapped** — `sandbox_workspace_write` (table) and `permission_profile`. Also in a role's flattened Codex configuration layer; no canonical key addresses either (Fibery #137 scoped the explicit surface to `sandbox-mode` and `approval-policy`). |
 
 ### Authoring layer — never emitted anywhere
 
@@ -176,7 +182,7 @@ document does not make their operations equivalent to source agent policy
   from the harness and ask what agentforge can express — a gap closed by adding a
   canonical key, not by changing a projection. Of Codex's nine explicit
   agent-role overrides, `model_reasoning_summary` and `model_verbosity` are
-  Translated, `personality` and `service_tier` are Ruled out, and `features`
+  Translated (as are the config-layer `sandbox_mode` and `approval_policy`), `personality` and `service_tier` are Ruled out, and `features`
   is Unmapped because its subtractive runtime-feature switches have no
   canonical field.
 - **Unknown keys.** Canonical schemas are `z.looseObject`, so a key neither
