@@ -980,7 +980,11 @@ no plugin was installed). There is no allowlist form: hiding everything but the
 named skills would mean disabling every other installed skill, a set no compile
 step holds.
 
-**Status.** open, upstream. The mapping is withheld deliberately, not deferred:
+2026-10-07: status changed from `open, upstream` to `by-design` (ndr:e0w650).
+The upstream absence is unchanged; AgentForge's handling of it, withholding the
+mapping and reporting the key as a confirmed loss, is deliberate.
+
+**Status.** by-design. The mapping is withheld deliberately, not deferred:
 the canonical value is a confirmed loss on Codex and is reported as one. It
 moves only if Codex grows an additive form (see the revisit trigger).
 
