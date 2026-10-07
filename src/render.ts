@@ -8,6 +8,7 @@ import { buildArtifactPlan } from './artifact-plan.ts';
 import {
   findConstructShapes,
   type GatedSupport,
+  shortDescriptionLengthDetail,
   supportFor,
   translationFor,
 } from './capabilities.ts';
@@ -166,11 +167,6 @@ const detectGatedBodyConstructs = (
     support,
   }));
 };
-
-// codex-cli 0.160.0 embedded skill-creator docs: interface.short_description is
-// a "Human-facing short UI blurb (25-64 chars)".
-const SHORT_DESCRIPTION_MIN = 25;
-const SHORT_DESCRIPTION_MAX = 64;
 
 const pickKeys = (
   obj: Record<string, unknown>,
@@ -388,13 +384,9 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
       ? undefined
       : translationFor(target, artifactConfig.surface, 'short-description');
   if (shortDescription !== undefined && shortDescriptionPath !== undefined) {
-    const length = [...shortDescription].length;
-    if (length < SHORT_DESCRIPTION_MIN || length > SHORT_DESCRIPTION_MAX) {
-      warnings.push({
-        kind: 'codex-short-description-length',
-        target,
-        detail: `short-description is ${length} characters; Codex documents ${SHORT_DESCRIPTION_MIN}-${SHORT_DESCRIPTION_MAX} for interface.short_description, emitted as written`,
-      });
+    const detail = shortDescriptionLengthDetail(shortDescription);
+    if (detail !== undefined) {
+      warnings.push({ kind: 'codex-short-description-length', target, detail });
     }
   }
   // One sidecar holds every translated key that lands in it, so two keys

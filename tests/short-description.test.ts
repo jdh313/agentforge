@@ -71,6 +71,10 @@ describe('short-description on Codex leaf skills', () => {
     });
   });
 
+  test('rejects an empty short-description', () => {
+    expect(() => project('codex', 'short-description: ""\n')).toThrow();
+  });
+
   test('keeps the key out of the SKILL.md frontmatter', () => {
     const { content } = project('codex', `short-description: ${JSON.stringify(BLURB)}\n`);
     expect(content).not.toContain('short-description');
@@ -163,6 +167,53 @@ describe('short-description in marketplace compilation', () => {
         interface: { display_name: 'Spec Flow', short_description: BLURB },
         policy: { allow_implicit_invocation: false },
       });
+    } finally {
+      writeFileSync(path, original);
+    }
+  });
+
+  test('a command with an out-of-range short-description warns but still emits it', async () => {
+    const path = join(root, 'packages/spec-flow/commands/spec-flow.md');
+    const original = readFileSync(path, 'utf-8');
+    writeFileSync(path, original.replace('---\n', '---\nshort-description: too short\n'));
+    try {
+      const loaded = await loadMarketplaceDefinition(join(root, 'MARKETPLACE.yaml'));
+      const plan = compileMarketplace(loaded, [
+        { target: 'claude', compilePublication: () => ({ outputs: [] }) },
+        codexMarketplaceAdapter,
+      ]);
+      expect(plan.diagnostics.map(({ code }) => code)).toContain('codex-short-description-length');
+      expect(Bun.YAML.parse(await codexOutput(commandSidecar))).toMatchObject({
+        interface: { short_description: 'too short' },
+      });
+    } finally {
+      writeFileSync(path, original);
+    }
+  });
+
+  test('Claude commands drop short-description and keep other commands byte-identical', async () => {
+    const path = join(root, 'packages/spec-flow/commands/spec-flow.md');
+    const original = readFileSync(path, 'utf-8');
+    const compile = async (): Promise<string> => {
+      const loaded = await loadMarketplaceDefinition(join(root, 'MARKETPLACE.yaml'));
+      const plan = compileMarketplace(loaded, [
+        claudeMarketplaceAdapter,
+        { target: 'codex', compilePublication: () => ({ outputs: [] }) },
+      ]);
+      const output = plan.outputs.find(
+        (candidate): candidate is DesiredGeneratedOutput =>
+          candidate.kind === 'generated' &&
+          candidate.destination === 'packages/spec-flow/commands/spec-flow.md',
+      );
+      return output?.content ?? '';
+    };
+    expect(await compile()).toBe(original);
+    writeFileSync(path, original.replace('---\n', `---\nshort-description: ${BLURB}\n`));
+    try {
+      const content = await compile();
+      expect(content).not.toContain('short-description');
+      expect(content).toContain('argument-hint');
+      expect(content).toContain('Dispatch the requested lifecycle operation');
     } finally {
       writeFileSync(path, original);
     }

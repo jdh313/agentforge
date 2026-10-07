@@ -1,4 +1,5 @@
 import { posix } from 'node:path';
+import matter from 'gray-matter';
 import { z } from 'zod';
 import { parseAgentBehavior, parseCommandBehavior } from '../agent-command.ts';
 import {
@@ -202,12 +203,22 @@ function directTranslator(
           kind: 'generated',
           packageId: packageInput.id,
           destination: `${packageDirectory}/${relativePackageArtifactPath(packageInput.path, artifact.path)}`,
-          content: behavior.source,
+          content: withoutCodexOnlyKeys(behavior.source),
         },
       ],
       diagnostics: [],
     };
   };
+}
+
+// `short-description` is translation-only (Codex's openai.yaml); Claude has no
+// such key, so it must not ship in a Claude command. Re-serialized only when
+// present, so every other command's bytes stay identical to its source.
+function withoutCodexOnlyKeys(source: string): string {
+  const parsed = matter(source);
+  if (!Object.hasOwn(parsed.data, 'short-description')) return source;
+  const { 'short-description': _dropped, ...rest } = parsed.data;
+  return matter.stringify(parsed.content, rest);
 }
 
 function compilePackage(input: PublicationCompilation, packageInput: CompilationPackage) {

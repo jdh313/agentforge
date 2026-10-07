@@ -2,7 +2,12 @@ import { basename, dirname } from 'node:path';
 import matter from 'gray-matter';
 import { z } from 'zod';
 import { parseAgentBehavior, parseCommandBehavior } from '../agent-command.ts';
-import { supportFor, toolSupportFor, translationsFor } from '../capabilities.ts';
+import {
+  shortDescriptionLengthDetail,
+  supportFor,
+  toolSupportFor,
+  translationsFor,
+} from '../capabilities.ts';
 import { compileCodexAgentBundleOutputs } from '../codex-agent-bundle.ts';
 import {
   CompilationError,
@@ -350,7 +355,7 @@ function compileCodexAgentBundleSetupSkill(
       kind: 'generated',
       packageId: packageInput.id,
       destination: `${skillDirectory}/agents/openai.yaml`,
-      content: codexSkillPolicy(CODEX_AGENT_BUNDLE_SETUP_SKILL, description),
+      content: codexSkillPolicy(CODEX_AGENT_BUNDLE_SETUP_SKILL),
     },
     {
       kind: 'generated',
@@ -1256,6 +1261,10 @@ function translateCommandSkill({
 }: ArtifactTranslatorInput): PackagePayloadResult {
   const command = parseCommandBehavior(artifact.path, artifact.content);
   const skillDirectory = `${packageDirectory}/skills/${command.name}`;
+  const lengthDetail =
+    command.shortDescription === undefined
+      ? undefined
+      : shortDescriptionLengthDetail(command.shortDescription);
   return {
     outputs: [
       {
@@ -1275,6 +1284,17 @@ function translateCommandSkill({
       },
     ],
     diagnostics: [
+      ...(lengthDetail === undefined
+        ? []
+        : [
+            {
+              code: 'codex-short-description-length' as const,
+              severity: 'warning' as const,
+              packageId: packageInput.id,
+              message: `Command "${command.name}": ${lengthDetail}.`,
+              locations: [{ path: artifact.path }],
+            },
+          ]),
       {
         code: 'inferred-artifact-projection',
         severity: 'note',

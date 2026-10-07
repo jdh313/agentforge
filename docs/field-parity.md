@@ -32,7 +32,9 @@ built yet ([roadmap.md](roadmap.md)).
 | **No analogue** | Dropped with nowhere to go: the harness has no field, and often no concept, that could carry it. These move only if the harness grows one. |
 | **Unmapped** | The reverse gap: a field the harness reads that no canonical key addresses, so an author cannot set it. Its canonical column reads *none*. |
 
-Blocked and No analogue are both reported as `claude-only-frontmatter-stripped`.
+Blocked and No analogue are both reported as `claude-only-frontmatter-stripped`,
+except a translation-only key (retained by no target, e.g. `short-description`),
+which reports nothing where it is not translated.
 The split is a judgement about the destination, not a distinction agentforge's
 diagnostics make. A **Blocked** row moves to Native or Translated only once the
 semantics are verified against the harness's own loader: a declared destination
@@ -84,7 +86,7 @@ documented frontmatter has no other field a Claude-only key could land in.
 
 | Canonical field | Claude | Codex | Pi |
 | --- | --- | --- | --- |
-| `short-description` <br> string, optional | **No analogue.** Claude Code skill frontmatter has no UI-blurb field; the listing text comes from `description`. Stripped silently, not reported: Claude never owned the key. | **Translated** — `agents/openai.yaml` → `interface.short_description` (JSON-quoted), in the same sidecar as the invocation policy. Codex documents 25-64 characters; outside that range emits `codex-short-description-length` and still writes the value as given. UI-only: `description` alone drives implicit selection (codex-cli 0.160.0). Never derived from `description`; unset, the key is omitted. | **No analogue.** Pi's skill frontmatter has no UI-blurb field, so the key is stripped silently. |
+| `short-description` <br> string, optional | **No analogue.** Claude Code skill frontmatter has no UI-blurb field; the listing text comes from `description`. Stripped silently, not reported: Claude never owned the key. | **Translated** — `agents/openai.yaml` → `interface.short_description` (JSON-quoted), in the same sidecar as the invocation policy. Codex documents 25-64 characters; outside that range, on a skill or a command-derived skill, emits `codex-short-description-length` and still writes the value as given. A command's own Claude output drops the key. Checked against codex-cli 0.160.0 (this row only; the rest of the doc is verified at the version in the header). UI-only: `description` alone drives implicit selection (codex-cli 0.160.0). Never derived from `description`; unset, the key is omitted. | **No analogue.** Pi's skill frontmatter has no UI-blurb field, so the key is stripped silently. |
 
 ### No canonical field — the harness reads it, agentforge cannot set it
 

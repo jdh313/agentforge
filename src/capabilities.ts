@@ -89,9 +89,20 @@ const CLAUDE_TOKENS = [
   'agent-reference',
 ] as const;
 
+// codex-cli 0.160.0 embedded skill-creator docs: interface.short_description is
+// a "Human-facing short UI blurb (25-64 chars)". Returns the warning detail when
+// a value falls outside that range, undefined when it is in range.
+export const SHORT_DESCRIPTION_MIN = 25;
+export const SHORT_DESCRIPTION_MAX = 64;
+export function shortDescriptionLengthDetail(value: string): string | undefined {
+  const length = [...value].length;
+  if (length >= SHORT_DESCRIPTION_MIN && length <= SHORT_DESCRIPTION_MAX) return undefined;
+  return `short-description is ${length} characters; Codex documents ${SHORT_DESCRIPTION_MIN}-${SHORT_DESCRIPTION_MAX} for interface.short_description, emitted as written`;
+}
+
 // Codex is the only target with translators today. `disable-model-invocation`
-// is a frontmatter key rather than a body shape, so it is keyed by its literal
-// name. It lives on the `codex/skill` row only — see `CODEX_HOOK_ENV_TRANSLATIONS`
+// and `short-description` are frontmatter keys rather than body shapes, so each
+// is keyed by its literal name. It lives on the `codex/skill` row only — see `CODEX_HOOK_ENV_TRANSLATIONS`
 // below for why the plugin-root variables do not share this row (ndr:61cmc9).
 const CODEX_SKILL_TRANSLATIONS: Readonly<Record<string, string>> = {
   'disable-model-invocation': 'agents/openai.yaml',
