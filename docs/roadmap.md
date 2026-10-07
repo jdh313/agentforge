@@ -32,8 +32,12 @@ so the agent lands under `agents/` and its declared resources land under
 them. User/project installs remain one-file and report plugin-root references
 as scope-gated through the typed capability result (`ndr:k58f71`); reports
 classify that condition after settled non-losses and before unknowns
-(`ndr:7r7n44`). Other target projections and marketplace reuse of the Codex
-leaf projection remain. The filename, required identity, and default layout are
+(`ndr:7r7n44`). Claude marketplace compilation projects package agents through
+the leaf agent projection at plugin scope, so `targets.claude` merges, body
+replacement, and authoring-key stripping match a standalone install. The
+compiled Codex agent bundle builds its roles from the same projection; only the
+in-package Codex procedure stays on the fallback (L-010). Other target
+projections remain. The filename, required identity, and default layout are
 recorded in `ndr:2t36rb`.
 
 ### Boundary
@@ -107,13 +111,19 @@ filename or schema rule that the current heads do not decide.
   alone do not prove discovery or enforcement.
 - Establish which runtimes enforce model, effort, turns, tools, isolation,
   delegation, and follow-up continuity. Prompt prose does not count as
-  enforcement.
+  enforcement. Claude has observed evidence for each of these (effort on
+  Claude Code 2.1.292), with two exceptions recorded in
+  [`librarian-agent-acceptance.md`](librarian-agent-acceptance.md):
+  Bash-pattern tool filters failed at runtime, and follow-up continuity holds
+  only for a background child.
 - Keep OpenCode and Pi agent support explicitly deferred beyond 1.0; non-agent
   target presence does not imply agent support.
 
 ### Validation gates
 
 - Add a target-by-agent fixture matrix with explicit unsupported cases.
+  Met: `tests/render.test.ts` renders every agent fixture against every target
+  and asserts the unsupported pairs throw.
 - Keep projection pure and route every write through the shared compilation
   plan and materializer.
 - Test field-level overrides and whole-body replacement.
