@@ -83,6 +83,23 @@ const ACCEPTANCE: Readonly<
       source:
         'Claude Code native subagent frontmatter; Codex agent role TOML `model_reasoning_effort` field. Every canonical value (low/medium/high/xhigh/max) is a confirmed-accepted Codex reasoning-effort string per the codex-cli 0.154.0 bundled model catalog.',
     },
+    // Translation-only (retained by no target, like skill `short-description`):
+    // Codex receives each as an agent-role TOML field and Claude has no such
+    // frontmatter key, so Claude strips them silently. Values are the codex-cli
+    // 0.160.0 `ReasoningSummary` / `Verbosity` enums. Codex ignores
+    // `model_verbosity` on a model that does not support it (the binary logs
+    // "model_verbosity is set but ignored as the model does not support
+    // verbosity"), so no warning is raised for it.
+    'reasoning-summary': {
+      targets: [],
+      source:
+        'Codex agent role TOML `model_reasoning_summary` (AgentRoleOverrides, codex-cli 0.154.0; values auto/concise/detailed/none from the codex-cli 0.160.0 `ReasoningSummary` enum). Claude Code subagent frontmatter has no counterpart.',
+    },
+    verbosity: {
+      targets: [],
+      source:
+        'Codex agent role TOML `model_verbosity` (AgentRoleOverrides, codex-cli 0.154.0; values low/medium/high from the codex-cli 0.160.0 `Verbosity` enum). Codex ignores it on a model without verbosity support. Claude Code subagent frontmatter has no counterpart.',
+    },
     // Codex agent roles have no tool-allowlist key (verified against the
     // agent-roles/plugin-manifest field sets in codex-cli 0.154.0), so tool
     // access stays unenforced on Codex; the constraint remains claude-only here.
@@ -93,8 +110,9 @@ const ACCEPTANCE: Readonly<
     // 0.154.0's AgentRoleOverrides has exactly nine fields —
     // developer_instructions, model, model_reasoning_effort,
     // model_reasoning_summary, model_verbosity, personality, service_tier,
-    // skills, features — and `codexAgentDocument.serialize` emits three of them
-    // (developer_instructions, plus model and model_reasoning_effort when set),
+    // skills, features — and `codexAgentDocument.serialize` emits five of them
+    // (developer_instructions, plus model, model_reasoning_effort,
+    // model_reasoning_summary and model_verbosity when set),
     // alongside name and description. A key with no field to land in is a
     // confirmed loss on Codex, which is what `claude-only-frontmatter-stripped`
     // states; that is a stronger and more useful claim than reporting a key

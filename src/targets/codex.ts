@@ -15,7 +15,9 @@ const CodexOutputFrontmatter = z.object({
 });
 
 // Mirrors the accepted-key set `src/frontmatter.ts` grants Codex for the
-// `agent` artifact (name, description, effort) — this validates the leaf
+// `agent` artifact (name, description, effort; the translation-only
+// `reasoning-summary` and `verbosity` ride the merged bag via
+// `agentExecutionFrom`, not this schema) — this validates the leaf
 // projection's merged frontmatter bag, not the emitted TOML field names,
 // which `codexAgentDocument.serialize` below renames on the way out. `model`
 // is deliberately absent: it never reaches Codex through the merged bag (see
@@ -88,7 +90,11 @@ export function codexTomlString(value: string, sourcePath: string, field: string
 // codex-cli 0.154.0 agent-role TOML: `name`, `description`, and a required
 // non-blank `developer_instructions` (verified via the binary's
 // `.developer_instructions cannot be blank` / `must define developer_instructions`
-// validation strings). `model` and `model_reasoning_effort` map directly —
+// validation strings). `model` and `model_reasoning_effort` map directly, and
+// the translation-only canonical keys `reasoning-summary` and `verbosity`
+// become `model_reasoning_summary` and `model_verbosity` (their enums are the
+// codex-cli 0.160.0 `ReasoningSummary` / `Verbosity` values; Codex ignores
+// `model_verbosity` on a model that lacks support, so nothing warns) —
 // every canonical effort value is a confirmed-accepted Codex reasoning-effort
 // string per the bundled model catalog's `supported_reasoning_levels` list
 // (low, medium, high, xhigh, max, ultra). There is no per-role turn-limit key
@@ -115,6 +121,14 @@ const codexAgentDocument: NativeAgentDocument = {
       lines.push(
         `model_reasoning_effort = ${string(behavior.execution.effort, 'model_reasoning_effort')}`,
       );
+    }
+    if (behavior.execution.reasoningSummary !== undefined) {
+      lines.push(
+        `model_reasoning_summary = ${string(behavior.execution.reasoningSummary, 'model_reasoning_summary')}`,
+      );
+    }
+    if (behavior.execution.verbosity !== undefined) {
+      lines.push(`model_verbosity = ${string(behavior.execution.verbosity, 'model_verbosity')}`);
     }
     lines.push(
       `developer_instructions = ${string(behavior.instructions.trim(), 'developer_instructions')}`,

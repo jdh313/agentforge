@@ -87,6 +87,9 @@ export const CanonicalAgentFrontmatter = z.looseObject({
   model: z.string().min(1).optional(),
   maxTurns: z.number().int().positive().optional(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
+  // Codex-only; see the translation-only rows in `src/frontmatter.ts`.
+  'reasoning-summary': z.enum(['auto', 'concise', 'detailed', 'none']).optional(),
+  verbosity: z.enum(['low', 'medium', 'high']).optional(),
   tools: ToolList.optional(),
 
   disallowedTools: ToolList.optional(),

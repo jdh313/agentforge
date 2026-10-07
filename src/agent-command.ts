@@ -25,10 +25,15 @@ interface CanonicalBehavior {
 
 export type CanonicalAgentEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
+export type CanonicalAgentReasoningSummary = 'auto' | 'concise' | 'detailed' | 'none';
+export type CanonicalAgentVerbosity = 'low' | 'medium' | 'high';
+
 export interface CanonicalAgentExecution {
   model?: string;
   maxTurns?: number;
   effort?: CanonicalAgentEffort;
+  reasoningSummary?: CanonicalAgentReasoningSummary;
+  verbosity?: CanonicalAgentVerbosity;
   tools?: string | string[];
 }
 
@@ -38,6 +43,17 @@ export interface CanonicalAgentBehavior extends CanonicalBehavior {
 }
 
 const CANONICAL_EFFORTS = new Set<string>(['low', 'medium', 'high', 'xhigh', 'max']);
+
+const CANONICAL_REASONING_SUMMARIES = new Set<string>(['auto', 'concise', 'detailed', 'none']);
+const CANONICAL_VERBOSITIES = new Set<string>(['low', 'medium', 'high']);
+
+function isCanonicalReasoningSummary(value: unknown): value is CanonicalAgentReasoningSummary {
+  return typeof value === 'string' && CANONICAL_REASONING_SUMMARIES.has(value);
+}
+
+function isCanonicalVerbosity(value: unknown): value is CanonicalAgentVerbosity {
+  return typeof value === 'string' && CANONICAL_VERBOSITIES.has(value);
+}
 
 function isCanonicalEffort(value: unknown): value is CanonicalAgentEffort {
   return typeof value === 'string' && CANONICAL_EFFORTS.has(value);
@@ -52,12 +68,18 @@ export function agentExecutionFrom(fields: {
   model?: unknown;
   maxTurns?: unknown;
   effort?: unknown;
+  'reasoning-summary'?: unknown;
+  verbosity?: unknown;
   tools?: unknown;
 }): CanonicalAgentExecution {
   return {
     ...(typeof fields.model === 'string' ? { model: fields.model } : {}),
     ...(typeof fields.maxTurns === 'number' ? { maxTurns: fields.maxTurns } : {}),
     ...(isCanonicalEffort(fields.effort) ? { effort: fields.effort } : {}),
+    ...(isCanonicalReasoningSummary(fields['reasoning-summary'])
+      ? { reasoningSummary: fields['reasoning-summary'] }
+      : {}),
+    ...(isCanonicalVerbosity(fields.verbosity) ? { verbosity: fields.verbosity } : {}),
     ...(fields.tools !== undefined ? { tools: fields.tools as string | string[] } : {}),
   };
 }

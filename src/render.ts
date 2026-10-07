@@ -256,6 +256,16 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
     .toSorted();
   const filtered = pickKeys(merged, acceptedKeys);
   artifactConfig.outputFrontmatterSchema.parse(filtered);
+  // A translation-only key is in no target's accepted set, so the output schema
+  // above never sees it; re-check its merged value against the canonical schema
+  // so a bad `targets.<name>` override is rejected rather than silently dropped.
+  const translationOnly = pickKeys(
+    merged,
+    new Set(Object.keys(merged).filter((key) => isTranslationOnlyKey(artifact, key))),
+  );
+  if (Object.keys(translationOnly).length > 0) {
+    artifactDef.canonicalSchema.parse({ ...data, ...translationOnly });
+  }
 
   const warnings: Warning[] = [];
   // Reported on every target, Claude included: retaining a key agentforge does

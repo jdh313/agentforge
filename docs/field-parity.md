@@ -31,9 +31,10 @@ built yet ([roadmap.md](roadmap.md)).
 | **Blocked** | Dropped today, but a field on that harness could hold it. The cell names that field and the objection currently stopping the mapping. These are the rows that can move. |
 | **No analogue** | Dropped with nowhere to go: the harness has no field, and often no concept, that could carry it. These move only if the harness grows one. |
 | **Unmapped** | The reverse gap: a field the harness reads that no canonical key addresses, so an author cannot set it. Its canonical column reads *none*. |
+| **Ruled out** | An Unmapped field that was considered for a canonical key and declined. The cell gives the reason and the trigger that reopens it. |
 
 Blocked and No analogue are both reported as `claude-only-frontmatter-stripped`,
-except a translation-only key (retained by no target, e.g. `short-description`),
+except a translation-only key (retained by no target, e.g. `short-description`, `reasoning-summary`, `verbosity`),
 which reports nothing where it is not translated.
 The split is a judgement about the destination, not a distinction agentforge's
 diagnostics make. A **Blocked** row moves to Native or Translated only once the
@@ -111,7 +112,10 @@ support is deferred beyond 1.0 ([roadmap.md](roadmap.md)).
 Claude emits Markdown frontmatter under the same key names its own loader reads.
 Codex's `AgentRoleOverrides` set has nine fields: `developer_instructions`,
 `model`, `model_reasoning_effort`, `model_reasoning_summary`, `model_verbosity`,
-`personality`, `service_tier`, `skills`, and `features`. `skills` shares a name
+`personality`, `service_tier`, `skills`, and `features`. `serialize` emits
+`model_reasoning_summary` and `model_verbosity` from the translation-only
+canonical keys `reasoning-summary` and `verbosity`; `personality` and
+`service_tier` are Ruled out below. `skills` shares a name
 with a canonical key but not its meaning: a role can use it only to remove
 skills from the child (L-013). A role file is a flattened Codex configuration
 layer and can therefore carry fields such as `sandbox_mode`, but sharing a
@@ -125,6 +129,8 @@ document does not make their operations equivalent to source agent policy
 | `name` <br> lowercase-hyphenated, required | **Native** — `name` | **Native** — `name` |
 | `description` <br> required | **Native** — `description` | **Native** — `description` |
 | `effort` <br> low \| medium \| high \| xhigh \| max | **Native** — `effort` | **Translated** — `model_reasoning_effort`. All five canonical values are accepted Codex reasoning levels. |
+| `reasoning-summary` <br> auto \| concise \| detailed \| none | **No analogue.** Claude Code subagent frontmatter has no reasoning-summary control. Stripped silently, not reported: Claude never owned the key. | **Translated** — `model_reasoning_summary`. Values are the codex-cli 0.160.0 `ReasoningSummary` enum; an invalid value is rejected by the canonical schema before projection. Codex-only (translation-only key, retained by no target). |
+| `verbosity` <br> low \| medium \| high | **No analogue.** Claude Code subagent frontmatter has no verbosity control. Stripped silently, not reported: Claude never owned the key. | **Translated** — `model_verbosity`. Values are the codex-cli 0.160.0 `Verbosity` enum. Codex ignores it on a model without verbosity support (the binary logs "model_verbosity is set but ignored as the model does not support verbosity"), so agentforge emits it as written and raises no warning. Codex-only (translation-only key). |
 | `model` | **Native** — `model` | **Translated** — `model`, only from `targets.codex.model`. A bare top-level `model:` is a Claude model name and is stripped rather than leaked into Codex's namespace (L-008). |
 | `body` <br> markdown below frontmatter | **Native** — Markdown body | **Translated** — `developer_instructions`. TOML string, required non-blank. No substitution of any kind — an agent role has no invocation-time argument. |
 
@@ -152,10 +158,8 @@ document does not make their operations equivalent to source agent policy
 | Canonical field | Claude (.md) | Codex (.toml) |
 | --- | --- | --- |
 | *none* | **Unmapped** — `observer` · `observerMessage` · `observeSubagents`. Claude Code 2.1.274's loader reads all three, but no published documentation does. Left out on purpose: enumerating them would claim a contract nothing backs. Written today, each reports `unrecognized-frontmatter-key` and is stripped on Claude too. | n/a — no observation fields on an agent role. |
-| *none* | n/a — no reasoning-summary control in Claude's agent frontmatter. | **Unmapped** — `model_reasoning_summary`. In the override set, never emitted. A canonical key would have to be authored Codex-first. |
-| *none* | n/a | **Unmapped** — `model_verbosity`. In the override set, never emitted. |
-| *none* | n/a — Claude's `color` is presentation, not tone; not the same field. | **Unmapped** — `personality`. In the override set, never emitted. |
-| *none* | n/a | **Unmapped** — `service_tier`. In the override set, never emitted. An account-level billing/latency pin with no Claude counterpart in frontmatter. |
+| *none* | n/a — Claude's `color` is presentation, not tone; not the same field. | **Ruled out** — `personality`. In the override set, never emitted. A tone preset with no Claude counterpart, so a canonical key would be authored Codex-first with nothing for Claude to do. Revisit when an author needs a Codex-tuned tone. |
+| *none* | n/a | **Ruled out** — `service_tier`. In the override set, never emitted. An account-level billing/latency pin, not agent behavior, with no Claude counterpart in frontmatter. Revisit if Codex makes it role-meaningful. |
 | *none* | n/a | **Unmapped** — `features`. A role may disable selected Codex runtime features; no canonical field expresses this subtractive feature map. |
 | *none* | n/a | **Unmapped** — `sandbox_mode`. Available in a role's flattened Codex configuration layer and deliberately unset by source-policy projection. An explicit Codex-native authoring surface can expose it honestly as a separate future feature (ndr:bqyqfd). |
 
@@ -170,9 +174,11 @@ document does not make their operations equivalent to source agent policy
 - **Unmapped rows read in the other direction.** Every other row starts from a
   canonical key and asks what each harness does with it. The Unmapped rows start
   from the harness and ask what agentforge can express — a gap closed by adding a
-  canonical key, not by changing a projection. Four of Codex's nine explicit
-  agent-role overrides sit there; `features` is also unmapped because its
-  subtractive runtime-feature switches have no canonical field.
+  canonical key, not by changing a projection. Of Codex's nine explicit
+  agent-role overrides, `model_reasoning_summary` and `model_verbosity` are
+  Translated, `personality` and `service_tier` are Ruled out, and `features`
+  is Unmapped because its subtractive runtime-feature switches have no
+  canonical field.
 - **Unknown keys.** Canonical schemas are `z.looseObject`, so a key neither
   schema enumerates survives parse long enough to report
   `unrecognized-frontmatter-key`, then is stripped on every target including

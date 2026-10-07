@@ -61,6 +61,8 @@ Five values, and they are not interchangeable:
   State why the concept cannot land, in terms of what the harness's loader does.
 - **Unmapped** — the reverse gap: the harness reads a field no canonical key
   addresses. Canonical column reads *none*.
+- **Ruled out** — an Unmapped field considered for a canonical key and
+  declined. The cell gives the reason and the trigger that reopens it.
 
 Two rules govern movement between them:
 

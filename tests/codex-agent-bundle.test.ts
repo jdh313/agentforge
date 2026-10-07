@@ -1695,6 +1695,28 @@ describe('compiled Codex package agent bundle', () => {
     expect(existsSync(join(project, '.codex/config.toml'))).toBe(false);
   });
 
+  test('carries reasoning-summary and verbosity through the definition schema', () => {
+    const source = join(temporaryRoot, 'tuned');
+    mkdirSync(source);
+    writeFileSync(
+      join(source, 'AGENT.md'),
+      '---\nname: tuned\ndescription: Tuned role.\nreasoning-summary: detailed\nverbosity: low\n---\n\nReturn tuned.\n',
+    );
+    const bundleRoot = join(temporaryRoot, 'tuned-bundle');
+    compileCodexAgentBundle({ sourceDir: source, packageId: 'agentforge', outputRoot: bundleRoot });
+    const project = join(temporaryRoot, 'tuned-project');
+    // The definition schema is strict: installing proves both fields are admitted.
+    materializeCodexAgentBundleInstallPlan(
+      buildCodexAgentBundleInstallPlan({ bundleRoot, scope: 'project', projectRoot: project }),
+    );
+    const roles = readdirSync(join(project, '.codex/agents'), { recursive: true }).map(String);
+    const toml = roles.find((entry) => entry.endsWith('.toml'));
+    if (toml === undefined) throw new Error('no installed role definition');
+    const role = readFileSync(join(project, '.codex/agents', toml), 'utf8');
+    expect(role).toContain('model_reasoning_summary = "detailed"');
+    expect(role).toContain('model_verbosity = "low"');
+  });
+
   test('keeps v1 TOML registration escaping and compile diagnostics', () => {
     const source = join(temporaryRoot, 'del');
     mkdirSync(source);

@@ -131,6 +131,8 @@ const CodexBundleDefinition = z.strictObject({
   description: z.string().min(1),
   model: z.string().min(1).optional(),
   model_reasoning_effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']).optional(),
+  model_reasoning_summary: z.enum(['auto', 'concise', 'detailed', 'none']).optional(),
+  model_verbosity: z.enum(['low', 'medium', 'high']).optional(),
   developer_instructions: z.string().min(1),
 });
 
