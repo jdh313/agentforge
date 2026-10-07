@@ -1,0 +1,13 @@
+schema: agentforge.package/v1
+id: roles
+defaults:
+  name: roles
+  version: 1.0.0
+  description: Fixture package whose agent must reach Claude through the leaf agent projection.
+artifacts:
+  - type: agent
+    pattern: agents/*.md
+authoring-keys:
+  - upstream
+targets:
+  claude: {}

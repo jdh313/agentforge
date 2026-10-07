@@ -1,0 +1,17 @@
+schema: agentforge.marketplace/v1
+id: claude-package-agent
+defaults:
+  name: claude-package-agent
+  description: Fixture marketplace whose package agent carries target overrides, an authoring-layer key, and an unrecognized key.
+  owner:
+    name: Fixture Owner
+    email: owner@example.com
+packages:
+  - packages/*/PACKAGE.yaml
+publications:
+  - id: claude
+    target: claude
+    destination: .claude-plugin/marketplace.json
+    enrollment:
+      mode: include
+      packages: [roles]

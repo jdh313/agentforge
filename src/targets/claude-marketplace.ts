@@ -11,15 +11,18 @@ import {
   type TargetCompilationResult,
 } from '../compiler.ts';
 import { deepMerge } from '../deep-merge.ts';
+import { projectArtifact } from '../render.ts';
 import {
   type ArtifactTranslator,
+  type ArtifactTranslatorInput,
   compilePackagePayload,
+  type PackagePayloadResult,
   relativePackageArtifactPath,
   relativePackageDirectory,
 } from './package-payload.ts';
 
 const DIRECT_TRANSLATORS = new Map<string, ArtifactTranslator>([
-  ['agent', directTranslator(parseAgentBehavior)],
+  ['agent', projectAgent],
   ['command', directTranslator(parseCommandBehavior)],
 ]);
 
@@ -145,6 +148,46 @@ export function compileClaudePublication(input: PublicationCompilation): TargetC
       ...payloads.flatMap(({ outputs }) => outputs),
     ],
     diagnostics: payloads.flatMap(({ diagnostics }) => diagnostics),
+  };
+}
+
+// Package agents use the leaf agent projection (roadmap 0.8 Boundary step 5),
+// so `targets.claude` merges, frontmatter filtering, body replacement and
+// authoring-key stripping match a standalone install at plugin scope.
+// `parseAgentBehavior` still runs first: it is the package parser's validation
+// (filename-stem name fallback, non-empty body) and the projection does not
+// repeat it.
+function projectAgent({
+  artifact,
+  packageDirectory,
+  packageInput,
+}: ArtifactTranslatorInput): PackagePayloadResult {
+  parseAgentBehavior(artifact.path, artifact.content);
+  const projection = projectArtifact({
+    sourcePath: artifact.path,
+    source: artifact.content,
+    target: 'claude',
+    artifact: 'agent',
+    resourcePaths: packageInput.files,
+    authoringKeys: packageInput.authoringKeys,
+    installScope: 'plugin',
+  });
+  return {
+    outputs: [
+      {
+        kind: 'generated',
+        packageId: packageInput.id,
+        destination: `${packageDirectory}/${relativePackageArtifactPath(packageInput.path, artifact.path)}`,
+        content: projection.content,
+      },
+    ],
+    diagnostics: projection.warnings.map((warning) => ({
+      code: warning.kind,
+      severity: 'warning' as const,
+      packageId: packageInput.id,
+      message: `Agent "${projection.artifactName}": ${warning.detail}.`,
+      locations: warning.locations ?? [{ path: artifact.path }],
+    })),
   };
 }
 
