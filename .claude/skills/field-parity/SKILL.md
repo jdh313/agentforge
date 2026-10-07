@@ -70,7 +70,8 @@ Two rules govern movement between them:
   Codex agent role is the worked example of a name that matches and a meaning
   that is unestablished.
 - **Blocked vs No analogue is a judgement about the destination, not a
-  diagnostic.** Both still emit `claude-only-frontmatter-stripped`. Do not
+  diagnostic.** Both still emit `claude-only-frontmatter-stripped`, except a
+  translation-only key (retained by no target), which emits nothing. Do not
   introduce a doc distinction the compiler makes, or imply the compiler makes
   this one.
 
