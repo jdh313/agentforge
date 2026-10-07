@@ -733,6 +733,19 @@ than only here. Two bounds on that coverage, both deliberate:
   `inferred-artifact-projection`, which is what names this limitation for the
   agent file itself.
 
+**Mitigation.** A package that opts into a compiled Codex agent bundle ships
+its agents as native role TOML built from the leaf projection
+(`src/codex-agent-bundle.ts`). `install-codex-agent` and its
+check/update/remove/repair siblings install those roles at user
+(`$CODEX_HOME/agents`) or project (`.codex/agents`) scope, and
+`sync-codex-agents` installs or updates the bundle of every enabled installed
+plugin in one command (`docs/codex-agent-bundle-acceptance.md`). The roles then
+reach a real config layer, where L-011 and L-012 establish that Codex selects
+them. The trade-off is lifecycle coupling: the roles live outside the plugin, so
+enabling, disabling or removing the plugin does not add or remove them, and they
+go stale until the next sync. The bundle's read-only `SessionStart` check hook
+reports that drift through `systemMessage` rather than correcting it.
+
 **Evidence.** Re-verified 2026-09-21 against installed `codex-cli 0.155.1` and
 current OpenAI source at `openai/codex` commit
 `142360dac8ea59234262c10bfd9a73df3f39b45c`. The installed binary contains the
@@ -747,7 +760,13 @@ live L-011/L-012 probe below positively selected a project role, establishing
 that role selection works when the file reaches a real config layer; it did
 not create a plugin registration path.
 
-**Status.** open, upstream. `translateAgentProcedure`'s Markdown-procedure
+2026-10-07: status changed from `open, upstream` to `by-design`. The upstream
+absence is unchanged; what changed is the classification. A target lacking a
+concept is `by-design` when AgentForge's handling of it is deliberate, as the
+`ndr:msdg46` fallback and the compiled agent bundle are; `open` is kept for gaps
+in AgentForge's own representation (ndr:e0w650).
+
+**Status.** by-design. `translateAgentProcedure`'s Markdown-procedure
 mapping remains the intended fallback per `ndr:msdg46`, not a placeholder for
 something better — there is currently nothing better to fall back from.
 
