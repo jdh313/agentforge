@@ -1725,7 +1725,11 @@ describe('compiled Codex package agent bundle', () => {
       '---\nname: scoped\ndescription: Scoped role.\nsandbox-mode: read-only\napproval-policy: never\n---\n\nReturn scoped.\n',
     );
     const bundleRoot = join(temporaryRoot, 'scoped-bundle');
-    compileCodexAgentBundle({ sourceDir: source, packageId: 'agentforge', outputRoot: bundleRoot });
+    const compiled = compileCodexAgentBundle({
+      sourceDir: source,
+      packageId: 'agentforge',
+      outputRoot: bundleRoot,
+    });
     const project = join(temporaryRoot, 'scoped-project');
     materializeCodexAgentBundleInstallPlan(
       buildCodexAgentBundleInstallPlan({ bundleRoot, scope: 'project', projectRoot: project }),
@@ -1736,6 +1740,10 @@ describe('compiled Codex package agent bundle', () => {
     const role = readFileSync(join(project, '.codex/agents', toml), 'utf8');
     expect(role).toContain('sandbox_mode = "read-only"');
     expect(role).toContain('approval_policy = "never"');
+    const surfaced = compiled.plan.diagnostics.filter(
+      ({ code }) => code === 'codex-role-policy-not-applied',
+    );
+    expect(surfaced).toHaveLength(1);
   });
 
   test('keeps v1 TOML registration escaping and compile diagnostics', () => {

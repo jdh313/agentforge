@@ -196,6 +196,12 @@ tests/
     `unclassified-body-construct` is kept apart from `claude-only-body-feature`:
     that warning claims Claude owns the key and the target loses it, and an
     unrecognized key supports neither half.
+  - `codex-role-policy-not-applied` — Codex `agent` only (Claude stays silent):
+    the canonical agent sets `sandbox-mode` and/or `approval-policy`. Both are
+    emitted into the role TOML exactly as written, but codex-cli 0.160.0 spawns
+    the child with the parent session's policy (`docs/limitations.md` L-014).
+    Raised by the Codex agent serializer, so the Codex agent bundle surfaces it
+    as a compile diagnostic too.
   - A key covered by `authoring-keys` emits **nothing**. That is not an
     oversight: a declared strip is not a loss, and only a confirmed loss is
     worth recording (ndr:4nshwv).

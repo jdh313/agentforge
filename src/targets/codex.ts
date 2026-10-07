@@ -8,6 +8,7 @@ import {
   type NativeAgentDocumentContext,
   type TargetAdapter,
 } from '../target-adapter.ts';
+import type { Warning } from '../types.ts';
 
 const CodexOutputFrontmatter = z.object({
   name: z.string().optional(),
@@ -143,7 +144,21 @@ const codexAgentDocument: NativeAgentDocument = {
     lines.push(
       `developer_instructions = ${string(behavior.instructions.trim(), 'developer_instructions')}`,
     );
-    return { content: `${lines.join('\n')}\n`, warnings: [] };
+    const policyKeys = [
+      ...(behavior.execution.sandboxMode !== undefined ? ['sandbox-mode'] : []),
+      ...(behavior.execution.approvalPolicy !== undefined ? ['approval-policy'] : []),
+    ];
+    const warnings: Warning[] =
+      policyKeys.length === 0
+        ? []
+        : [
+            {
+              kind: 'codex-role-policy-not-applied',
+              target: 'codex',
+              detail: `${policyKeys.join(' and ')} ${policyKeys.length === 1 ? 'is' : 'are'} emitted into the role as written, but codex-cli 0.160.0 spawns the child with the parent session's sandbox and approval policy, so ${policyKeys.length === 1 ? 'it has' : 'they have'} no runtime effect (docs/limitations.md L-014)`,
+            },
+          ];
+    return { content: `${lines.join('\n')}\n`, warnings };
   },
 };
 

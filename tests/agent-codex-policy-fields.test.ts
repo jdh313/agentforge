@@ -126,6 +126,45 @@ describe('sandbox-mode and approval-policy on agents (explicit Codex-native auth
   });
 });
 
+describe('codex-role-policy-not-applied warning', () => {
+  const policyWarnings = (target: TargetName, frontmatter: string) =>
+    project(target, frontmatter).warnings.filter(
+      ({ kind }) => kind === 'codex-role-policy-not-applied',
+    );
+
+  test.each([
+    ['sandbox-mode: read-only\n', ['sandbox-mode'], ['approval-policy']],
+    ['approval-policy: never\n', ['approval-policy'], ['sandbox-mode']],
+    ['sandbox-mode: read-only\napproval-policy: never\n', ['sandbox-mode', 'approval-policy'], []],
+  ])('Codex warns for %j', (frontmatter, named, unnamed) => {
+    const found = policyWarnings('codex', frontmatter);
+    expect(found).toHaveLength(1);
+    const [warning] = found;
+    expect(warning?.target).toBe('codex');
+    for (const key of named) expect(warning?.detail).toContain(key);
+    for (const key of unnamed) expect(warning?.detail).not.toContain(key);
+    expect(warning?.detail).toContain('0.160.0');
+    expect(warning?.detail).toContain('L-014');
+  });
+
+  test('a targets.codex override still warns', () => {
+    expect(
+      policyWarnings('codex', 'targets:\n  codex:\n    sandbox-mode: read-only\n'),
+    ).toHaveLength(1);
+  });
+
+  test('absent when neither key is set, even with Claude policy fields', () => {
+    expect(policyWarnings('codex', '')).toEqual([]);
+    expect(policyWarnings('codex', 'permissionMode: plan\ntools: Read\n')).toEqual([]);
+  });
+
+  test('absent on Claude', () => {
+    expect(policyWarnings('claude', 'sandbox-mode: read-only\napproval-policy: never\n')).toEqual(
+      [],
+    );
+  });
+});
+
 describe('Claude policy fields never synthesize Codex policy (ndr:bqyqfd)', () => {
   test('permissionMode, tools and disallowedTools alone produce no sandbox or approval', () => {
     const { content, warnings } = project(

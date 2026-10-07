@@ -45,6 +45,9 @@ export type DiagnosticCode =
   // `short-description` outside Codex's documented 25-64 character range. A
   // warning, not a rejection: the value is still emitted as written.
   | 'codex-short-description-length'
+  // `sandbox-mode` / `approval-policy` on a Codex agent: emitted as written, but
+  // codex-cli 0.160.0 spawns the child with the parent's policy (L-014).
+  | 'codex-role-policy-not-applied'
   // A construct the target supports only when a typed condition holds.
   // Distinct from every kind above, which reports an unconditional target
   // outcome: this warning carries the gate rather than averaging over it, and
@@ -79,6 +82,7 @@ export type WarningKind = Extract<
   | 'unclassified-body-construct'
   | 'unrecognized-frontmatter-key'
   | 'codex-short-description-length'
+  | 'codex-role-policy-not-applied'
   | 'construct-support-gated'
 >;
 

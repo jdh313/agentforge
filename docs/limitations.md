@@ -1015,18 +1015,25 @@ nothing at runtime.
 carrying `sandbox_mode = "read-only"`, the role is registered and selectable,
 and the child's shell can still write the workspace when the parent session is
 `workspace-write`. The reverse also holds: a role declaring `workspace-write`
-under a `read-only` parent cannot write. No warning is raised at compile time,
-because the output is exactly the native form (ndr:mqt5dv).
+under a `read-only` parent cannot write. The output is exactly the native form,
+and compilation raises `codex-role-policy-not-applied` (disposition
+carried-unenforced) whenever either key is set on a Codex agent, naming the
+key(s) and citing this entry. The warning is raised by
+`codexAgentDocument.serialize`, so the standalone render and the Codex agent
+bundle both surface it (the bundle as a compile diagnostic). Claude stays silent.
 
-**Affects.** Codex leaf `agent` projection and the standalone Codex agent bundle
-(`sandbox_mode`, `approval_policy` in the role TOML), for every canonical agent
-that sets either key.
+**Affects.** Codex leaf `agent` projection, the standalone Codex agent bundle,
+and the marketplace companion bundle (`targets.codex.codex-agent-bundle: true`)
+— `sandbox_mode`, `approval_policy` in the role TOML — for every canonical agent
+that sets either key. The warning is a compile-time diagnostic only:
+`install-codex-agent` and `sync-codex-agents` copy the compiled role without
+re-raising it, so whoever installs a bundle sees the fields but not the warning.
 
 **Evidence.** Fresh runtime probe 2026-10-07, codex-cli 0.160.0, isolated
 `CODEX_HOME`, project `.codex/agents` roles installed with
 `install-codex-agent` and selected through `spawn_agent` `agent_type`. Method
-and results are in `docs/codex-agent-bundle-acceptance.md` § Role-scoped
-sandbox and approval acceptance. The child's rollout `turn_context` recorded the
+and results are in `docs/codex-agent-bundle-acceptance.md` § Fibery #137
+role-scoped policy runtime acceptance. The child's rollout `turn_context` recorded the
 parent's `sandbox_policy` and `approval_policy` in every run, including when the
 parent's policy came from `config.toml` rather than a CLI flag. The role itself
 was loaded (`session_meta.agent_role` names it and its instructions ran). The
@@ -1045,6 +1052,10 @@ child must restrict the parent session.
 records the role's `sandbox_mode` or `approval_policy`. Re-run the probe in the
 acceptance record: the read-only role under a `workspace-write` parent must
 fail the write.
+
+**Mitigation.** The warning above. It is the only mitigation: AgentForge does
+not emulate the policy. Remove the warning together with this entry's status
+change when Codex starts applying role-scoped policy.
 
 **Where to look.** `src/targets/codex.ts` — `codexAgentDocument.serialize`.
 `src/frontmatter.ts` — the `sandbox-mode` and `approval-policy` rows.

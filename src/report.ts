@@ -75,6 +75,8 @@ const DISPOSITION_BY_CODE: Readonly<Record<DiagnosticCode, Disposition>> = {
   'empty-hook-configuration': 'nothing-to-carry',
   // Emitted exactly as written; only the documented UI range is not enforced.
   'codex-short-description-length': 'carried-unenforced',
+  // Emitted exactly as written; Codex does not apply it to a spawned child (L-014).
+  'codex-role-policy-not-applied': 'carried-unenforced',
   'unclassified-construct': 'not-established',
   'unclassified-body-construct': 'not-established',
   'unrecognized-frontmatter-key': 'not-established',

@@ -300,7 +300,7 @@ context). Missing or stale roles point at `sync-codex-agents`; edited,
 conflicted, or unsupported roles point at `check-codex-agent` for review. It
 always exits 0 and never writes. Codex asks the user to trust the hook once.
 
-## Role-scoped sandbox and approval acceptance
+## Fibery #137 role-scoped policy runtime acceptance
 
 Fibery #137. Question: does Codex apply a role's `sandbox_mode` and
 `approval_policy` to a spawned child? Result: **no**. Last exercised
