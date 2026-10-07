@@ -27,7 +27,10 @@ shell, OS, and global preferences; only narrows or extends here.
   plans and the staged materializer (`rsuzoxko`, commit `2cbcb8ff`). These
   roadmap labels describe implementation slices; released package versions are
   assigned separately by semantic-release.
-- The 0.8 slice is underway: `agent` is a first-class leaf artifact with a
+- The 0.8, 0.9 and 1.0 slices are complete (Fibery #111, #113, #117);
+  releases continue past `v1.0.0`, and post-1.0 work is tracked in Fibery
+  (see `docs/roadmap.md` § After 1.0).
+- 0.8 made `agent` a first-class leaf artifact with a
   shared canonical schema, projecting to Claude Markdown and native Codex
   agent-role TOML. Codex plugin packages cannot register agent roles as of
   codex-cli 0.155.1 (`docs/limitations.md` L-010), so marketplace agent

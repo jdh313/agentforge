@@ -1,7 +1,12 @@
-# AgentForge roadmap to 1.0
+# AgentForge roadmap
 
 The numbered roadmap labels are implementation slices, not released package
 versions. Semantic-release assigns package versions from commits on `main`.
+
+Every slice through 1.0 is complete: 0.8, 0.9 and 1.0 closed as Fibery Project
+Tracking tasks #111, #113 and #117, and releases continue past `v1.0.0`. The
+sections below are kept as the record of what each slice set out to prove. Work
+after 1.0 is tracked in Fibery, not here; see [After 1.0](#after-10).
 
 ## Completed foundation
 
@@ -13,7 +18,7 @@ versions. Semantic-release assigns package versions from commits on `main`.
   compilation plans and publish through the same staged materializer. Recorded
   as change `rsuzoxko`, commit `2cbcb8ff`.
 
-## 0.8 — canonical agents
+## 0.8 — canonical agents (complete)
 
 Make `agent` a first-class leaf artifact and use that same canonical model from
 marketplace compilation.
@@ -143,7 +148,7 @@ leaf-agent results must remain separate. Explicit project-role selection is
 accepted on codex-cli 0.155.1; plugin registration remains unsupported. See
 `docs/limitations.md` L-010 through L-012.
 
-## 0.9 — hooks
+## 0.9 — hooks (complete)
 
 Generalize target-native hook projection around Commit. Verify event payloads,
 plugin-root paths, executable modes, failure behavior, and actual blocking
@@ -166,7 +171,7 @@ for a hook of a test plugin, and that plugin hook was observed to receive
 `PLUGIN_ROOT`, `PLUGIN_DATA` and their `CLAUDE_*` aliases; Commit's own guard
 was not put into a failure mode or an env probe.
 
-## 1.0 — corpus acceptance and publication
+## 1.0 — corpus acceptance and publication (complete)
 
 - Use Compass for discovery and explicit-only invocation.
 - Use Teach for explicit-only invocation, approval-before-write behavior,
@@ -191,3 +196,19 @@ was not put into a failure mode or an env probe.
 
 The 1.0 support statement must distinguish intended behavior, emitted native
 artifacts, and behavior verified in a fresh harness.
+
+## After 1.0
+
+Open work lives in Fibery Project Tracking tasks, ordered by their `Sequence`
+field. As of 2026-10-07 the AgentForge tasks still open are:
+
+- #133 — decide who owns Codex skill `interface.short_description`.
+- #134 — add canonical keys for unmapped Codex agent-role fields, or rule them
+  out.
+- #135 — enumerate the three Claude observer loader keys, or leave them
+  unrecognized.
+- #137 — expose Codex-native agent sandbox and approval configuration.
+- #118 and #124 — post-1.0: verified agent support for OpenCode, Pi and later
+  runtimes; removal of `attention-workflow` from `jdh-agents`.
+
+Check Fibery before trusting this list; it is a snapshot.
