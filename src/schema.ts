@@ -80,7 +80,9 @@ const LoaderBoolean = z.union([z.boolean(), z.enum(['true', 'false'])]);
 //
 // Deliberately absent: `observer`, `observerMessage`, `observeSubagents`. The
 // loader reads all three, but no published documentation does, so enumerating
-// them would claim a contract that nothing backs.
+// them would claim a contract that nothing backs. They wait on official docs,
+// not on the experimental `CLAUDE_CODE_EXPERIMENTAL_OBSERVER_AGENTS` gate
+// (ndr:csj8pa).
 export const CanonicalAgentFrontmatter = z.looseObject({
   name: CanonicalAgentName,
   description: z.string().min(1),
