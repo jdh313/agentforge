@@ -684,6 +684,17 @@ AGENTFORGE_CC_MARKETPLACE_PROJECT=../cc-marketplace bun test tests/cli.test.ts
 | `pi` | `~/.pi/agent/skills` | `.pi/skills` | `$PI_CODING_AGENT_DIR/agents` (default `~/.pi/agent/agents`) | `.pi/agents` | `skills` (agents unsupported) |
 | `claude-chat` | unsupported | unsupported | unsupported | unsupported | unsupported |
 
+Agent support by target:
+
+- `pi` agents are verified only through the third-party
+  `@gotgenes/pi-subagents` extension at **23.2.0** (`PI_SUBAGENTS_VERSION` in
+  `src/targets/pi.ts`), which must be installed in Pi: core Pi reads no agent
+  files. Runtime acceptance is recorded in `docs/pi-agent-acceptance.md`
+  (`bun run acceptance:pi-agents`); known gaps are L-015 and L-016 in
+  `docs/limitations.md`.
+- `opencode` and `claude-chat` have no agent projection; their skill output
+  stays best-effort.
+
 ## Contributing
 
 Issues and pull requests are welcome. Before opening a PR:

@@ -356,6 +356,14 @@ binaries. Pin `vX.Y.Z` + the `SHA256SUMS` entry, never a commit SHA.
    `TARGET_NAMES`; re-run with `bun test --update-snapshots` and review the
    diff before committing. Unsupported (target, artifact) pairs assert a
    thrown error instead of producing a snapshot.
+5. Agents need native acceptance before any doc claims support. Either run
+   the target's agent projection against the real runtime and record the
+   result as `docs/<target>-agent-acceptance.md`, with a script whose exit
+   code is the verdict (precedent: `docs/pi-agent-acceptance.md` and
+   `bun run acceptance:pi-agents`), or record an unsupported disposition:
+   leave `artifacts.agent` unset and state the gap in `docs/limitations.md`.
+   Fill the target's agent column in `docs/field-parity.md` from what
+   acceptance observed, and claim no control it did not.
 
 ## Adding a new artifact
 
