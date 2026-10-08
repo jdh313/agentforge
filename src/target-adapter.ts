@@ -25,8 +25,9 @@ export interface NativeAgentDocumentResult {
   warnings: Warning[];
 }
 
-// Whether an agent leaf projects as Markdown-plus-frontmatter or as a target's
-// own registration document is a fact about the target itself, true before any
+// Whether an agent leaf is serialized by the shared Markdown projection or by a
+// target-owned serializer (own extension and key set: Codex TOML, Pi Markdown
+// for pi-subagents) is a fact about the target itself, true before any
 // specific artifact is projected — the case ndr:nes397 admits onto an adapter
 // member. The shape stays one function interface regardless of which target
 // implements it, so the member's type is not a union enumerating targets.
@@ -40,6 +41,12 @@ export interface NativeAgentDocumentContext {
    * (Codex `model`, Pi `model` and `tools`).
    */
   overrides: Readonly<Record<string, unknown>>;
+  /**
+   * The canonical frontmatter before `targets.<name>` is merged over it. An
+   * override written with no value (YAML `null`) replaces the shared key in
+   * the merged view, so a target gating on a shared restriction reads it here.
+   */
+  sharedFrontmatter: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -76,7 +83,7 @@ export interface ArtifactConfig {
   outputFrontmatterSchema: z.ZodType;
   bundle?: 'dir' | 'zip';
   // Present only for a target/artifact pair that registers as a native
-  // document instead of the default one-file Markdown projection (ndr:2t36rb).
+  // document instead of the default shared one-file Markdown projection, through a target-owned serializer (Codex TOML, Pi Markdown for pi-subagents) (ndr:2t36rb).
   nativeDocument?: NativeAgentDocument;
   // A translation-only key (retained by no target) is normally stripped
   // silently where it is not translated, because the key belongs to a sibling

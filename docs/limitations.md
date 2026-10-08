@@ -1079,8 +1079,10 @@ major would silently ignore a key the render still emits. Two behaviors of the
 pinned loader are worth knowing: `maxTurns: 1` runs as 2 (the render emits it
 verbatim and raises `pi-max-turns-raised`), and a `tools` list is matched
 exactly against Pi-native lowercase names, so a Claude name yields an agent
-with no tools. That second one is why a shared `tools` or `disallowedTools`
-refuses the Pi render unless `targets.pi.tools` is written (ndr:yvgjpt).
+with no tools. That second one, with the loader's lack of a denylist or permission mode, is why
+a shared `tools`, a non-empty `disallowedTools`, or a `permissionMode` other than
+`bypassPermissions` refuses the Pi render unless `targets.pi.tools` is written
+(ndr:jybfry).
 
 **Affects.** The `pi` target's `agent` artifact (`render` only; install and
 `check-install` are Fibery #140). Every key reported as not accepted by Pi in
@@ -1089,10 +1091,10 @@ refuses the Pi render unless `targets.pi.tools` is written (ndr:yvgjpt).
 **Evidence.** Code read of the installed package for Fibery #138, 2026-10-08; the
 loader parse, `max_turns` floor and `thinking` vocabulary were re-read at
 23.2.0 when this entry was written. Eleven frontmatter
-keys parsed in `src/config/custom-agents.ts:56-73`; `thinking` vocabulary in
-`src/config/thinking-level.ts:24-32`; the `max_turns` floor in
-`src/lifecycle/turn-limits.ts:122-127`; prompt assembly in
-`src/session/prompts.ts:50-100`. Not executed: the unknown-tool-name and
+keys parsed in `src/config/custom-agents.ts loadFromDir`; `thinking` vocabulary in
+`src/config/thinking-level.ts THINKING_LEVELS`; the `max_turns` floor in
+`src/lifecycle/turn-limits.ts normalizeMaxTurns`; prompt assembly in
+`src/session/prompts.ts buildAgentPrompt`. Not executed: the unknown-tool-name and
 malformed-YAML consequences are inferred from code, and `claude-only-body-feature`
 for Pi agent bodies rests on finding no substitution in the prompt path.
 Runtime verification is Fibery #141.

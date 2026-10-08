@@ -58,9 +58,10 @@ shell, OS, and global preferences; only narrows or extends here.
   third-party `@gotgenes/pi-subagents` extension, pinned at 23.2.0 (one
   constant, `PI_SUBAGENTS_VERSION` in `src/targets/pi.ts`; ndr:az33k6,
   `docs/limitations.md` L-015). `model` and `tools` come only from
-  `targets.pi`; a shared `tools` or `disallowedTools` without
-  `targets.pi.tools` refuses the render with `ProjectionRefusedError`
-  (ndr:yvgjpt), which `render --all-targets` reports as a skip. Install and
+  `targets.pi`; a shared `tools`, a non-empty `disallowedTools`, or any
+  `permissionMode` other than `bypassPermissions`, without `targets.pi.tools`,
+  refuses the render with `ProjectionRefusedError` (ndr:jybfry), which
+  `render --all-targets` reports as a skip. Install and
   `check-install` for Pi agents are Fibery #140 and not wired yet
   (`installLocations` is empty).
 - Releases are automated (semantic-release + per-platform binaries; see
@@ -164,7 +165,11 @@ tests/
 - Canonical frontmatter is the superset for that artifact's targets, plus
   an optional `targets:` block keyed by target name.
 - Per (target, artifact): look up `adapter.artifacts[artifact]`. If missing,
-  the render throws (`--all-targets` skips with a log line instead).
+  the render throws (`--all-targets` skips with a log line instead). A target
+  can also refuse a source it does support (`ProjectionRefusedError`, e.g. Pi
+  with a tool or permission restriction and no `targets.pi.tools`,
+  ndr:jybfry); that throws on a single-target render and `--all-targets`
+  reports it as a skip the same way.
   Otherwise: deep-merge `targets.<name>` over top-level frontmatter
   (excluding `body`), filter through `frontmatter.ts`, validate with
   `outputFrontmatterSchema`.
@@ -497,10 +502,11 @@ unrecognized key keeps the category-2 behavior above.
 
 ## Out of scope today
 
-- Remaining non-Claude/Codex projections and marketplace reuse of the Codex
-  leaf projection (blocked upstream — `docs/limitations.md` L-010) remain in
-  the 0.8 work in
-  [docs/roadmap.md](docs/roadmap.md). MCP artifacts remain later work.
+- OpenCode agent projection, install and `check-install` for Pi agents
+  (Fibery #140) and Pi runtime verification (#141) remain post-1.0, as does
+  marketplace reuse of the Codex leaf projection (blocked upstream —
+  `docs/limitations.md` L-010); see [docs/roadmap.md](docs/roadmap.md). MCP
+  artifacts remain later work.
 - Watch mode.
 - Multi-artifact source directory rendering (each source dir contains
   exactly one canonical file).

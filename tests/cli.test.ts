@@ -439,7 +439,7 @@ describe('leaf agent commands', () => {
     );
   });
 
-  // ndr:yvgjpt: the refusal is reported like an unsupported pair, so one
+  // ndr:jybfry: the refusal is reported like an unsupported pair, so one
   // restricted agent does not abort the other targets' output.
   test('reports a Pi tool-restriction refusal as a skip and still renders the other targets', () => {
     const source = join(temporaryRoot, 'agent-pi-refused');

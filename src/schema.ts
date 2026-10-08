@@ -5,11 +5,13 @@ const TargetOverride = z.looseObject({
   body: z.string().optional(),
 });
 
+export const EffortLevel = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
+
 export const CanonicalAgentName = z
   .string()
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'name must be a lowercase hyphenated identifier');
 
-const ToolList = z.union([z.string(), z.array(z.string())]);
+export const ToolList = z.union([z.string(), z.array(z.string())]);
 
 const TargetsBlock = z
   .object({
@@ -62,7 +64,7 @@ export type CanonicalSkillFrontmatterT = z.infer<typeof CanonicalSkillFrontmatte
 // strings "true"/"false" for its two boolean-ish keys, so the canonical schema
 // accepts exactly what the runtime does. Narrowing to `z.boolean()` would
 // refuse a document Claude loads.
-const LoaderBoolean = z.union([z.boolean(), z.enum(['true', 'false'])]);
+export const LoaderBoolean = z.union([z.boolean(), z.enum(['true', 'false'])]);
 
 // This is also the package-agent parser's schema. Leaf rendering and
 // marketplace compilation must normalize one canonical behavior model rather
@@ -88,7 +90,7 @@ export const CanonicalAgentFrontmatter = z.looseObject({
   description: z.string().min(1),
   model: z.string().min(1).optional(),
   maxTurns: z.number().int().positive().optional(),
-  effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
+  effort: EffortLevel.optional(),
   // Codex-only; see the translation-only rows in `src/frontmatter.ts`.
   'reasoning-summary': z.enum(['auto', 'concise', 'detailed', 'none']).optional(),
   verbosity: z.enum(['low', 'medium', 'high']).optional(),

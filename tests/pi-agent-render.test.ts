@@ -7,7 +7,7 @@ import { ProjectionRefusedError } from '../src/target-adapter.ts';
 import { PI_SUBAGENTS_PACKAGE, PI_SUBAGENTS_VERSION } from '../src/targets/pi.ts';
 import type { TargetName } from '../src/types.ts';
 
-// Pi agent leaf projection to @gotgenes/pi-subagents (ndr:az33k6, ndr:yvgjpt).
+// Pi agent leaf projection to @gotgenes/pi-subagents (ndr:az33k6, ndr:jybfry).
 // Sources are inline so each case states exactly the keys it is about; the
 // matrix fixtures in render.test.ts carry the committed snapshots.
 
@@ -125,10 +125,21 @@ describe('Pi agent projection: model and tools come only from targets.pi', () =>
     );
   });
 
-  test('targets.pi.tools rejects a value that is neither string nor list', () => {
-    expect(() => project(source('targets:\n  pi:\n    tools: 3\n'))).toThrow(
-      /targets\.pi\.tools must be a string or a list of strings/,
+  test('targets.pi.tools rejects a value that is neither string nor list, as a refusal', () => {
+    for (const value of ['3', '{ a: 1 }', '[read, 3]']) {
+      const src = source(`targets:\n  pi:\n    tools: ${value}\n`);
+      expect(() => project(src)).toThrow(ProjectionRefusedError);
+      expect(() => project(src)).toThrow(
+        /targets\.pi\.tools must be a string or a list of strings/,
+      );
+    }
+  });
+
+  test('a null targets.pi.tools is absent, so the gate still applies', () => {
+    expect(() => project(source('tools: Read\ntargets:\n  pi:\n    tools: null\n'))).toThrow(
+      ProjectionRefusedError,
     );
+    expect(frontmatterOf(source('targets:\n  pi:\n    tools:\n'))).not.toHaveProperty('tools');
   });
 
   test('no Claude-to-Pi tool-name map exists: a shared Claude name never reaches the output', () => {
@@ -138,7 +149,7 @@ describe('Pi agent projection: model and tools come only from targets.pi', () =>
   });
 });
 
-describe('Pi agent projection: refusal to lose a tool restriction (ndr:yvgjpt)', () => {
+describe('Pi agent projection: refusal to lose a tool or permission restriction (ndr:jybfry)', () => {
   test('refuses a shared tools list with no targets.pi.tools', () => {
     expect(() => project(source('tools: Read\n'))).toThrow(ProjectionRefusedError);
     expect(() => project(source('tools: Read\n'))).toThrow(
@@ -153,10 +164,40 @@ describe('Pi agent projection: refusal to lose a tool restriction (ndr:yvgjpt)',
     );
   });
 
-  test('names both keys when both restrict', () => {
-    expect(() => project(source('tools: Read\ndisallowedTools: [Write]\n'))).toThrow(
-      /tools and disallowedTools restrict/,
-    );
+  test('names every restricting key', () => {
+    expect(() =>
+      project(source('tools: Read\ndisallowedTools: [Write]\npermissionMode: plan\n')),
+    ).toThrow(/tools, disallowedTools, permissionMode restrict what it may do/);
+  });
+
+  test('refuses a plan-mode-only agent with no targets.pi.tools', () => {
+    const src = source('permissionMode: plan\n');
+    expect(() => project(src)).toThrow(ProjectionRefusedError);
+    expect(() => project(src)).toThrow(/permissionMode restricts.*no targets\.pi\.tools/);
+  });
+
+  test.each([
+    'default',
+    'acceptEdits',
+    'auto',
+    'dontAsk',
+    'manual',
+  ])('refuses permissionMode %s', (mode) => {
+    expect(() => project(source(`permissionMode: ${mode}\n`))).toThrow(ProjectionRefusedError);
+  });
+
+  test('permissionMode bypassPermissions renders (the one mode Pi already means)', () => {
+    expect(() => project(source('permissionMode: bypassPermissions\n'))).not.toThrow();
+  });
+
+  test('an empty disallowedTools list restricts nothing and renders', () => {
+    expect(() => project(source('disallowedTools: []\n'))).not.toThrow();
+  });
+
+  test('targets.pi.tools satisfies the gate for permissionMode too', () => {
+    const src = source(`permissionMode: plan\ntargets:\n${PI_TOOLS}`);
+    expect(matter(project(src).content).data.tools).toEqual(['read', 'grep']);
+    expect(strippedDetail(src)).toContain('permissionMode');
   });
 
   test('names the source file so a batch run points at the agent', () => {
@@ -188,7 +229,7 @@ describe('Pi agent projection: refusal to lose a tool restriction (ndr:yvgjpt)',
 describe('Pi agent projection: losses named by the az33k6 decision', () => {
   // One entry per key the decision reports as not accepted by Pi, each with a
   // value the canonical schema accepts. `targets.pi.tools` rides along so the
-  // yvgjpt gate never fires for the restricting `disallowedTools` case.
+  // jybfry gate never fires for the restricting `disallowedTools` case.
   const LOSSES: readonly (readonly [string, string])[] = [
     ['disallowedTools', 'disallowedTools: [Write]\n'],
     ['permissionMode', 'permissionMode: plan\n'],

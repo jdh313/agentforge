@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import matter from 'gray-matter';
 import { z } from 'zod';
 import type { CanonicalAgentBehavior } from '../agent-command.ts';
-import { CanonicalAgentName } from '../schema.ts';
+import { CanonicalAgentName, EffortLevel, LoaderBoolean, ToolList } from '../schema.ts';
 import {
   agentSkillsTarget,
   type NativeAgentDocument,
@@ -35,12 +35,10 @@ export const PI_SUBAGENTS_VERSION = '23.2.0';
 const PiAgentOutputFrontmatter = z.looseObject({
   name: CanonicalAgentName,
   description: z.string().min(1),
-  effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
+  effort: EffortLevel.optional(),
   maxTurns: z.number().int().positive().optional(),
-  background: z.union([z.boolean(), z.enum(['true', 'false'])]).optional(),
+  background: LoaderBoolean.optional(),
 });
-
-const PiToolList = z.union([z.string(), z.array(z.string())]);
 
 // The loader treats a boolean `true` strictly (`=== true`), so the canonical
 // loader-boolean strings are normalized rather than passed through.
@@ -50,51 +48,72 @@ const loaderBoolean = (value: unknown): boolean | undefined => {
   return undefined;
 };
 
-// ndr:yvgjpt: a tool restriction is a safety property and the extension has no
-// denylist, so losing one widens the agent to all seven built-in tools. A
-// shared `tools` is in Claude names the loader matches against nothing, and
-// `disallowedTools` is never read; either one without a Pi allowlist the
-// author wrote is refused rather than stripped. `targets.pi.tools` satisfies
-// the gate even when a shared `disallowedTools` remains (that key is still
+// ndr:jybfry: a tool or permission restriction is a safety property, and the
+// extension has no denylist, no permission mode and an omitted `tools` means
+// all seven built-in tools, so losing one widens the agent. A shared `tools`
+// is in Claude names the loader matches against nothing, a non-empty
+// `disallowedTools` is never read, and every `permissionMode` except
+// `bypassPermissions` asks or denies on Claude where Pi asks nothing. Any of
+// them without a Pi allowlist the author wrote is refused rather than
+// stripped. An empty `disallowedTools` restricts nothing and does not count.
+// `targets.pi.tools` satisfies the gate for all three keys (they are still
 // reported as not accepted by the generic path).
+function restrictingKeys(frontmatter: Readonly<Record<string, unknown>>): string[] {
+  const keys: string[] = [];
+  if (frontmatter.tools != null) keys.push('tools');
+  const denied = frontmatter.disallowedTools;
+  if (denied !== undefined && !(Array.isArray(denied) && denied.length === 0)) {
+    keys.push('disallowedTools');
+  }
+  const mode = frontmatter.permissionMode;
+  if (mode !== undefined && mode !== 'bypassPermissions') keys.push('permissionMode');
+  return keys;
+}
+
 function assertRestrictionIsExpressible(
   name: string,
   sourcePath: string,
   frontmatter: Readonly<Record<string, unknown>>,
-  overrides: Readonly<Record<string, unknown>>,
+  piTools: string | string[] | undefined,
 ): void {
-  if (overrides.tools !== undefined) return;
-  const restricting = ['tools', 'disallowedTools'].filter((key) => frontmatter[key] !== undefined);
+  if (piTools !== undefined) return;
+  const restricting = restrictingKeys(frontmatter);
   if (restricting.length === 0) return;
   throw new ProjectionRefusedError(
-    `${sourcePath}: refusing to render agent ${JSON.stringify(name)} for pi: ${restricting.join(' and ')} restrict${restricting.length === 1 ? 's' : ''} its tools but no targets.pi.tools is set. ${PI_SUBAGENTS_PACKAGE} ${PI_SUBAGENTS_VERSION} has no tool denylist and matches tool names exactly, so a Claude-named list matches nothing and an omitted list grants all built-in tools. Add targets.pi.tools in Pi tool names (for example [read, grep]).`,
+    `${sourcePath}: refusing to render agent ${JSON.stringify(name)} for pi: ${restricting.join(', ')} restrict${restricting.length === 1 ? 's' : ''} what it may do but no targets.pi.tools is set. ${PI_SUBAGENTS_PACKAGE} ${PI_SUBAGENTS_VERSION} has no tool denylist or permission mode and matches tool names exactly, so a Claude-named list matches nothing and an omitted list grants all built-in tools. Add targets.pi.tools with Pi tool names (for example [read, grep]).`,
   );
+}
+
+// `null` is an absent override (a YAML key written with no value); any other
+// non-list, non-string value is a refusal so `--all-targets` skips Pi rather
+// than aborting the run.
+function parsePiTools(sourcePath: string, value: unknown): string | string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  const parsed = ToolList.safeParse(value);
+  if (!parsed.success) {
+    throw new ProjectionRefusedError(
+      `${sourcePath}: targets.pi.tools must be a string or a list of strings`,
+    );
+  }
+  return parsed.data;
 }
 
 const piAgentDocument: NativeAgentDocument = {
   extension: '.md',
   serialize(
     behavior: CanonicalAgentBehavior,
-    { sourcePath, overrides }: NativeAgentDocumentContext,
+    { sourcePath, overrides, sharedFrontmatter }: NativeAgentDocumentContext,
   ) {
-    assertRestrictionIsExpressible(
-      behavior.name,
-      sourcePath,
-      behavior.sourceFrontmatter,
-      overrides,
+    const tools = parsePiTools(sourcePath, overrides.tools);
+    // A null override (`targets.pi.permissionMode:` with no value) erases the
+    // shared key in the merged view; the gate falls back to the shared value.
+    const effective = Object.fromEntries(
+      Object.keys({ ...sharedFrontmatter, ...behavior.sourceFrontmatter }).map((key) => [
+        key,
+        behavior.sourceFrontmatter[key] ?? sharedFrontmatter[key],
+      ]),
     );
-    const tools =
-      overrides.tools === undefined
-        ? undefined
-        : (() => {
-            const parsed = PiToolList.safeParse(overrides.tools);
-            if (!parsed.success) {
-              throw new Error(
-                `${sourcePath}: targets.pi.tools must be a string or a list of strings`,
-              );
-            }
-            return parsed.data;
-          })();
+    assertRestrictionIsExpressible(behavior.name, sourcePath, effective, tools);
     const background = loaderBoolean(behavior.sourceFrontmatter.background);
     // Fixed key order, so the output is deterministic and reads like the
     // extension's own documentation.

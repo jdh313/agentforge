@@ -741,7 +741,7 @@ program
           const result = await render({ sourceDir: src, target: adapter.name, outDir, artifact });
           console.log(formatResult(adapter.name, result));
         } catch (error) {
-          // A refusal is the target declining this source (ndr:yvgjpt), not a
+          // A refusal is the target declining this source (ndr:jybfry), not a
           // malformed one: report it like an unsupported pair and continue.
           if (!(error instanceof ProjectionRefusedError)) throw error;
           console.log(`[${adapter.name}] skip: ${error.message}`);

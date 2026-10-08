@@ -370,6 +370,7 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
     const native = artifactConfig.nativeDocument.serialize(behavior, {
       sourcePath,
       overrides: overrideFields,
+      sharedFrontmatter: canonicalFrontmatter as Record<string, unknown>,
     });
     return {
       artifactName,
@@ -449,11 +450,12 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
 // so a native-document target consumes one agent behavior model rather than a
 // second, leaf-specific representation.
 //
-// `model` is the one field deliberately NOT read from `merged`: a shared
-// top-level `model:` is a Claude-shaped alias (Claude's own model catalog),
-// and a native-document target's model namespace is its own. Only an
-// explicit `targets.<name>.model` names this target, so `overrideFields` —
-// never the merged value — is what a native document may read; a bare
+// `model` is deliberately NOT read from `merged`: a shared top-level `model:`
+// is a Claude-shaped alias (Claude's own model catalog), and a native-document
+// target's model namespace is its own. Only an explicit `targets.<name>.model`
+// names this target, so `overrideFields` — never the merged value — is what a
+// native document may read; Pi's serializer likewise reads `tools` only from
+// those overrides (`targets.pi.tools`); a bare
 // top-level `model:` with no matching override still surfaces as a
 // `claude-only-frontmatter-stripped` warning through the existing
 // acceptance-table path, same as any other Claude-only key.

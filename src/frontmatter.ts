@@ -57,7 +57,7 @@ const ACCEPTANCE: Readonly<
   agent: {
     // Pi never emits `name` as a key: the pi-subagents loader takes the agent
     // name from the filename stem (@gotgenes/pi-subagents 23.2.0,
-    // `src/config/custom-agents.ts:46`). Membership here is what lets the
+    // `src/config/custom-agents.ts loadFromDir`). Membership here is what lets the
     // merged `name` (including a `targets.pi.name` override) choose that
     // filename, not a claim the loader reads a frontmatter `name`.
     name: {
@@ -68,7 +68,7 @@ const ACCEPTANCE: Readonly<
     description: {
       targets: ['claude', 'codex', 'pi'],
       source:
-        'Claude Code native subagent frontmatter; Codex agent role TOML `description` field (codex-cli 0.154.0); @gotgenes/pi-subagents 23.2.0 `description` (`src/config/custom-agents.ts:61`).',
+        'Claude Code native subagent frontmatter; Codex agent role TOML `description` field (codex-cli 0.154.0); @gotgenes/pi-subagents 23.2.0 `description` (`src/config/custom-agents.ts loadFromDir`).',
     },
     // Codex has a native `model` TOML field, but a shared top-level `model:`
     // is a Claude-shaped alias (Claude's own model catalog) that must not
@@ -85,17 +85,17 @@ const ACCEPTANCE: Readonly<
     // this row's targets until one does.
     //
     // Pi retains it renamed to `max_turns` (@gotgenes/pi-subagents 23.2.0,
-    // `src/config/custom-agents.ts:65`), so Pi is a member even though the
+    // `src/config/custom-agents.ts loadFromDir`), so Pi is a member even though the
     // emitted key differs from the canonical one (ndr:az33k6).
     maxTurns: {
       targets: ['claude', 'pi'],
       source:
-        'Claude Code native subagent frontmatter; Pi agent `max_turns` (@gotgenes/pi-subagents 23.2.0 `src/config/custom-agents.ts:65`, emitted verbatim; the extension runs 1 as 2).',
+        'Claude Code native subagent frontmatter; Pi agent `max_turns` (@gotgenes/pi-subagents 23.2.0 `src/config/custom-agents.ts loadFromDir`, emitted verbatim; the extension runs 1 as 2).',
     },
     effort: {
       targets: ['claude', 'codex', 'pi'],
       source:
-        'Claude Code native subagent frontmatter; Codex agent role TOML `model_reasoning_effort` field. Every canonical value (low/medium/high/xhigh/max) is a confirmed-accepted Codex reasoning-effort string per the codex-cli 0.154.0 bundled model catalog. Pi agent `thinking` (@gotgenes/pi-subagents 23.2.0 `src/config/thinking-level.ts:24-32`): every canonical value is in its vocabulary.',
+        'Claude Code native subagent frontmatter; Codex agent role TOML `model_reasoning_effort` field. Every canonical value (low/medium/high/xhigh/max) is a confirmed-accepted Codex reasoning-effort string per the codex-cli 0.154.0 bundled model catalog. Pi agent `thinking` (@gotgenes/pi-subagents 23.2.0 `src/config/thinking-level.ts THINKING_LEVELS`): every canonical value is in its vocabulary.',
     },
     // Translation-only (retained by no target, like skill `short-description`):
     // Codex receives each as an agent-role TOML field and Claude has no such
@@ -137,7 +137,7 @@ const ACCEPTANCE: Readonly<
     // Pi does read a `tools` allowlist, but it is exact-match against Pi-native
     // lowercase names, so a shared Claude-named value is never emitted; only
     // `targets.pi.tools` is (ndr:az33k6), and a shared value without it refuses
-    // the Pi render outright (ndr:yvgjpt).
+    // the Pi render outright (ndr:jybfry).
     tools: claudeOnly('Claude Code native subagent frontmatter.'),
 
     // Everything below is read and validated by Claude Code 2.1.274's shipped
@@ -168,7 +168,7 @@ const ACCEPTANCE: Readonly<
     background: {
       targets: ['claude', 'pi'],
       source:
-        'Claude Code native subagent frontmatter. Codex agent roles have no foreground/background field; its backgrounding is a spawn-time tool argument, not role metadata. Pi agent `run_in_background` (@gotgenes/pi-subagents 23.2.0 `src/config/custom-agents.ts:69`): a strict boolean, so the projection normalizes the canonical "true"/"false" strings.',
+        'Claude Code native subagent frontmatter. Codex agent roles have no foreground/background field; its backgrounding is a spawn-time tool argument, not role metadata. Pi agent `run_in_background` (@gotgenes/pi-subagents 23.2.0 `src/config/custom-agents.ts loadFromDir`): a strict boolean, so the projection normalizes the canonical "true"/"false" strings.',
     },
     omitClaudeMd: claudeOnly(
       'Claude Code native subagent frontmatter. Names CLAUDE.md, a Claude Code file, so no other target can have an equivalent.',
