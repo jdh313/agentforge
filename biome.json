@@ -4,6 +4,7 @@
     "includes": [
       "src/**",
       "tests/**",
+      "scripts/pi-agent-acceptance.ts",
       "!!tests/fixtures/expected",
       "!!tests/fixtures/definitions/codex-hook-locations/packages/duplicated/hooks/hooks.json",
       "*.json",

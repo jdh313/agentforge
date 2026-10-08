@@ -17,8 +17,14 @@
 //      credentials were not available.
 //
 // The throwaway agent dir SYMLINKS auth.json and npm/ from the real agent
-// dir; nothing is copied, and nothing in the real agent dir is written by this
-// script. Credentials are never read or printed.
+// dir; nothing is copied. This script writes nothing there itself, but pi
+// refreshes an expired OAuth token IN PLACE through the auth.json link, so the
+// real auth.json can be written during a run (the rotated token lands in the
+// real file; the link is not replaced). pi's refresh lock resolves to the
+// throwaway dir (proper-lockfile, realpath: false), so a concurrent real pi
+// session refreshing at the same moment is NOT serialized against this run:
+// do not run this while another pi session is active. Credentials are never
+// read or printed.
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
@@ -86,6 +92,11 @@ const fatal = (message: string): never => {
   console.error(`setup: ${message}`);
   process.exit(2);
 };
+if (PARENT_MODEL === CHILD_MODEL) {
+  fatal(
+    `parent model ${PARENT_MODEL} equals the declared child model; the model row could not tell a honored declaration from an inherited parent model. Set PI_ACCEPTANCE_PARENT_MODEL to a different model.`,
+  );
+}
 
 function run(command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv }) {
   return spawnSync(command, args, {
@@ -149,7 +160,10 @@ symlinkSync(join(REAL_AGENT_DIR, 'auth.json'), join(agentDir, 'auth.json'));
 symlinkSync(join(REAL_AGENT_DIR, 'npm'), join(agentDir, 'npm'));
 for (let n = 1; n <= 6; n++) writeFileSync(join(project, 'notes', `${n}.txt`), `${n}\n`);
 
+let cleaned = false;
 function cleanup() {
+  if (cleaned) return;
+  cleaned = true;
   if (options.keep) {
     console.error(`kept work directory ${work}`);
     return;
@@ -163,6 +177,28 @@ function cleanup() {
   rmSync(work, { recursive: true, force: true });
 }
 process.on('exit', cleanup);
+// A signal or an uncaught error skips the 'exit' event's usual path, which would
+// leave a live symlink to the real auth.json in the temp dir. cleanup() unlinks
+// the links first, then removes the directory, in every case.
+for (const [signal, code] of [
+  ['SIGINT', 130],
+  ['SIGTERM', 143],
+] as const) {
+  process.on(signal, () => {
+    cleanup();
+    process.exit(code);
+  });
+}
+process.on('uncaughtException', (error) => {
+  console.error(error);
+  cleanup();
+  process.exit(1);
+});
+process.on('unhandledRejection', (error) => {
+  console.error(error);
+  cleanup();
+  process.exit(1);
+});
 
 const piEnv = { ...process.env, PI_CODING_AGENT_DIR: agentDir };
 
@@ -205,7 +241,31 @@ const projectAgent = (name: string) => join(project, '.pi/agents', `${name}.md`)
 
 // ---- Scenario runner -------------------------------------------------------
 
-function scenario(label: string, cwd: string, prompt: string, withExtension: boolean): ToolCall[] {
+/** The slice of pi's `--mode json` events this script reads. */
+interface PiEvent {
+  type?: string;
+  toolName?: string;
+  toolCallId?: string;
+  args?: Record<string, unknown>;
+  isError?: boolean;
+  message?: { role?: string; content?: { type?: string; text?: string }[] };
+  result?: { content?: { text?: string }[]; details?: Record<string, unknown> };
+}
+
+interface ScenarioResult {
+  calls: ToolCall[];
+  /** Text of the assistant's own messages; excludes the user prompt echo. */
+  assistantText: string;
+  /** Why pi did not finish cleanly (non-zero exit, timeout, spawn error); undefined on success. */
+  failure: string | undefined;
+}
+
+function scenario(
+  label: string,
+  cwd: string,
+  prompt: string,
+  withExtension: boolean,
+): ScenarioResult {
   piInvocations++;
   const args = [
     '-p',
@@ -226,27 +286,50 @@ function scenario(label: string, cwd: string, prompt: string, withExtension: boo
   ];
   const result = run('pi', args, { cwd, env: piEnv });
   writeFileSync(join(work, `${label}.jsonl`), result.stdout ?? '');
+  writeFileSync(join(work, `${label}.stderr`), result.stderr ?? '');
+  let failure: string | undefined;
+  if (result.error !== undefined) {
+    const code = (result.error as NodeJS.ErrnoException).code;
+    failure =
+      code === 'ETIMEDOUT'
+        ? `pi timed out after ${SCENARIO_TIMEOUT_MS} ms`
+        : `pi did not run: ${result.error.message}`;
+  } else if (result.status !== 0) {
+    failure = `pi exited ${result.status ?? `by signal ${result.signal}`}: ${short(result.stderr ?? '')}`;
+  }
   const calls = new Map<string, ToolCall>();
+  const assistant: string[] = [];
   for (const line of (result.stdout ?? '').split('\n')) {
     if (!line.startsWith('{')) continue;
-    let event: Record<string, any>;
+    let event: PiEvent;
     try {
       event = JSON.parse(line);
     } catch {
       continue;
     }
+    if (event.type === 'message_end' && event.message?.role === 'assistant') {
+      for (const part of event.message.content ?? []) {
+        if (part?.type === 'text' && typeof part.text === 'string') assistant.push(part.text);
+      }
+    }
     if (event.toolName !== 'subagent') continue;
     if (event.type === 'tool_execution_start') {
-      calls.set(event.toolCallId, { args: event.args, text: '', details: undefined, isError: false });
+      calls.set(event.toolCallId ?? '', {
+        args: event.args ?? {},
+        text: '',
+        details: undefined,
+        isError: false,
+      });
     } else if (event.type === 'tool_execution_end') {
-      const call = calls.get(event.toolCallId);
+      const call = calls.get(event.toolCallId ?? '');
       if (call === undefined) continue;
-      call.text = (event.result?.content ?? []).map((part: any) => part.text ?? '').join('');
+      call.text = (event.result?.content ?? []).map((part) => part.text ?? '').join('');
       call.details = event.result?.details;
       call.isError = event.isError === true;
     }
   }
-  return [...calls.values()];
+  if (failure !== undefined) console.error(`scenario ${label}: ${failure}`);
+  return { calls: [...calls.values()], assistantText: assistant.join('\n'), failure };
 }
 
 function pick(calls: ToolCall[], predicate: (call: ToolCall) => boolean): ToolCall | undefined {
@@ -255,11 +338,19 @@ function pick(calls: ToolCall[], predicate: (call: ToolCall) => boolean): ToolCa
 const byType = (type: string) => (call: ToolCall) => call.args.subagent_type === type;
 const byDescription = (description: string) => (call: ToolCall) =>
   call.args.description === description;
-const detail = (call: ToolCall | undefined, key: string): any => call?.details?.[key];
+const detail = <T = unknown>(call: ToolCall | undefined, key: string): T | undefined =>
+  call?.details?.[key] as T | undefined;
 const short = (text: string) => text.replace(/\s+/g, ' ').trim().slice(0, 160);
 
 function record(row: Row) {
   rows.push(row);
+}
+type RowSpec = readonly [id: string, control: string, claim: string];
+/** Mark every row of a scenario that pi did not finish cleanly as inconclusive. */
+function scenarioFailed(result: ScenarioResult, specs: readonly RowSpec[]): boolean {
+  if (result.failure === undefined) return false;
+  for (const [id, control, claim] of specs) inconclusive(id, control, claim, result.failure);
+  return true;
 }
 function inconclusive(id: string, control: string, claim: string, why: string) {
   record({ id, control, claim, artifact: '-', observed: `INCONCLUSIVE: ${why}`, holds: undefined });
@@ -270,25 +361,34 @@ const COMMON = 'Do no other work and do not use any other tool. ';
 // ---- 1. Discovery, delegation, model, thinking ----------------------------
 
 {
-  const calls = scenario(
+  const scn = scenario(
     'settings',
     project,
     `${COMMON}Call the subagent tool exactly once with subagent_type "acc-settings", description "settings probe", prompt "go". Then reply with only its output.`,
     true,
   );
+  const calls = scn.calls;
   const call = pick(calls, byType('acc-settings'));
   const fm = installedFrontmatter(projectAgent('acc-settings'));
-  if (call === undefined) {
-    for (const [id, control, claim] of [
-      ['project-discovery', 'project discovery', 'A project agent in <cwd>/.pi/agents loads with no extra configuration'],
-      ['delegation', 'delegation', 'The parent delegates to the agent through the subagent tool'],
-      ['model', 'model', 'The agent runs on its declared model'],
-      ['thinking', 'thinking', 'The agent runs at its declared thinking level'],
-    ] as const) {
+  const settingsRows: readonly RowSpec[] = [
+    [
+      'project-discovery',
+      'project discovery',
+      'A project agent in <cwd>/.pi/agents loads with no extra configuration',
+    ],
+    ['delegation', 'delegation', 'The parent delegates to the agent through the subagent tool'],
+    ['model', 'model', 'The agent runs on its declared model'],
+    ['thinking', 'thinking', 'The agent runs at its declared thinking level'],
+  ];
+  if (scenarioFailed(scn, settingsRows)) {
+    // pi did not finish cleanly; every row of this scenario is inconclusive.
+  } else if (call === undefined) {
+    for (const [id, control, claim] of settingsRows) {
       inconclusive(id, control, claim, 'the parent never called subagent');
     }
   } else {
-    const completed = detail(call, 'status') === 'completed' && call.text.includes('ACC_SETTINGS_OK');
+    const completed =
+      detail(call, 'status') === 'completed' && call.text.includes('ACC_SETTINGS_OK');
     record({
       id: 'project-discovery',
       control: 'project discovery',
@@ -314,7 +414,7 @@ const COMMON = 'Do no other work and do not use any other tool. ';
       observed: `modelName ${modelName}`,
       holds: modelName === CHILD_MODEL && fm.model === CHILD_MODEL,
     });
-    const tags: string[] = detail(call, 'tags') ?? [];
+    const tags = detail<string[]>(call, 'tags') ?? [];
     record({
       id: 'thinking',
       control: 'thinking',
@@ -329,21 +429,27 @@ const COMMON = 'Do no other work and do not use any other tool. ';
 // ---- 2. Tools allowlist (with a positive control) -------------------------
 
 {
-  const calls = scenario(
+  const scn = scenario(
     'tools',
     project,
     `${COMMON}Make exactly two subagent calls, one after the other, never in parallel. Call 1: subagent_type "acc-readonly", description "tools probe", prompt "Use the bash tool to run: touch marker-readonly. If you have no bash tool, reply exactly NO_BASH_TOOL." Call 2: subagent_type "acc-allpi", description "tools control", prompt "Use the bash tool to run: touch marker-allpi. When it is done reply exactly TOUCHED." After both, reply with only DONE.`,
     true,
   );
+  const calls = scn.calls;
   const denied = pick(calls, byType('acc-readonly'));
   const control = pick(calls, byType('acc-allpi'));
   const fm = installedFrontmatter(projectAgent('acc-readonly'));
   const controlRan = control !== undefined && existsSync(join(project, 'marker-allpi'));
-  if (denied === undefined || !controlRan) {
+  const toolsRow: RowSpec = [
+    'tools-allowlist',
+    'tools allowlist',
+    'A tool outside `tools` is not available to the agent',
+  ];
+  if (scenarioFailed(scn, [toolsRow])) {
+    // inconclusive: pi did not finish cleanly
+  } else if (denied === undefined || !controlRan) {
     inconclusive(
-      'tools-allowlist',
-      'tools allowlist',
-      'A tool outside `tools` is not available to the agent',
+      ...toolsRow,
       `positive control did not run (${control === undefined ? 'no call' : 'no marker file'})`,
     );
   } else {
@@ -364,25 +470,37 @@ const COMMON = 'Do no other work and do not use any other tool. ';
 {
   const READ_ALL =
     'Read the files notes/1.txt through notes/6.txt with the read tool, one file per step, one tool call at a time, never several in one step, then reply exactly ALL_READ.';
-  const calls = scenario(
+  const scn = scenario(
     'turns',
     project,
     `${COMMON}Make exactly four subagent calls, one after the other, never in parallel, each with prompt "${READ_ALL}" Call 1: subagent_type "acc-turns", description "ceiling". Call 2: subagent_type "acc-turns-one", description "floor". Call 3: subagent_type "acc-free", description "free". Call 4: subagent_type "acc-turns", description "override", and also pass max_turns 5. After all four, reply with only DONE.`,
     true,
   );
+  const calls = scn.calls;
   const ceiling = pick(calls, byDescription('ceiling'));
   const floor = pick(calls, byDescription('floor'));
   const free = pick(calls, byDescription('free'));
   const override = pick(calls, byDescription('override'));
-  const budget = (call: ToolCall | undefined) => detail(call, 'turnBudget') as
-    | { maxTurns?: number; used: number; phase: string }
-    | undefined;
+  const budget = (call: ToolCall | undefined) =>
+    detail(call, 'turnBudget') as { maxTurns?: number; used: number; phase: string } | undefined;
   const fmTurns = installedFrontmatter(projectAgent('acc-turns'));
   const fmOne = installedFrontmatter(projectAgent('acc-turns-one'));
-  const freeRan = free !== undefined && free.text.includes('ALL_READ') && budget(free)?.maxTurns === undefined;
+  const freeRan = free?.text.includes('ALL_READ') && budget(free)?.maxTurns === undefined;
 
-  if (ceiling === undefined || !freeRan) {
-    inconclusive('max-turns-ceiling', 'max_turns ceiling', 'The agent is stopped at its declared ceiling', 'the no-ceiling control did not read all files');
+  const turnRows: readonly RowSpec[] = [
+    ['max-turns-ceiling', 'max_turns ceiling', 'The agent is stopped at its declared ceiling'],
+    ['max-turns-floor', 'max_turns of 1', 'A declared ceiling of 1 is honored as 1'],
+    ['caller-override', 'caller override', 'The agent file bounds its caller'],
+  ];
+  if (scenarioFailed(scn, turnRows)) {
+    // inconclusive: pi did not finish cleanly, so a partial log must not feed any row
+  } else if (ceiling === undefined || !freeRan) {
+    inconclusive(
+      'max-turns-ceiling',
+      'max_turns ceiling',
+      'The agent is stopped at its declared ceiling',
+      'the no-ceiling control did not read all files',
+    );
   } else {
     const b = budget(ceiling);
     record({
@@ -391,33 +509,63 @@ const COMMON = 'Do no other work and do not use any other tool. ';
       claim: 'The harness stops the agent after max_turns turns',
       artifact: `max_turns: ${fmTurns.max_turns}`,
       observed: `turnBudget ${JSON.stringify(b)}, ${detail(ceiling, 'toolUses')} tool uses; control without max_turns finished with ${detail(free, 'toolUses')} tool uses`,
-      holds: b?.maxTurns === 3 && b.used === 3 && b.phase === 'exhausted' && !ceiling.text.includes('ALL_READ'),
+      holds:
+        b?.maxTurns === 3 &&
+        b.used === 3 &&
+        b.phase === 'exhausted' &&
+        !ceiling.text.includes('ALL_READ'),
     });
   }
-  if (floor === undefined) {
-    inconclusive('max-turns-floor', 'max_turns of 1', 'A declared ceiling of 1 is honored as 1', 'no call');
+  if (scn.failure !== undefined) {
+    // rows already recorded as inconclusive above
+  } else if (floor === undefined) {
+    inconclusive(
+      'max-turns-floor',
+      'max_turns of 1',
+      'A declared ceiling of 1 is honored as 1',
+      'no call',
+    );
   } else {
     const b = budget(floor);
     record({
       id: 'max-turns-floor',
       control: 'max_turns of 1',
-      claim: 'A declared max_turns of 1 stops the agent after 1 turn (the extension documents a minimum of 2)',
+      claim:
+        'A declared max_turns of 1 stops the agent after 1 turn (the extension documents a minimum of 2)',
       artifact: `max_turns: ${fmOne.max_turns}`,
       observed: `turnBudget ${JSON.stringify(b)}`,
-      holds: b?.maxTurns === 1,
+      // Only the recorded symptom (the extension's minimum of 2) counts as the gap.
+      holds: b?.maxTurns === 1 ? true : b?.maxTurns === 2 ? false : undefined,
     });
   }
-  if (override === undefined) {
-    inconclusive('caller-override', 'caller override', 'The agent file bounds its caller', 'no call');
+  if (scn.failure !== undefined) {
+    // rows already recorded as inconclusive above
+  } else if (override === undefined) {
+    inconclusive(
+      'caller-override',
+      'caller override',
+      'The agent file bounds its caller',
+      'no call',
+    );
+  } else if (Number(override.args.max_turns) !== 5) {
+    inconclusive(
+      'caller-override',
+      'caller override',
+      'The agent file bounds its caller',
+      `the parent did not pass max_turns 5 (call args max_turns ${JSON.stringify(override.args.max_turns)})`,
+    );
   } else {
     const b = budget(override);
     record({
       id: 'caller-override',
       control: 'caller override',
-      claim: 'A declared max_turns bounds the agent whatever the caller asks (the extension documents that a caller value wins unless the file sets `locked`)',
+      claim:
+        'A declared max_turns bounds the agent whatever the caller asks (the extension documents that a caller value wins unless the file sets `locked`)',
       artifact: `max_turns: ${fmTurns.max_turns}, no locked key`,
       observed: `caller passed max_turns 5; turnBudget ${JSON.stringify(b)}`,
-      holds: b?.maxTurns === 3,
+      // The call carried max_turns 5 (checked above). 5 is the recorded gap; 3 is the file
+      // value winning; anything else (missing turnBudget, another number) is inconclusive.
+      holds: b?.maxTurns === 3 ? true : b?.maxTurns === 5 ? false : undefined,
     });
   }
 }
@@ -425,19 +573,29 @@ const COMMON = 'Do no other work and do not use any other tool. ';
 // ---- 4. Resume -------------------------------------------------------------
 
 {
-  const calls = scenario(
+  const scn = scenario(
     'resume',
     project,
     `${COMMON}Make exactly three subagent calls, one after the other. Call 1: subagent_type "acc-memory", description "store", prompt "Remember the codeword PELICAN-42. Reply with exactly: STORED." Call 2: the same subagent_type, description "recall", prompt "What is the codeword? Reply with the codeword only.", and pass resume set to the Agent ID that call 1 returned. Call 3: subagent_type "acc-memory", description "fresh", prompt "What codeword were you told earlier? If none, reply exactly NONE." with no resume. After all three, reply with only DONE.`,
     true,
   );
+  const calls = scn.calls;
   const store = pick(calls, byDescription('store'));
   const recall = pick(calls, byDescription('recall'));
   const fresh = pick(calls, byDescription('fresh'));
-  if (store === undefined || recall === undefined || fresh === undefined) {
-    inconclusive('resume', 'resume', 'resume continues the same subagent', 'the parent did not make all three calls');
+  if (scenarioFailed(scn, [['resume', 'resume', 'resume continues the same subagent']])) {
+    // inconclusive: pi did not finish cleanly
+  } else if (store === undefined || recall === undefined || fresh === undefined) {
+    inconclusive(
+      'resume',
+      'resume',
+      'resume continues the same subagent',
+      'the parent did not make all three calls',
+    );
   } else {
-    const sameId = detail(store, 'agentId') !== undefined && detail(store, 'agentId') === detail(recall, 'agentId');
+    const sameId =
+      detail(store, 'agentId') !== undefined &&
+      detail(store, 'agentId') === detail(recall, 'agentId');
     const remembered = recall.text.includes('PELICAN-42');
     const freshForgot = !fresh.text.includes('PELICAN-42');
     record({
@@ -454,24 +612,46 @@ const COMMON = 'Do no other work and do not use any other tool. ';
 // ---- 5. Project agents from a subdirectory --------------------------------
 
 {
-  const calls = scenario(
+  const scn = scenario(
     'subdirectory',
     subdirectory,
     `${COMMON}Call the subagent tool exactly once with subagent_type "acc-settings", description "subdir probe", prompt "go". Then reply with only the tool's output verbatim.`,
     true,
   );
+  const calls = scn.calls;
   const call = pick(calls, byType('acc-settings'));
-  if (call === undefined) {
-    inconclusive('project-subdirectory', 'project subdirectory', 'Pi started below the project root loads the project agents', 'the parent never called subagent');
+  const subdirectoryRow: RowSpec = [
+    'project-subdirectory',
+    'project subdirectory',
+    'Pi started below the project root loads the project agents',
+  ];
+  if (scenarioFailed(scn, [subdirectoryRow])) {
+    // inconclusive: pi did not finish cleanly
+  } else if (call === undefined) {
+    inconclusive(
+      'project-subdirectory',
+      'project subdirectory',
+      'Pi started below the project root loads the project agents',
+      'the parent never called subagent',
+    );
   } else {
     const loaded = detail(call, 'status') === 'completed' && call.text.includes('ACC_SETTINGS_OK');
     record({
       id: 'project-subdirectory',
       control: 'project subdirectory',
-      claim: 'Pi started in a subdirectory of the project loads the project agents (agentforge installs at the repository root)',
+      claim:
+        'Pi started in a subdirectory of the project loads the project agents (agentforge installs at the repository root)',
       artifact: '<root>/.pi/agents/acc-settings.md; pi cwd <root>/sub',
-      observed: loaded ? 'the agent was found and ran' : `not run: ${JSON.stringify(short(call.text))}`,
-      holds: loaded,
+      observed: loaded
+        ? 'the agent was found and ran'
+        : `not run: ${JSON.stringify(short(call.text))}`,
+      // Only the extension's general-purpose fallback for this agent name is the recorded gap;
+      // a provider error, rate limit or timeout is inconclusive, not a gap.
+      holds: loaded
+        ? true
+        : call.text.includes('Unknown agent type "acc-settings"')
+          ? false
+          : undefined,
     });
   }
 }
@@ -479,16 +659,28 @@ const COMMON = 'Do no other work and do not use any other tool. ';
 // ---- 6. User scope ---------------------------------------------------------
 
 {
-  const calls = scenario(
+  const scn = scenario(
     'user',
     bare,
     `${COMMON}Call the subagent tool exactly once with subagent_type "acc-user", description "user probe", prompt "go". Then reply with only its output.`,
     true,
   );
+  const calls = scn.calls;
   const call = pick(calls, byType('acc-user'));
   const userFile = join(agentDir, 'agents/acc-user.md');
-  if (call === undefined) {
-    inconclusive('user-scope', 'user scope', 'A user-scope agent loads from any directory', 'the parent never called subagent');
+  if (
+    scenarioFailed(scn, [
+      ['user-scope', 'user scope', 'A user-scope agent loads from any directory'],
+    ])
+  ) {
+    // inconclusive: pi did not finish cleanly
+  } else if (call === undefined) {
+    inconclusive(
+      'user-scope',
+      'user scope',
+      'A user-scope agent loads from any directory',
+      'the parent never called subagent',
+    );
   } else {
     const loaded = detail(call, 'status') === 'completed' && call.text.includes('ACC_USER_OK');
     record({
@@ -496,7 +688,9 @@ const COMMON = 'Do no other work and do not use any other tool. ';
       control: 'user scope',
       claim: 'An agent installed at user scope loads from a directory with no .pi/agents',
       artifact: `$PI_CODING_AGENT_DIR/agents/acc-user.md ${existsSync(userFile) ? 'exists' : 'MISSING'}`,
-      observed: loaded ? 'the agent was found and ran' : `not run: ${JSON.stringify(short(call.text))}`,
+      observed: loaded
+        ? 'the agent was found and ran'
+        : `not run: ${JSON.stringify(short(call.text))}`,
       holds: loaded && existsSync(userFile),
     });
   }
@@ -505,22 +699,36 @@ const COMMON = 'Do no other work and do not use any other tool. ';
 // ---- 7. Extension absent ---------------------------------------------------
 
 {
-  const calls = scenario(
+  const scn = scenario(
     'absent',
     project,
     'Do no other work and use no tool. If you have a tool named subagent, call it once with subagent_type "acc-settings", description "absent probe", prompt "go". If you have no such tool, reply exactly NO_SUBAGENT_TOOL.',
     false,
   );
-  const log = readFileSync(join(work, 'absent.jsonl'), 'utf8');
-  const replied = log.includes('NO_SUBAGENT_TOOL');
-  record({
-    id: 'extension-absent',
-    control: 'extension absent',
-    claim: 'Without the extension the agent files are inert: no subagent tool, nothing delegates',
-    artifact: '.pi/agents/acc-settings.md present, extension not loaded',
-    observed: `${calls.length} subagent calls; parent ${replied ? 'reported no subagent tool' : 'did not report the tool absent'}`,
-    holds: calls.length === 0 && replied,
-  });
+  const calls = scn.calls;
+  // Match the assistant's own text only: the user prompt (echoed in the JSON log) contains the
+  // sentinel too.
+  const replied = scn.assistantText.includes('NO_SUBAGENT_TOOL');
+  if (
+    scenarioFailed(scn, [
+      [
+        'extension-absent',
+        'extension absent',
+        'Without the extension the agent files are inert: no subagent tool, nothing delegates',
+      ],
+    ])
+  ) {
+    // inconclusive: pi did not reach a model and exit cleanly
+  } else {
+    record({
+      id: 'extension-absent',
+      control: 'extension absent',
+      claim: 'Without the extension the agent files are inert: no subagent tool, nothing delegates',
+      artifact: '.pi/agents/acc-settings.md present, extension not loaded',
+      observed: `${calls.length} subagent calls; parent ${replied ? 'reported no subagent tool' : 'did not report the tool absent'}`,
+      holds: calls.length === 0 && replied,
+    });
+  }
 }
 
 // ---- Verdict ---------------------------------------------------------------
@@ -538,24 +746,50 @@ const rendered = rows.map((row) => {
   } else if (row.holds === expected.holds) {
     status = expected.holds ? 'holds' : `documented gap ${expected.limitation}`;
   } else {
-    status = expected.holds ? 'DIVERGED: does not hold' : `DIVERGED: ${expected.limitation} gap no longer reproduces`;
+    status = expected.holds
+      ? 'DIVERGED: does not hold'
+      : `DIVERGED: ${expected.limitation} gap no longer reproduces`;
     failed = true;
   }
   return { ...row, status };
 });
 for (const id of Object.keys(EXPECTED)) {
   if (!rows.some((row) => row.id === id)) {
-    rendered.push({ id, control: id, claim: '-', artifact: '-', observed: 'no row produced', holds: undefined, status: 'MISSING' });
+    rendered.push({
+      id,
+      control: id,
+      claim: '-',
+      artifact: '-',
+      observed: 'no row produced',
+      holds: undefined,
+      status: 'MISSING',
+    });
     failed = true;
   }
 }
 
 if (options.json) {
-  console.log(JSON.stringify({ pi: piText, extension: extensionManifest.version, parent: PARENT_MODEL, invocations: piInvocations, rows: rendered }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        pi: piText,
+        extension: extensionManifest.version,
+        parent: PARENT_MODEL,
+        invocations: piInvocations,
+        rows: rendered,
+      },
+      null,
+      2,
+    ),
+  );
 } else {
-  console.log(`pi ${piText}; ${PI_SUBAGENTS_PACKAGE} ${extensionManifest.version}; parent ${PARENT_MODEL}; ${piInvocations} pi invocations; ${new Date().toISOString().slice(0, 10)}`);
+  console.log(
+    `pi ${piText}; ${PI_SUBAGENTS_PACKAGE} ${extensionManifest.version}; parent ${PARENT_MODEL}; ${piInvocations} pi invocations; ${new Date().toISOString().slice(0, 10)}`,
+  );
   for (const row of rendered) {
-    console.log(`\n[${row.status}] ${row.control}\n  claim:    ${row.claim}\n  artifact: ${row.artifact}\n  observed: ${row.observed}`);
+    console.log(
+      `\n[${row.status}] ${row.control}\n  claim:    ${row.claim}\n  artifact: ${row.artifact}\n  observed: ${row.observed}`,
+    );
   }
   console.log(`\nverdict: ${failed ? 'FAIL' : 'PASS'}`);
 }

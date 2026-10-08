@@ -28,16 +28,30 @@ throwaway project and a throwaway `PI_CODING_AGENT_DIR`, then runs seven fresh
 `pi -p --mode json` sessions with the extension loaded through `-e`. It reads
 what the extension reports on each `subagent` tool result (`modelName`, `tags`,
 `turnBudget`, `agentId`) and what the child did to the filesystem. The agent
-dir symlinks `auth.json` and `npm/` from `~/.pi/agent`; nothing is copied and
-nothing in the real agent dir is written by the script.
+dir symlinks `auth.json` and `npm/` from `~/.pi/agent`; nothing is copied. The
+script writes nothing in the real agent dir itself, but pi refreshes an expired
+OAuth token in place through the `auth.json` link, so the real file can be
+written during a run (see Credentials). On exit, SIGINT, SIGTERM or an uncaught
+error the script unlinks both symlinks first, then removes the temp directory.
+Before any scenario runs it refuses (exit 2) a parent model equal to the
+declared child model, since the `model` row could not then tell a honored
+declaration from an inherited one.
 
 Exit 0 means every row matches its recorded expectation. A control that does
 not hold is listed in the script's `EXPECTED` table with its limitation id, so
-it passes only while it still fails in the recorded way: the day a later
-extension honors it, the row reports `DIVERGED: ... no longer reproduces` and
-the run exits 1, which is the revisit trigger of the entry. Exit 1 also covers
-an inconclusive scenario (the parent did not make the expected calls, or a
-positive control did not run). Exit 2 means setup failed (`pi` missing, the
+it passes only while it shows the specific recorded symptom: `max_turns` 1
+reported as `turnBudget.maxTurns` 2, a caller's `max_turns: 5` winning (the
+call args must carry 5 and `turnBudget.maxTurns` must be 5), and the
+`Unknown agent type "acc-settings"` general-purpose fallback from a
+subdirectory. Any other outcome (missing `turnBudget`, a timeout, a provider
+error) is inconclusive and fails the run. The day a later extension honors the
+control, the row reports `DIVERGED: ... no longer reproduces` and the run exits
+1, which is the revisit trigger of the entry. Exit 1 also covers an
+inconclusive scenario: the parent did not make the expected calls, a positive
+control did not run, or pi timed out or exited non-zero (the scenario's rows
+are all inconclusive; its stderr is kept beside the `.jsonl` under `--keep`).
+The `extension absent` row reads only the assistant's own text, not the prompt
+echoed in the JSON log. Exit 2 means setup failed (`pi` missing, the
 extension absent or not at the pinned version, no credentials) and no verdict
 was reached.
 
@@ -80,4 +94,9 @@ generated, and what the run observed.
 
 The throwaway agent dir links the existing `auth.json` (OAuth). The script does
 not read or print it. Pi refreshes an OAuth token through the link when it has
-expired, which is ordinary use of the credential, not a copy.
+expired (it writes `auth.json` in place, not by rename), so the real
+`~/.pi/agent/auth.json` can be written during a run and the rotated token lands
+there; the link is not replaced and no credential is lost. Pi's refresh lock
+resolves to the throwaway directory, so a concurrent real pi session refreshing
+at the same moment is not serialized against this run. Do not run the script
+while another pi session is active.
