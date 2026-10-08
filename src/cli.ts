@@ -26,7 +26,12 @@ import {
 } from './codex-installed-plugins.ts';
 import { type CompilationPlan, compileMarketplace, type RootAnchoredOutput } from './compiler.ts';
 import { type LoadedMarketplace, loadMarketplaceDefinition } from './definitions.ts';
-import { buildInstallPlan, checkInstallPlan, materializeInstallPlan } from './install.ts';
+import {
+  buildInstallPlan,
+  checkInstallPlan,
+  materializeInstallPlan,
+  refusedInstallResult,
+} from './install.ts';
 import { materializeCompilation } from './materializer.ts';
 import { render } from './render.ts';
 import { buildCheckReport, formatFromPath, type ReportFormat, renderReport } from './report.ts';
@@ -683,7 +688,19 @@ addInstallOptions(
     .description('Check one installed canonical artifact without writing'),
 ).action((sourceDir: string, opts: InstallCommandOptions) => {
   try {
-    const install = resolveInstallPlan(sourceDir, opts);
+    let install: ReturnType<typeof resolveInstallPlan>;
+    try {
+      install = resolveInstallPlan(sourceDir, opts);
+    } catch (error) {
+      // A target declining this source is a non-current state, not a crash.
+      if (!(error instanceof ProjectionRefusedError)) throw error;
+      console.log(`failed: ${opts.target} refuses to project this source`);
+      for (const issue of refusedInstallResult(error).issues) {
+        console.error(formatCheckIssue(issue));
+      }
+      process.exitCode = 1;
+      return;
+    }
     const result = checkInstallPlan(install);
     const status = result.issues.length === 0 ? 'ok' : 'failed';
     console.log(

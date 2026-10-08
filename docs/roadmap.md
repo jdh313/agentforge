@@ -123,8 +123,8 @@ filename or schema rule that the current heads do not decide.
   only for a background child.
 - Keep OpenCode agent support explicitly deferred beyond 1.0; non-agent
   target presence does not imply agent support. Pi agents project to the pinned
-  `@gotgenes/pi-subagents` extension (render only; install is Fibery #140,
-  runtime verification #141; `docs/limitations.md` L-015).
+  `@gotgenes/pi-subagents` extension (render and install at user and project
+  scope; runtime verification #141; `docs/limitations.md` L-015).
 
 ### Validation gates
 

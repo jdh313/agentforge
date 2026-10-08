@@ -17,6 +17,7 @@ import {
 } from './materializer.ts';
 import { loadArtifactProjection } from './render.ts';
 import { ARTIFACT_DEFS } from './schema.ts';
+import type { ProjectionRefusedError } from './target-adapter.ts';
 import { getArtifactConfig } from './targets/index.ts';
 import type { ArtifactType, InstallScope, TargetName } from './types.ts';
 
@@ -69,8 +70,10 @@ export function buildInstallPlan(options: BuildInstallPlanOptions): InstallPlan 
       supported.length > 0
         ? `supported scopes for this artifact: ${supported.join(', ')}`
         : 'this artifact has no installable scope on this target';
+    // The reason is the target's own text, relayed verbatim when it gives one.
+    const reason = config.unsupportedInstallScopeReasons?.[options.scope];
     throw new Error(
-      `target ${options.target} does not support ${options.scope}-scope installation for artifact ${options.artifact}; ${alternative}`,
+      `target ${options.target} does not support ${options.scope}-scope installation for artifact ${options.artifact}; ${alternative}${reason === undefined ? '' : `. ${reason}`}`,
     );
   }
 
@@ -173,6 +176,28 @@ export function materializeInstallPlan(install: InstallPlan): MaterializationRes
   return install.ownership === 'snapshot'
     ? materializeCompilation(install.plan, install.destinationRoot)
     : materializeCompilationOutputs(install.plan, install.destinationRoot);
+}
+
+/**
+ * `check-install` is read-only and never throws for a source the target
+ * refuses to project (ndr:jybfry): no plan exists to compare against, and an
+ * earlier installed file must not read as current. The refusal becomes a
+ * check issue, so it fails the check the way any other non-current state does.
+ */
+export function refusedInstallResult(error: ProjectionRefusedError): MarketplaceCheckResult {
+  return {
+    outputRoot: '',
+    filesChecked: [],
+    rootFilesChecked: [],
+    issues: [
+      {
+        code: 'projection-refused',
+        publicationId: 'install',
+        path: '.',
+        message: error.message,
+      },
+    ],
+  };
 }
 
 export function checkInstallPlan(install: InstallPlan): MarketplaceCheckResult {

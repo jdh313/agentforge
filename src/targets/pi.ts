@@ -162,12 +162,18 @@ export const piTarget = {
   artifacts: {
     ...piAgentSkills.artifacts,
     agent: {
-      // Render only (Fibery #139). The extension discovers agents in
-      // `~/.pi/agent/agents` and `<cwd>/.pi/agents`, but declaring those here
-      // would make `install` write them, and the install lifecycle is #140.
-      // An empty map is the output-style precedent: standalone render works,
-      // install reports there is no installable scope.
-      installLocations: {},
+      // The extension discovers agents only in `~/.pi/agent/agents` and
+      // `<cwd>/.pi/agents` (ndr:az33k6), so those are the only scopes. Each
+      // agent is one file in a directory that holds the user's other agents,
+      // so install owns only its planned path (ndr:hjnabw). Whether the
+      // extension needs a setting to read project agents is unverified (#141).
+      installLocations: {
+        user: ({ homeDirectory }) => join(homeDirectory, '.pi/agent/agents'),
+        project: ({ projectRoot }) => join(projectRoot, '.pi/agents'),
+      },
+      unsupportedInstallScopeReasons: {
+        plugin: `${PI_SUBAGENTS_PACKAGE} ${PI_SUBAGENTS_VERSION} discovers agents only in ~/.pi/agent/agents and <cwd>/.pi/agents, not inside a Pi package, so a plugin root would hold files nothing reads`,
+      },
       surface: 'agent' as const,
       resourceSubdirs: new Set<string>(),
       outputFrontmatterSchema: PiAgentOutputFrontmatter,

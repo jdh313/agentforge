@@ -61,9 +61,17 @@ shell, OS, and global preferences; only narrows or extends here.
   `targets.pi`; a shared `tools`, a non-empty `disallowedTools`, or any
   `permissionMode` other than `bypassPermissions`, without `targets.pi.tools`,
   refuses the render with `ProjectionRefusedError` (ndr:jybfry), which
-  `render --all-targets` reports as a skip. Install and
-  `check-install` for Pi agents are Fibery #140 and not wired yet
-  (`installLocations` is empty).
+  `render --all-targets` reports as a skip.
+- Pi agent install (Fibery #140) installs and checks one `<name>.md` per agent
+  at user (`~/.pi/agent/agents`) and project (`.pi/agents`) scope, with the
+  planned-file ownership Claude and Codex agents use (ndr:hjnabw): siblings are
+  untouched and a rename leaves the old file. Plugin scope is refused with the
+  reason the Pi target supplies (the extension reads no Pi package). `install`
+  of a source Pi refuses writes nothing; `check-install` reports it as a
+  `projection-refused` issue instead of throwing or reporting an earlier file
+  current. No other target resolves an agent to a Pi agents directory, so the
+  collision detector has nothing to arbitrate there. Whether the extension
+  needs a setting to read project agents is unverified (#141).
 - Releases are automated (semantic-release + per-platform binaries; see
   § Releases).
 
@@ -144,8 +152,9 @@ src/
                       (native `.toml` via `nativeDocument`; ~/.codex/agents,
                       .codex/agents)
     pi.ts           — artifacts.skill (~/.pi/agent/skills, .pi/skills),
-                      artifacts.agent (render-only `.md` via `nativeDocument`;
-                      no install locations yet)
+                      artifacts.agent (`.md` via `nativeDocument`;
+                      ~/.pi/agent/agents, .pi/agents; no plugin scope, with
+                      the reason in `unsupportedInstallScopeReasons`)
     claude-chat.ts  — artifacts.skill (~/Downloads/claude-skills, zipped)
 tests/
   fixtures/         — 5 matrix skills + focused skill fixtures + 3 agents +
@@ -502,8 +511,8 @@ unrecognized key keeps the category-2 behavior above.
 
 ## Out of scope today
 
-- OpenCode agent projection, install and `check-install` for Pi agents
-  (Fibery #140) and Pi runtime verification (#141) remain post-1.0, as does
+- OpenCode agent projection and Pi runtime verification (#141) remain
+  post-1.0, as does
   marketplace reuse of the Codex leaf projection (blocked upstream —
   `docs/limitations.md` L-010); see [docs/roadmap.md](docs/roadmap.md). MCP
   artifacts remain later work.

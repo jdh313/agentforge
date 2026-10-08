@@ -73,6 +73,12 @@ export interface NativeAgentDocument {
 
 export interface ArtifactConfig {
   installLocations: Partial<Record<InstallScope, InstallLocation>>;
+  // Why a scope this artifact omits from `installLocations` is omitted, in the
+  // target's own words. Absence means the target gives no reason, not that the
+  // scope is supported. Shared code relays the text and never writes it, so the
+  // knowledge stays with the target (ndr:nes397: a question about the target
+  // itself, true before any output exists).
+  unsupportedInstallScopeReasons?: Partial<Record<InstallScope, string>>;
   surface: ConstructSurface;
   resourceSubdirs: ReadonlySet<string>;
   // When present, standalone rendering still carries these resources, but an

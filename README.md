@@ -679,7 +679,7 @@ AGENTFORGE_CC_MARKETPLACE_PROJECT=../cc-marketplace bun test tests/cli.test.ts
 | `claude` | `~/.claude/skills` | `.claude/skills` | `~/.claude/agents` | `.claude/agents` | `skills` |
 | `opencode` | `~/.config/opencode/skills` | `.opencode/skills` | unsupported | unsupported | unsupported |
 | `codex` | `~/.agents/skills` | `.agents/skills` | `~/.codex/agents` | `.codex/agents` | `skills` |
-| `pi` | `~/.pi/agent/skills` | `.pi/skills` | unsupported | unsupported | `skills` |
+| `pi` | `~/.pi/agent/skills` | `.pi/skills` | `~/.pi/agent/agents` | `.pi/agents` | `skills` (agents unsupported) |
 | `claude-chat` | unsupported | unsupported | unsupported | unsupported | unsupported |
 
 ## Contributing

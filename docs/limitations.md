@@ -1084,8 +1084,9 @@ a shared `tools`, a non-empty `disallowedTools`, or a `permissionMode` other tha
 `bypassPermissions` refuses the Pi render unless `targets.pi.tools` is written
 (ndr:jybfry).
 
-**Affects.** The `pi` target's `agent` artifact (`render` only; install and
-`check-install` are Fibery #140). Every key reported as not accepted by Pi in
+**Affects.** The `pi` target's `agent` artifact (`render`, plus `install` and
+`check-install` at user and project scope only: the extension reads no Pi
+package, so plugin scope is refused with that reason). Every key reported as not accepted by Pi in
 `docs/field-parity.md`.
 
 **Evidence.** Code read of the installed package for Fibery #138, 2026-10-08; the

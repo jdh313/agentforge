@@ -31,7 +31,12 @@ export type MarketplaceCheckIssueCode =
   // skills/ directory) already holds a different target's projection of
   // this source. Reported here rather than thrown, since check-install is
   // read-only; `install` refuses the same collision outright.
-  | 'cross-target-install-collision';
+  | 'cross-target-install-collision'
+  // check-install only: the target refuses to project this source
+  // (ProjectionRefusedError), so there is no plan to compare installed files
+  // against and none of them can be reported current. `install` refuses the
+  // same source before writing anything.
+  | 'projection-refused';
 
 export interface MarketplaceCheckIssue {
   code: MarketplaceCheckIssueCode;
