@@ -11,7 +11,7 @@ table reads the other way: harness fields no canonical key can set.
 schemas and the native TOML serializer), `src/capabilities.ts` (translations),
 and `src/targets/codex-marketplace.ts` (the `agents/openai.yaml` sidecar); the Pi agent column also reads `src/targets/pi.ts` (`piAgentDocument.serialize`). Those
 are authoritative; this file is a reading of them at one moment and goes stale
-the way any table does. The Pi agent column reads `@gotgenes/pi-subagents` **23.2.0** (`PI_SUBAGENTS_VERSION`, `src/targets/pi.ts`) from its source on 2026-10-08 and exercised at runtime the same day (`docs/pi-agent-acceptance.md`, L-015). Verified against **codex-cli 0.155.1** and **Claude Code
+the way any table does. The Pi agent column reads `@gotgenes/pi-subagents` **23.2.0** (`PI_SUBAGENTS_VERSION`, `src/targets/pi.ts`) from its source on 2026-10-08; only the controls listed below were exercised at runtime that day (`docs/pi-agent-acceptance.md`, L-015, L-016). Verified against **codex-cli 0.155.1** and **Claude Code
 2.1.274**, 2026-09-21; the Agent `skills` row retains its codex-cli 0.154.0
 live A/B evidence (L-013), while role selection and project discovery were
 re-verified on 0.155.1 (L-011 and L-012). The Pi skill column was read off `src/targets/pi.ts`,
@@ -112,8 +112,13 @@ Pi has no native agent surface: core Pi 1.0.2 reads no agent files. The Pi
 column describes the third-party `@gotgenes/pi-subagents` extension, **pinned at
 23.2.0** (`PI_SUBAGENTS_VERSION` in `src/targets/pi.ts`; ndr:az33k6, L-015). Its
 loader reads eleven frontmatter keys and ignores every other key without a
-warning, so the column is a reading of that one version's source, checked
-against a runtime run on 2026-10-08 (Fibery #141, `docs/pi-agent-acceptance.md`). `render` writes `<name>.md`; install
+warning, so the column is a reading of that one version's source. A runtime run on
+2026-10-08 (Fibery #141, `docs/pi-agent-acceptance.md`) exercised project and
+user discovery, delegation, `model` in `provider/id` form, `thinking`, the
+`tools` allowlist, `max_turns` (including the raise from 1 to 2 and caller
+override), and absence of the extension. Every other Pi cell, including each
+loss and the fuzzy-match and background behaviors, rests on source and the
+extension's README, not on a run. `render` writes `<name>.md`; install
 and `check-install` own that one file at user and project scope. The Pi-only
 keys the loader reads (`display_name`, `prompt_mode`, `inherit_context`,
 `enabled`, `locked`) have no canonical source and are not emitted.

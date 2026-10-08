@@ -690,8 +690,10 @@ Agent support by target:
   `@gotgenes/pi-subagents` extension at **23.2.0** (`PI_SUBAGENTS_VERSION` in
   `src/targets/pi.ts`), which must be installed in Pi: core Pi reads no agent
   files. Runtime acceptance is recorded in `docs/pi-agent-acceptance.md`
-  (`bun run acceptance:pi-agents`); known gaps are L-015 and L-016 in
-  `docs/limitations.md`.
+  (`bun run acceptance:pi-agents`). Known gaps, in `docs/limitations.md`:
+  project agents load only when pi starts in the directory holding
+  `.pi/agents` (L-015), and `max_turns` is a default the caller can override,
+  not a ceiling (L-016).
 - `opencode` and `claude-chat` have no agent projection; their skill output
   stays best-effort.
 
