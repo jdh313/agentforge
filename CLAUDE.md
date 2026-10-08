@@ -63,7 +63,9 @@ shell, OS, and global preferences; only narrows or extends here.
   `targets.pi`; a shared `tools`, a non-empty `disallowedTools`, or any
   `permissionMode` other than `bypassPermissions`, without `targets.pi.tools`,
   refuses the render with `ProjectionRefusedError` (ndr:jybfry), which
-  `render --all-targets` reports as a skip.
+  `render --all-targets` reports as a skip. Runtime acceptance (Fibery #141):
+  `bun run acceptance:pi-agents` re-runs it and its exit code is the verdict;
+  results in `docs/pi-agent-acceptance.md`, gaps in L-015 and L-016.
 - Pi agent install (Fibery #140) installs and checks one `<name>.md` per agent
   at user (`~/.pi/agent/agents`) and project (`.pi/agents`) scope, with the
   planned-file ownership Claude and Codex agents use (ndr:hjnabw): siblings are

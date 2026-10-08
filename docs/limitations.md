@@ -1062,7 +1062,12 @@ change when Codex starts applying role-scoped policy.
 `tests/agent-codex-policy-fields.test.ts`. `docs/field-parity.md` — the Agent
 rows.
 
-## L-015 — Pi agents exist only through a pinned third-party extension, read from source and never run
+## L-015 — Pi agents exist only through a pinned third-party extension, and project agents load only from the directory pi starts in
+
+> **Amendment 2026-10-08 (Fibery #141).** Written as a code read. The runtime run
+> confirmed the key list and the cwd-only project scope, and found that an agent
+> that is not discovered is replaced by a general-purpose child instead of
+> failing; see the project-scope paragraph and Evidence.
 
 **Gap.** Core Pi 1.0.2 reads no agent files; its README states it skips
 sub-agents. AgentForge's Pi `agent` projection therefore targets the
@@ -1095,7 +1100,13 @@ scope is narrower than it looks: pi-subagents 23.2.0 reads project agents only
 from `<cwd>/.pi/agents` and never walks up, while agentforge's project scope
 resolves the repository root, so Pi started from a subdirectory does not load
 them and `check-install` still reports `ok`. Pi skills share the same gap.
-Runtime confirmation is Fibery #141.
+Confirmed at runtime (Fibery #141): started in `<root>/sub`, pi 1.0.2 with the
+extension reports `Unknown agent type "<name>" — using general-purpose` and runs
+a child on the parent model with the default tools and none of the file's
+controls. A `subagent` call naming a missing agent therefore does not fail; it
+runs an unrestricted stand-in and says so in a one-line note the parent may not
+relay. Started in `<root>`, project agents load with no settings file and under
+`--no-approve`.
 
 **Evidence.** Code read of the installed package for Fibery #138, 2026-10-08;
 the loader parse, `max_turns` floor and `thinking` vocabulary were re-read at
@@ -1106,20 +1117,75 @@ the loader parse, `max_turns` floor and `thinking` vocabulary were re-read at
 `src/session/prompts.ts buildAgentPrompt`. Not executed: the unknown-tool-name
 and malformed-YAML consequences are inferred from code, and
 `claude-only-body-feature` for Pi agent bodies rests on finding no substitution
-in the prompt path. Runtime verification is Fibery #141.
+in the prompt path. Runtime verification (Fibery #141, 2026-10-08, pi 1.0.2 and
+pi-subagents 23.2.0; `docs/pi-agent-acceptance.md`): discovery, delegation,
+`model`, `thinking`, the `tools` allowlist, the `max_turns` ceiling and its
+floor of 2, `resume` and user scope all behaved as the code read said. The
+unknown-tool-name and malformed-YAML consequences above remain code-read only.
+The absent-extension case was observed as a missing `subagent` tool, not as a
+trace of file reads. The caller-override behavior it also found is L-016.
 
 **Status.** by-design. Pinning is deliberate: the loader warns on nothing, so
 tracking the latest version would let drift surface nowhere.
 
 **Revisit trigger.** Core Pi gains a native registered-agent surface; a new
-extension major changes the loader's key set, naming or discovery paths;
-runtime verification (#141) contradicts the code-read key list.
+extension major changes the loader's key set, naming or discovery paths, or
+walks up from the cwd for project agents. Re-run `bun run acceptance:pi-agents`:
+its `max-turns-floor` and `project-subdirectory` rows are recorded gaps and exit
+1 the day either stops reproducing.
 
 **Mitigation.** The pinned constant, the field-parity Pi column, the refusal for
-an unexpressible tool restriction, and one diagnostic per reported loss. Bumping
-`PI_SUBAGENTS_VERSION` means re-reading the loader, not editing a string.
+an unexpressible tool restriction, one diagnostic per reported loss, and the
+runnable acceptance script. Bumping `PI_SUBAGENTS_VERSION` means re-reading the
+loader and re-running the script, not editing a string. No diagnostic exists for
+the subdirectory case: render has no install scope, so it cannot say where pi
+must be started.
 
 **Where to look.** `src/targets/pi.ts` — `piAgentDocument.serialize`,
 `PI_SUBAGENTS_VERSION`. `src/frontmatter.ts` — the agent `ACCEPTANCE` rows with
 `pi`. `src/capabilities.ts` — the `pi/agent` row. `tests/pi-agent-render.test.ts`.
 `docs/field-parity.md` — the Agent Pi column.
+
+## L-016 — A Pi agent's `max_turns` is a default the calling parent can replace, not a ceiling
+
+**Gap.** `@gotgenes/pi-subagents` 23.2.0 lets a `subagent` tool call pass
+`model`, `thinking` and `max_turns`, and the call's value wins over the agent
+file's unless the file sets `locked`. AgentForge emits no `locked` key. A Claude
+agent's `maxTurns` bounds the agent whoever launches it; the Pi form is only the
+value used when the caller names none.
+
+**Manifests as.** An agent declaring `maxTurns: 3` renders to `max_turns: 3`,
+runs with a ceiling of 3 when called plainly, and runs with a ceiling of 5 when
+the parent's call passes `max_turns: 5`. Compilation raises
+`pi-caller-may-override` (disposition carried-unenforced) whenever `maxTurns` is
+set on a Pi agent, citing this entry. `model` and `thinking` have the same
+property but no diagnostic: Claude's Task tool also accepts a per-call `model`,
+and neither value is a limit on the agent.
+
+**Affects.** Pi `agent` projection (`render`, `install`) for every canonical
+agent that sets `maxTurns`. The diagnostic is raised by `piAgentDocument.serialize`
+and is compile-time only, like L-014's.
+
+**Evidence.** Runtime run 2026-10-08, pi 1.0.2, pi-subagents 23.2.0
+(`docs/pi-agent-acceptance.md`, "Caller override"): an `acc-turns` agent with
+`max_turns: 3` ran `turnBudget.maxTurns 3` on a plain call and `5` when the call
+passed `max_turns: 5`. The extension documents the precedence
+(`docs/configuration.md`, "Frontmatter Fields" and "Locking fields against
+callers"); the run confirms it.
+
+**Status.** by-design. The handling is the shipped diagnostic (ndr:e0w650).
+AgentForge could instead emit `locked: [max_turns]` (or `locked: true`) so the
+file bounds its caller. That is a mapping change to ndr:az33k6's key set, which
+emits no Pi-only keys until a need names them, so it is an open question for the
+decision owner, not made here.
+
+**Revisit trigger.** A decision to emit `locked`; or an extension release that
+makes the file value a ceiling. Either flips the `caller-override` row of
+`bun run acceptance:pi-agents` and exits 1.
+
+**Mitigation.** The `pi-caller-may-override` diagnostic. An author who needs the
+bound writes it in the parent's instructions, not in the agent file.
+
+**Where to look.** `src/targets/pi.ts` — `piAgentDocument.serialize`.
+`src/report.ts` — `DISPOSITION_BY_CODE`. `tests/pi-agent-render.test.ts`.
+`scripts/pi-agent-acceptance.ts` — the `caller-override` row.
