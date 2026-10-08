@@ -74,8 +74,9 @@ shell, OS, and global preferences; only narrows or extends here.
   of a source Pi refuses writes nothing; `check-install` reports it as a
   `projection-refused` issue instead of throwing or reporting an earlier file
   current. No other target resolves an agent to a Pi agents directory, so the
-  collision detector has nothing to arbitrate there. Whether the extension
-  needs a setting to read project agents is unverified (#141).
+  collision detector has nothing to arbitrate there. Project agents load with
+  no setting, but only when pi starts in the directory holding `.pi/agents`
+  (L-015).
 - Releases are automated (semantic-release + per-platform binaries; see
   § Releases).
 
@@ -515,8 +516,7 @@ unrecognized key keeps the category-2 behavior above.
 
 ## Out of scope today
 
-- OpenCode agent projection and Pi runtime verification (#141) remain
-  post-1.0, as does
+- OpenCode agent projection remains post-1.0, as does
   marketplace reuse of the Codex leaf projection (blocked upstream —
   `docs/limitations.md` L-010); see [docs/roadmap.md](docs/roadmap.md). MCP
   artifacts remain later work.
