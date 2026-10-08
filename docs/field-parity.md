@@ -14,7 +14,8 @@ are authoritative; this file is a reading of them at one moment and goes stale
 the way any table does. The Pi agent column reads `@gotgenes/pi-subagents` **23.2.0** (`PI_SUBAGENTS_VERSION`, `src/targets/pi.ts`) from its source on 2026-10-08; only the controls listed below were exercised at runtime that day (`docs/pi-agent-acceptance.md`, L-015, L-016). Verified against **codex-cli 0.155.1** and **Claude Code
 2.1.274**, 2026-09-21; the Agent `skills` row retains its codex-cli 0.154.0
 live A/B evidence (L-013), while role selection and project discovery were
-re-verified on 0.155.1 (L-011 and L-012). The Pi skill column was read off `src/targets/pi.ts`,
+re-verified on 0.155.1 (L-011 and L-012), and the Agent observer row reads
+Claude Code 2.1.293's loader on 2026-10-07 (ndr:csj8pa). The Pi skill column was read off `src/targets/pi.ts`,
 the `pi/skill` capability row, and Pi's `docs/skills.md` on 2026-10-06.
 
 **Not in scope here:** why a row is the way it is (NDR ledger, cited as
