@@ -48,6 +48,10 @@ export type DiagnosticCode =
   // `sandbox-mode` / `approval-policy` on a Codex agent: emitted as written, but
   // codex-cli 0.160.0 spawns the child with the parent's policy (L-014).
   | 'codex-role-policy-not-applied'
+  // `maxTurns: 1` on a Pi agent: emitted as written, but the pi-subagents
+  // extension raises every positive limit to a floor of 2 (docs/limitations.md
+  // L-015).
+  | 'pi-max-turns-raised'
   // A construct the target supports only when a typed condition holds.
   // Distinct from every kind above, which reports an unconditional target
   // outcome: this warning carries the gate rather than averaging over it, and
@@ -83,6 +87,7 @@ export type WarningKind = Extract<
   | 'unrecognized-frontmatter-key'
   | 'codex-short-description-length'
   | 'codex-role-policy-not-applied'
+  | 'pi-max-turns-raised'
   | 'construct-support-gated'
 >;
 

@@ -77,6 +77,8 @@ const DISPOSITION_BY_CODE: Readonly<Record<DiagnosticCode, Disposition>> = {
   'codex-short-description-length': 'carried-unenforced',
   // Emitted exactly as written; Codex does not apply it to a spawned child (L-014).
   'codex-role-policy-not-applied': 'carried-unenforced',
+  // Emitted exactly as written; the pi-subagents loader runs 1 as 2 (L-015).
+  'pi-max-turns-raised': 'carried-unenforced',
   'unclassified-construct': 'not-established',
   'unclassified-body-construct': 'not-established',
   'unrecognized-frontmatter-key': 'not-established',

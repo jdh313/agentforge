@@ -843,3 +843,138 @@ exports[`render agent agent-claude-fields → codex: warnings 1`] = `
 `;
 
 exports[`render agent agent-claude-fields → codex: resources 1`] = `[]`;
+
+exports[`render agent agent-basic → pi: canonical 1`] = `
+"---
+description: Read and summarize the knowledge vault.
+tools:
+  - read
+  - grep
+thinking: high
+max_turns: 10
+---
+
+# Vault reader
+
+Inspect the requested notes and return a concise, cited summary.
+"
+`;
+
+exports[`render agent agent-basic → pi: warnings 1`] = `
+[
+  {
+    "detail": "stripped model, tools",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "pi",
+  },
+]
+`;
+
+exports[`render agent agent-basic → pi: resources 1`] = `[]`;
+
+exports[`render agent agent-overrides → pi: canonical 1`] = `
+"---
+description: Read canonical material.
+model: anthropic/claude-sonnet-4-5
+tools:
+  - read
+  - grep
+thinking: low
+max_turns: 8
+---
+# Pi reader
+
+Use Pi's native agent context.
+"
+`;
+
+exports[`render agent agent-overrides → pi: warnings 1`] = `
+[
+  {
+    "detail": "stripped model, tools",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "pi",
+  },
+]
+`;
+
+exports[`render agent agent-overrides → pi: resources 1`] = `[]`;
+
+exports[`render agent agent-codex-escaping → pi: canonical 1`] = `
+"---
+description: 'Handles "quotes", backslashes, and triple quotes.'
+thinking: high
+---
+
+# Escape check
+
+Says "hello" and carries a backslash \\ right here, plus a literal ''' triple
+single-quote marker that must never be read as an unterminated string.
+
+Second paragraph after a blank line.
+"
+`;
+
+exports[`render agent agent-codex-escaping → pi: warnings 1`] = `
+[
+  {
+    "detail": "stripped model",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "pi",
+  },
+]
+`;
+
+exports[`render agent agent-codex-escaping → pi: resources 1`] = `[]`;
+
+exports[`render agent agent-codex-model-override → pi: canonical 1`] = `
+"---
+description: Confirms Codex reads model only from its own target override.
+---
+
+# Model override check
+
+Answers questions about explicit per-target model overrides.
+"
+`;
+
+exports[`render agent agent-codex-model-override → pi: warnings 1`] = `
+[
+  {
+    "detail": "stripped model",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "pi",
+  },
+]
+`;
+
+exports[`render agent agent-codex-model-override → pi: resources 1`] = `[]`;
+
+exports[`render agent agent-claude-fields → pi: canonical 1`] = `
+"---
+description: 'Reads the vault under a plan-mode, write-denied restriction.'
+tools:
+  - read
+  - grep
+thinking: medium
+max_turns: 6
+run_in_background: false
+---
+
+# Restricted reader
+
+Read the requested notes and return a cited summary. Never write.
+"
+`;
+
+exports[`render agent agent-claude-fields → pi: warnings 1`] = `
+[
+  {
+    "detail": "stripped model, tools, disallowedTools, permissionMode, isolation, memory, omitClaudeMd, skills, initialPrompt, color, mcpServers, hooks, experimental",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "pi",
+  },
+]
+`;
+
+exports[`render agent agent-claude-fields → pi: resources 1`] = `[]`;

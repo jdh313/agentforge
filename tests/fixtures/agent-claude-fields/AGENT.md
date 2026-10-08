@@ -26,6 +26,11 @@ hooks:
     - matcher: Write
 experimental:
   cacheTtl: 1h
+targets:
+  pi:
+    tools:
+      - read
+      - grep
 ---
 
 # Restricted reader

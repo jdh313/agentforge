@@ -33,6 +33,26 @@ export interface NativeAgentDocumentResult {
 export interface NativeAgentDocumentContext {
   /** The canonical source file's path, for error messages that name it. */
   sourcePath: string;
+  /**
+   * The raw `targets.<name>` override for this target, body removed. A native
+   * document reads a key from here when the shared value is another
+   * harness's vocabulary and only an explicit override names this target
+   * (Codex `model`, Pi `model` and `tools`).
+   */
+  overrides: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * A target declined to project a source rather than emit a document that
+ * widens what the source allows. Distinct from a thrown schema error so a
+ * batch run (`render --all-targets`) can report it like an unsupported
+ * (target, artifact) pair and continue.
+ */
+export class ProjectionRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProjectionRefusedError';
+  }
 }
 
 export interface NativeAgentDocument {
@@ -58,6 +78,11 @@ export interface ArtifactConfig {
   // Present only for a target/artifact pair that registers as a native
   // document instead of the default one-file Markdown projection (ndr:2t36rb).
   nativeDocument?: NativeAgentDocument;
+  // A translation-only key (retained by no target) is normally stripped
+  // silently where it is not translated, because the key belongs to a sibling
+  // harness. A target that sets this reports each of them as a key it does not
+  // accept instead (ndr:az33k6: Pi reports the four Codex-only agent keys).
+  reportsTranslationOnlyKeys?: boolean;
 }
 
 export interface MarketplaceCapability {

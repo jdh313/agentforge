@@ -281,6 +281,19 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
     },
   ],
   [
+    // Body of a Pi agent file is the agent prompt of @gotgenes/pi-subagents
+    // 23.2.0. Read from the extension's source, not executed (docs/limitations.md
+    // L-015): no substitution or interpolation of any kind was found in the
+    // prompt builder, so every Claude construct reaches the model as text.
+    'pi/agent',
+    {
+      supported: [],
+      unsupported: CLAUDE_TOKENS,
+      source:
+        "@gotgenes/pi-subagents 23.2.0 `src/session/prompts.ts:50-100` and `src/config/custom-agents.ts:56-73` (code read of the installed package, 2026-10-08): the file body is `.trim()`ed and placed in the child system prompt, wrapped in `<agent_instructions>` or appended after the inherited parent prompt. No templating, argument pass, shell injection or tool namespace exists in that path, so `$ARGUMENTS`, `${CLAUDE_*}`, `!` shell and `mcp-tool` names are inert text; the extension was not run against a probe body (Fibery #141). `agent-reference` is unsupported on this repository's own basis, as on `pi/skill`: agentforge compiles no Pi package, so a collaborator a body names is never installed with it.",
+    },
+  ],
+  [
     'claude-chat/skill',
     {
       supported: [],

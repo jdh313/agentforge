@@ -10,7 +10,8 @@ shell, OS, and global preferences; only narrows or extends here.
 
 - **Artifact** — the type/category of canonical thing being rendered.
   `skill`, `agent`, and `output-style` are implemented by the leaf renderer;
-  `agent` projects to Claude (Markdown) and Codex (native TOML), and `mcp`
+  `agent` projects to Claude (Markdown), Codex (native TOML) and Pi (Markdown
+  for the pinned `@gotgenes/pi-subagents` extension), and `mcp`
   remains later work. Each implemented artifact has a canonical filename
   (`SKILL.md`, `AGENT.md`, `OUTPUT_STYLE.md`), a canonical schema, and a layout
   (`directory` for skills, `file` for agents and output-styles).
@@ -53,6 +54,15 @@ shell, OS, and global preferences; only narrows or extends here.
   `systemMessage` when roles are not current.
   Remaining target projections stay gated on verified native semantics. See
   [docs/roadmap.md](docs/roadmap.md).
+- Pi agent render (Fibery #139) projects a leaf agent to `<name>.md` for the
+  third-party `@gotgenes/pi-subagents` extension, pinned at 23.2.0 (one
+  constant, `PI_SUBAGENTS_VERSION` in `src/targets/pi.ts`; ndr:az33k6,
+  `docs/limitations.md` L-015). `model` and `tools` come only from
+  `targets.pi`; a shared `tools` or `disallowedTools` without
+  `targets.pi.tools` refuses the render with `ProjectionRefusedError`
+  (ndr:yvgjpt), which `render --all-targets` reports as a skip. Install and
+  `check-install` for Pi agents are Fibery #140 and not wired yet
+  (`installLocations` is empty).
 - Releases are automated (semantic-release + per-platform binaries; see
   § Releases).
 
@@ -132,7 +142,9 @@ src/
     codex.ts        — artifacts.skill (~/.agents/skills), artifacts.agent
                       (native `.toml` via `nativeDocument`; ~/.codex/agents,
                       .codex/agents)
-    pi.ts           — artifacts.skill (~/.pi/agent/skills, .pi/skills)
+    pi.ts           — artifacts.skill (~/.pi/agent/skills, .pi/skills),
+                      artifacts.agent (render-only `.md` via `nativeDocument`;
+                      no install locations yet)
     claude-chat.ts  — artifacts.skill (~/Downloads/claude-skills, zipped)
 tests/
   fixtures/         — 5 matrix skills + focused skill fixtures + 3 agents +

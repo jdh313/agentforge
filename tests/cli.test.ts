@@ -416,7 +416,7 @@ describe('leaf agent commands', () => {
     expect(result.stderr).toContain('name:');
   });
 
-  test('renders Claude and Codex and explicitly skips unsupported targets', () => {
+  test('renders Claude, Codex and Pi and explicitly skips unsupported targets', () => {
     const outBase = join(temporaryRoot, 'agent-all-targets');
     const result = runCli('render', agentSource, '--all-targets', '--out-base', outBase);
 
@@ -426,7 +426,9 @@ describe('leaf agent commands', () => {
     expect(result.stdout).toContain('claude/vault-reader.md');
     expect(result.stdout).toContain('[codex] wrote');
     expect(result.stdout).toContain('codex/vault-reader.toml');
-    for (const target of ['opencode', 'pi', 'claude-chat']) {
+    expect(result.stdout).toContain('[pi] wrote');
+    expect(result.stdout).toContain('pi/vault-reader.md');
+    for (const target of ['opencode', 'claude-chat']) {
       expect(result.stdout).toContain(`[${target}] skip: artifact agent not supported`);
     }
     expect(readFileSync(join(outBase, 'claude', 'vault-reader.md'), 'utf-8')).toContain(
@@ -435,6 +437,28 @@ describe('leaf agent commands', () => {
     expect(readFileSync(join(outBase, 'codex', 'vault-reader.toml'), 'utf-8')).toContain(
       'developer_instructions',
     );
+  });
+
+  // ndr:yvgjpt: the refusal is reported like an unsupported pair, so one
+  // restricted agent does not abort the other targets' output.
+  test('reports a Pi tool-restriction refusal as a skip and still renders the other targets', () => {
+    const source = join(temporaryRoot, 'agent-pi-refused');
+    mkdirSync(source);
+    writeFileSync(
+      join(source, 'AGENT.md'),
+      '---\nname: restricted\ndescription: Restricted by a shared tools list.\ntools: Read\n---\n\n# Restricted\n',
+    );
+    const outBase = join(temporaryRoot, 'agent-pi-refused-out');
+
+    const result = runCli('render', source, '--all-targets', '--out-base', outBase);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('[claude] wrote');
+    expect(result.stdout).toContain('[codex] wrote');
+    expect(result.stdout).toContain('[pi] skip: ');
+    expect(result.stdout).toContain('targets.pi.tools');
+    expect(existsSync(join(outBase, 'pi', 'restricted.md'))).toBe(false);
   });
 
   test('lists sibling-preserving agent install scopes', () => {

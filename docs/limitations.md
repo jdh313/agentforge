@@ -1061,3 +1061,54 @@ change when Codex starts applying role-scoped policy.
 `src/frontmatter.ts` — the `sandbox-mode` and `approval-policy` rows.
 `tests/agent-codex-policy-fields.test.ts`. `docs/field-parity.md` — the Agent
 rows.
+
+## L-015 — Pi agents exist only through a pinned third-party extension, read from source and never run
+
+**Gap.** Core Pi 1.0.2 reads no agent files; its README states it skips
+sub-agents. AgentForge's Pi `agent` projection therefore targets the
+`@gotgenes/pi-subagents` extension, **pinned at 23.2.0**
+(`PI_SUBAGENTS_VERSION` in `src/targets/pi.ts`; ndr:az33k6). The mapping is a
+claim about that one version's loader, and the loader ignores every key it does
+not read without a warning, so AgentForge cannot observe a drifted key set, an
+absent extension, or a rejected file. Pi also has no CLI that loads or
+validates an agent file.
+
+**Manifests as.** A rendered `<name>.md` is inert text unless the extension at
+a compatible version is installed. With it installed, a loader change in a later
+major would silently ignore a key the render still emits. Two behaviors of the
+pinned loader are worth knowing: `maxTurns: 1` runs as 2 (the render emits it
+verbatim and raises `pi-max-turns-raised`), and a `tools` list is matched
+exactly against Pi-native lowercase names, so a Claude name yields an agent
+with no tools. That second one is why a shared `tools` or `disallowedTools`
+refuses the Pi render unless `targets.pi.tools` is written (ndr:yvgjpt).
+
+**Affects.** The `pi` target's `agent` artifact (`render` only; install and
+`check-install` are Fibery #140). Every key reported as not accepted by Pi in
+`docs/field-parity.md`.
+
+**Evidence.** Code read of the installed package for Fibery #138, 2026-10-08; the
+loader parse, `max_turns` floor and `thinking` vocabulary were re-read at
+23.2.0 when this entry was written. Eleven frontmatter
+keys parsed in `src/config/custom-agents.ts:56-73`; `thinking` vocabulary in
+`src/config/thinking-level.ts:24-32`; the `max_turns` floor in
+`src/lifecycle/turn-limits.ts:122-127`; prompt assembly in
+`src/session/prompts.ts:50-100`. Not executed: the unknown-tool-name and
+malformed-YAML consequences are inferred from code, and `claude-only-body-feature`
+for Pi agent bodies rests on finding no substitution in the prompt path.
+Runtime verification is Fibery #141.
+
+**Status.** by-design. Pinning is deliberate: the loader warns on nothing, so
+tracking the latest version would let drift surface nowhere.
+
+**Revisit trigger.** Core Pi gains a native registered-agent surface; a new
+extension major changes the loader's key set, naming or discovery paths;
+runtime verification (#141) contradicts the code-read key list.
+
+**Mitigation.** The pinned constant, the field-parity Pi column, the refusal for
+an unexpressible tool restriction, and one diagnostic per reported loss. Bumping
+`PI_SUBAGENTS_VERSION` means re-reading the loader, not editing a string.
+
+**Where to look.** `src/targets/pi.ts` — `piAgentDocument.serialize`,
+`PI_SUBAGENTS_VERSION`. `src/frontmatter.ts` — the agent `ACCEPTANCE` rows with
+`pi`. `src/capabilities.ts` — the `pi/agent` row. `tests/pi-agent-render.test.ts`.
+`docs/field-parity.md` — the Agent Pi column.

@@ -32,6 +32,7 @@ import { render } from './render.ts';
 import { buildCheckReport, formatFromPath, type ReportFormat, renderReport } from './report.ts';
 import { rootDisplayPath } from './root-manifest.ts';
 import { ARTIFACT_DEFS } from './schema.ts';
+import { ProjectionRefusedError } from './target-adapter.ts';
 import { allTargets } from './targets/index.ts';
 import {
   ARTIFACT_TYPES,
@@ -736,8 +737,15 @@ program
           continue;
         }
         const outDir = join(resolve(outBase), adapter.name);
-        const result = await render({ sourceDir: src, target: adapter.name, outDir, artifact });
-        console.log(formatResult(adapter.name, result));
+        try {
+          const result = await render({ sourceDir: src, target: adapter.name, outDir, artifact });
+          console.log(formatResult(adapter.name, result));
+        } catch (error) {
+          // A refusal is the target declining this source (ndr:yvgjpt), not a
+          // malformed one: report it like an unsupported pair and continue.
+          if (!(error instanceof ProjectionRefusedError)) throw error;
+          console.log(`[${adapter.name}] skip: ${error.message}`);
+        }
       }
       return;
     }

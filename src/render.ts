@@ -289,7 +289,8 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
         artifactDef.canonicalKeys.has(key) &&
         !acceptedKeys.has(key) &&
         !externallyProjectedFrontmatterKeys.has(key) &&
-        !isTranslationOnlyKey(artifact, key) &&
+        (!isTranslationOnlyKey(artifact, key) ||
+          artifactConfig.reportsTranslationOnlyKeys === true) &&
         supportFor(target, artifactConfig.surface, key) !== 'translated',
     );
     if (claudeOnlyPresent.length > 0) {
@@ -366,7 +367,10 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
 
   if (artifactConfig.nativeDocument) {
     const behavior = toCanonicalAgentBehavior(artifactName, merged, overrideFields, body, source);
-    const native = artifactConfig.nativeDocument.serialize(behavior, { sourcePath });
+    const native = artifactConfig.nativeDocument.serialize(behavior, {
+      sourcePath,
+      overrides: overrideFields,
+    });
     return {
       artifactName,
       content: native.content,

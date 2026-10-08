@@ -7,6 +7,11 @@ effort: high
 tools:
   - Read
   - Grep
+targets:
+  pi:
+    tools:
+      - read
+      - grep
 ---
 
 # Vault reader

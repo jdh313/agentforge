@@ -104,7 +104,7 @@ targets:
       },
       { name: 'opencode', surfaces: { skill: 'skill' }, marketplace: false },
       { name: 'codex', surfaces: { skill: 'skill', agent: 'agent' }, marketplace: true },
-      { name: 'pi', surfaces: { skill: 'skill' }, marketplace: false },
+      { name: 'pi', surfaces: { skill: 'skill', agent: 'agent' }, marketplace: false },
       { name: 'claude-chat', surfaces: { skill: 'skill' }, marketplace: false },
     ]);
   });
