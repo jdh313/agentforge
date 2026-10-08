@@ -1,7 +1,7 @@
 ---
 id: "yvgjpt"
 title: Refuse a Pi agent render that would lose a tool restriction
-status: current
+status: superseded
 decision_date: 2026-10-08
 author: Jacob Hoehler
 conviction: strong
@@ -13,7 +13,8 @@ binds:
   - src/targets/pi.ts
   - src/render.ts
 supersedes: []
-superseded_by: []
+superseded_by:
+  - jybfry
 derived_from:
   - "Fibery Project Tracking/Task #138 (Pi agents: decide to target
     @gotgenes/pi-subagents and its field mapping)"
