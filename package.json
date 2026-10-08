@@ -35,6 +35,7 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
+    "acceptance:pi-agents": "bun run scripts/pi-agent-acceptance.ts",
     "format": "biome format --write .",
     "build": "bun build --compile src/cli.ts --outfile dist/agentforge",
     "install:bin": "bun run build && ln -sf \"$PWD/dist/agentforge\" ~/.local/bin/agentforge"
