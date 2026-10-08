@@ -1079,26 +1079,34 @@ major would silently ignore a key the render still emits. Two behaviors of the
 pinned loader are worth knowing: `maxTurns: 1` runs as 2 (the render emits it
 verbatim and raises `pi-max-turns-raised`), and a `tools` list is matched
 exactly against Pi-native lowercase names, so a Claude name yields an agent
-with no tools. That second one, with the loader's lack of a denylist or permission mode, is why
-a shared `tools`, a non-empty `disallowedTools`, or a `permissionMode` other than
+with no tools. That second one, with the loader's lack of a denylist or permission mode, is
+why a shared `tools`, a non-empty `disallowedTools`, or a `permissionMode` other than
 `bypassPermissions` refuses the Pi render unless `targets.pi.tools` is written
 (ndr:jybfry).
 
 **Affects.** The `pi` target's `agent` artifact (`render`, plus `install` and
 `check-install` at user and project scope only: the extension reads no Pi
-package, so plugin scope is refused with that reason). Every key reported as not accepted by Pi in
-`docs/field-parity.md`.
+package, so plugin scope is refused with that reason). Every key reported as not
+accepted by Pi in `docs/field-parity.md`.
 
-**Evidence.** Code read of the installed package for Fibery #138, 2026-10-08; the
-loader parse, `max_turns` floor and `thinking` vocabulary were re-read at
-23.2.0 when this entry was written. Eleven frontmatter
-keys parsed in `src/config/custom-agents.ts loadFromDir`; `thinking` vocabulary in
+User scope installs to `$PI_CODING_AGENT_DIR/agents` when that variable is set,
+else `~/.pi/agent/agents`, matching the extension's `getAgentDir()`. Project
+scope is narrower than it looks: pi-subagents 23.2.0 reads project agents only
+from `<cwd>/.pi/agents` and never walks up, while agentforge's project scope
+resolves the repository root, so Pi started from a subdirectory does not load
+them and `check-install` still reports `ok`. Pi skills share the same gap.
+Runtime confirmation is Fibery #141.
+
+**Evidence.** Code read of the installed package for Fibery #138, 2026-10-08;
+the loader parse, `max_turns` floor and `thinking` vocabulary were re-read at
+23.2.0 when this entry was written. Eleven frontmatter keys parsed in
+`src/config/custom-agents.ts loadFromDir`; `thinking` vocabulary in
 `src/config/thinking-level.ts THINKING_LEVELS`; the `max_turns` floor in
 `src/lifecycle/turn-limits.ts normalizeMaxTurns`; prompt assembly in
-`src/session/prompts.ts buildAgentPrompt`. Not executed: the unknown-tool-name and
-malformed-YAML consequences are inferred from code, and `claude-only-body-feature`
-for Pi agent bodies rests on finding no substitution in the prompt path.
-Runtime verification is Fibery #141.
+`src/session/prompts.ts buildAgentPrompt`. Not executed: the unknown-tool-name
+and malformed-YAML consequences are inferred from code, and
+`claude-only-body-feature` for Pi agent bodies rests on finding no substitution
+in the prompt path. Runtime verification is Fibery #141.
 
 **Status.** by-design. Pinning is deliberate: the loader warns on nothing, so
 tracking the latest version would let drift surface nowhere.

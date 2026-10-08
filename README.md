@@ -29,9 +29,11 @@ snapshots; file-layout artifacts install only their planned paths inside shared
 runtime directories, preserving sibling files (`ndr:hjnabw`).
 
 The canonical-agent roadmap slice is underway. The leaf renderer accepts an
-`AGENT.md` artifact and projects it to Claude's native named Markdown format and
-Codex's native agent-role TOML. Both install at user or project scope with
-sibling-preserving ownership. Codex plugin packages cannot register agent roles
+`AGENT.md` artifact and projects it to Claude's native named Markdown format,
+Codex's native agent-role TOML, and Pi's Markdown for the pinned
+`@gotgenes/pi-subagents` extension. Claude, Codex and Pi install at user or
+project scope with sibling-preserving ownership (Claude also at plugin scope).
+Codex plugin packages cannot register agent roles
 as of codex-cli 0.155.1, so marketplace packages retain an explicitly inert
 Markdown procedure rather than claiming native registration. See
 [the roadmap](docs/roadmap.md) for the implementation boundary and acceptance
@@ -676,10 +678,10 @@ AGENTFORGE_CC_MARKETPLACE_PROJECT=../cc-marketplace bun test tests/cli.test.ts
 
 | Target | User skill root | Project skill root | User agent root | Project agent root | Plugin package root |
 |---|---|---|---|---|---|
-| `claude` | `~/.claude/skills` | `.claude/skills` | `~/.claude/agents` | `.claude/agents` | `skills` |
+| `claude` | `~/.claude/skills` | `.claude/skills` | `~/.claude/agents` | `.claude/agents` | `skills`, `agents` |
 | `opencode` | `~/.config/opencode/skills` | `.opencode/skills` | unsupported | unsupported | unsupported |
-| `codex` | `~/.agents/skills` | `.agents/skills` | `~/.codex/agents` | `.codex/agents` | `skills` |
-| `pi` | `~/.pi/agent/skills` | `.pi/skills` | `~/.pi/agent/agents` | `.pi/agents` | `skills` (agents unsupported) |
+| `codex` | `~/.agents/skills` | `.agents/skills` | `$CODEX_HOME/agents` (default `~/.codex/agents`) | `.codex/agents` | `skills` (agents unsupported) |
+| `pi` | `~/.pi/agent/skills` | `.pi/skills` | `$PI_CODING_AGENT_DIR/agents` (default `~/.pi/agent/agents`) | `.pi/agents` | `skills` (agents unsupported) |
 | `claude-chat` | unsupported | unsupported | unsupported | unsupported | unsupported |
 
 ## Contributing

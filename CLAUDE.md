@@ -37,7 +37,9 @@ shell, OS, and global preferences; only narrows or extends here.
   codex-cli 0.155.1 (`docs/limitations.md` L-010), so marketplace agent
   translation keeps the Markdown-procedure fallback for Codex. Leaf agents
   install with planned-file ownership at Claude user, project, and plugin
-  scope, and at Codex user and project scope. Claude plugin-scope installation
+  scope, and at Codex and Pi user and project scope (Pi: Fibery #140; a source
+  Pi refuses makes `install` write nothing and `check-install` fail with a
+  `projection-refused` issue, ndr:jybfry). Claude plugin-scope installation
   anchors one planned-file operation at the package root: the agent lands in
   `agents/`, while declared `references/`, `scripts/`, and `assets/` land where
   `${CLAUDE_PLUGIN_ROOT}` addresses them; user/project installs remain one-file.

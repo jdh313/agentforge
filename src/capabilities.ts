@@ -277,7 +277,7 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
       supported: ['allowed-tools', 'disable-model-invocation'],
       unsupported: CLAUDE_TOKENS,
       source:
-        'https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md — Pi implements Agent Skills, natively accepts allowed-tools and disable-model-invocation, and documents no Claude Code body templating. Verified 2026-09-14. `agent-reference` is unsupported because agentforge projects no `agent` artifact to Pi (`src/targets/pi.ts` declares `artifacts.skill` alone), so a collaborator named in a body is never installed with it.',
+        'https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md — Pi implements Agent Skills, natively accepts allowed-tools and disable-model-invocation, and documents no Claude Code body templating. Verified 2026-09-14. `agent-reference` is unsupported because agentforge compiles no Pi package, and the Pi `agent` artifact installs only to the user and project agent directories (`src/targets/pi.ts`), so a collaborator named in a skill body is never installed with it.',
     },
   ],
   [

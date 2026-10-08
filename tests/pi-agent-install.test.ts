@@ -161,6 +161,76 @@ for (const { scope, relativeRoot } of SCOPES) {
   });
 }
 
+describe('Pi agent install: $PI_CODING_AGENT_DIR at user scope', () => {
+  const userPlan = (piAgentDirectory?: string) =>
+    buildInstallPlan({
+      sourceDir: FIXTURE_AGENT,
+      target: 'pi',
+      artifact: 'agent',
+      scope: 'user',
+      projectRoot: join(temporaryRoot, 'project'),
+      homeDirectory: join(temporaryRoot, 'home'),
+      ...(piAgentDirectory === undefined ? {} : { piAgentDirectory }),
+    });
+
+  test('unset: falls back to ~/.pi/agent/agents', () => {
+    expect(userPlan().destinationRoot).toBe(join(temporaryRoot, 'home/.pi/agent/agents'));
+  });
+
+  test('set: installs to <dir>/agents and leaves the home default untouched', () => {
+    const piAgentDirectory = join(temporaryRoot, 'pi-agent-dir');
+    const install = userPlan(piAgentDirectory);
+    expect(install.destinationRoot).toBe(join(piAgentDirectory, 'agents'));
+
+    materializeInstallPlan(install);
+    expect(readdirSync(join(piAgentDirectory, 'agents'))).toEqual(['vault-reader.md']);
+    expect(existsSync(join(temporaryRoot, 'home/.pi'))).toBe(false);
+    expect(checkInstallPlan(install).issues).toEqual([]);
+  });
+
+  test('does not move the project location or the Pi skill location', () => {
+    const piAgentDirectory = join(temporaryRoot, 'pi-agent-dir');
+    const context = {
+      homeDirectory: join(temporaryRoot, 'home'),
+      projectRoot: join(temporaryRoot, 'project'),
+      piAgentDirectory,
+    };
+    expect(getArtifactConfig('pi', 'agent')?.installLocations.project?.(context)).toBe(
+      join(temporaryRoot, 'project/.pi/agents'),
+    );
+    expect(getArtifactConfig('pi', 'skill')?.installLocations.user?.(context)).toBe(
+      join(temporaryRoot, 'home/.pi/agent/skills'),
+    );
+  });
+
+  test('CLI: honors PI_CODING_AGENT_DIR when set and falls back to HOME when unset', () => {
+    const home = join(temporaryRoot, 'cli-home');
+    const piAgentDirectory = join(temporaryRoot, 'cli-pi-agent-dir');
+    const args = [
+      FIXTURE_AGENT,
+      '--target',
+      'pi',
+      '--scope',
+      'user',
+      '--project-root',
+      join(temporaryRoot, 'cli-project'),
+    ];
+
+    const set = runCli({ HOME: home, PI_CODING_AGENT_DIR: piAgentDirectory }, 'install', ...args);
+    expect(set.exitCode).toBe(0);
+    expect(existsSync(join(piAgentDirectory, 'agents/vault-reader.md'))).toBe(true);
+    expect(existsSync(join(home, '.pi'))).toBe(false);
+    expect(
+      runCli({ HOME: home, PI_CODING_AGENT_DIR: piAgentDirectory }, 'check-install', ...args)
+        .stdout,
+    ).toContain(`ok: 1 managed files at ${join(piAgentDirectory, 'agents')}`);
+
+    const unset = runCli({ HOME: home }, 'install', ...args);
+    expect(unset.exitCode).toBe(0);
+    expect(existsSync(join(home, '.pi/agent/agents/vault-reader.md'))).toBe(true);
+  });
+});
+
 describe('Pi agent install: unsupported plugin scope', () => {
   test('refuses and names why the extension cannot read a plugin root', () => {
     const pluginRoot = join(temporaryRoot, 'plugin');
@@ -311,6 +381,9 @@ describe('Pi agent install CLI', () => {
     expect(installed.exitCode).toBe(1);
     expect(installed.stdout).not.toContain('installed');
     expect(installed.stderr).toContain('refusing to render agent "vault-reader" for pi');
+    expect(installed.stderr).toContain(
+      'an agent previously installed at the destination is left in place and is still active',
+    );
     expect(readFileSync(join(agentsRoot, 'vault-reader.md')).equals(earlier)).toBe(true);
 
     const checked = runCli({}, 'check-install', ...args);
@@ -329,7 +402,9 @@ function runCli(
   const result = Bun.spawnSync({
     cmd: [process.execPath, 'run', CLI, ...args],
     cwd: REPO_ROOT,
-    env: { ...process.env, ...env },
+    // A developer's own PI_CODING_AGENT_DIR must not leak into a case that
+    // does not set it; every case that needs it passes it explicitly.
+    env: { ...process.env, PI_CODING_AGENT_DIR: undefined, ...env },
     stdout: 'pipe',
     stderr: 'pipe',
   });

@@ -14,6 +14,11 @@ export interface InstallLocationContext {
   // target-owned override distinct from homeDirectory so every other target
   // retains its own documented home-relative locations.
   codexHomeDirectory?: string;
+  // Pi documents PI_CODING_AGENT_DIR as the root of its per-user state, and
+  // @gotgenes/pi-subagents reads user agents from `<that root>/agents`. It
+  // defaults to ~/.pi/agent when unset. Target-owned, like codexHomeDirectory;
+  // the Pi skill location deliberately does not consult it.
+  piAgentDirectory?: string;
   projectRoot: string;
   pluginRoot?: string;
 }

@@ -30,6 +30,7 @@ export interface BuildInstallPlanOptions {
   pluginRoot?: string;
   homeDirectory?: string;
   codexHomeDirectory?: string;
+  piAgentDirectory?: string;
 }
 
 export interface InstallPlan {
@@ -81,6 +82,8 @@ export function buildInstallPlan(options: BuildInstallPlanOptions): InstallPlan 
   const resolvedHomeDirectory = resolve(options.homeDirectory ?? homedir());
   const resolvedCodexHomeDirectory =
     options.codexHomeDirectory === undefined ? undefined : resolve(options.codexHomeDirectory);
+  const resolvedPiAgentDirectory =
+    options.piAgentDirectory === undefined ? undefined : resolve(options.piAgentDirectory);
   const resolvedProjectRoot = resolve(options.projectRoot);
   const resolvedPluginRoot =
     options.pluginRoot === undefined ? undefined : resolve(options.pluginRoot);
@@ -89,6 +92,9 @@ export function buildInstallPlan(options: BuildInstallPlanOptions): InstallPlan 
     ...(resolvedCodexHomeDirectory === undefined
       ? {}
       : { codexHomeDirectory: resolvedCodexHomeDirectory }),
+    ...(resolvedPiAgentDirectory === undefined
+      ? {}
+      : { piAgentDirectory: resolvedPiAgentDirectory }),
     projectRoot: resolvedProjectRoot,
     ...(resolvedPluginRoot === undefined ? {} : { pluginRoot: resolvedPluginRoot }),
   });
@@ -179,10 +185,12 @@ export function materializeInstallPlan(install: InstallPlan): MaterializationRes
 }
 
 /**
- * `check-install` is read-only and never throws for a source the target
- * refuses to project (ndr:jybfry): no plan exists to compare against, and an
- * earlier installed file must not read as current. The refusal becomes a
- * check issue, so it fails the check the way any other non-current state does.
+ * The `check-install` CLI path is read-only and does not throw for a source
+ * the target refuses to project (ndr:jybfry): no plan exists to compare
+ * against, and an earlier installed file must not read as current. The CLI
+ * turns the refusal into a check issue with this function, so it fails the
+ * check the way any other non-current state does. Library callers of
+ * `buildInstallPlan` still receive the `ProjectionRefusedError`.
  */
 export function refusedInstallResult(error: ProjectionRefusedError): MarketplaceCheckResult {
   return {

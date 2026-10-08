@@ -162,13 +162,15 @@ export const piTarget = {
   artifacts: {
     ...piAgentSkills.artifacts,
     agent: {
-      // The extension discovers agents only in `~/.pi/agent/agents` and
-      // `<cwd>/.pi/agents` (ndr:az33k6), so those are the only scopes. Each
+      // The extension discovers agents only in `$PI_CODING_AGENT_DIR/agents`
+      // (default `~/.pi/agent/agents`) and `<cwd>/.pi/agents` (ndr:az33k6), so
+      // those are the only scopes. Each
       // agent is one file in a directory that holds the user's other agents,
       // so install owns only its planned path (ndr:hjnabw). Whether the
       // extension needs a setting to read project agents is unverified (#141).
       installLocations: {
-        user: ({ homeDirectory }) => join(homeDirectory, '.pi/agent/agents'),
+        user: ({ homeDirectory, piAgentDirectory }) =>
+          join(piAgentDirectory ?? join(homeDirectory, '.pi/agent'), 'agents'),
         project: ({ projectRoot }) => join(projectRoot, '.pi/agents'),
       },
       unsupportedInstallScopeReasons: {

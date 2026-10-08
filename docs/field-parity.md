@@ -114,9 +114,9 @@ column describes the third-party `@gotgenes/pi-subagents` extension, **pinned at
 loader reads eleven frontmatter keys and ignores every other key without a
 warning, so the column is a reading of that one version's source, not a
 runtime-verified contract (Fibery #141). `render` writes `<name>.md`; install
-and `check-install` own that one file at user and project scope. The Pi-only keys the loader reads
-(`display_name`, `prompt_mode`, `inherit_context`, `enabled`, `locked`) have no
-canonical source and are not emitted.
+and `check-install` own that one file at user and project scope. The Pi-only
+keys the loader reads (`display_name`, `prompt_mode`, `inherit_context`,
+`enabled`, `locked`) have no canonical source and are not emitted.
 
 Claude emits Markdown frontmatter under the same key names its own loader reads.
 Codex's `AgentRoleOverrides` set has nine fields: `developer_instructions`,
@@ -206,6 +206,10 @@ Pi takes `tools` here via `targets.pi.tools`; the other rows are Claude-only on 
   harnesses. Claude agents reach all three (resources ride along at plugin scope
   only); Codex agents install at user (`$CODEX_HOME/agents`) and project
   (`.codex/agents`) scope. Plugin packages register no Codex agent role at all
-  (L-010), so marketplace agent translation falls back to a Markdown procedure. Pi agents render to `<name>.md`, install at user (`~/.pi/agent/agents`) and project (`.pi/agents`) scope only, and need the pinned third-party extension to be read at all (L-015).
+  (L-010), so marketplace agent translation falls back to a Markdown
+  procedure. Pi agents render to `<name>.md`, install at user
+  (`$PI_CODING_AGENT_DIR/agents`, default `~/.pi/agent/agents`) and project
+  (`.pi/agents`) scope only, and need the pinned third-party extension to be
+  read at all (L-015).
 - **Other artifacts.** `output-style` is the third leaf artifact and projects to
   Claude only; `mcp` is unimplemented.

@@ -379,6 +379,9 @@ const resolveInstallPlan = (sourceDir: string, opts: InstallCommandOptions) => {
     scope: opts.scope,
     projectRoot: resolve(opts.projectRoot ?? workingProjectRoot(process.cwd())),
     ...(process.env.CODEX_HOME === undefined ? {} : { codexHomeDirectory: process.env.CODEX_HOME }),
+    ...(process.env.PI_CODING_AGENT_DIR === undefined
+      ? {}
+      : { piAgentDirectory: process.env.PI_CODING_AGENT_DIR }),
     ...(opts.pluginRoot === undefined ? {} : { pluginRoot: resolve(opts.pluginRoot) }),
   });
 };
@@ -677,7 +680,11 @@ addInstallOptions(
     console.log(`installed ${install.plan.outputs.length} files at ${install.destinationRoot}`);
     for (const line of formatCompilationDiagnostics(install.plan)) console.log(line);
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
+    const hint =
+      error instanceof ProjectionRefusedError
+        ? ' Nothing was written: an agent previously installed at the destination is left in place and is still active.'
+        : '';
+    console.error(`${error instanceof Error ? error.message : String(error)}${hint}`);
     process.exitCode = 1;
   }
 });
