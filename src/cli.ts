@@ -379,9 +379,10 @@ const resolveInstallPlan = (sourceDir: string, opts: InstallCommandOptions) => {
     scope: opts.scope,
     projectRoot: resolve(opts.projectRoot ?? workingProjectRoot(process.cwd())),
     ...(process.env.CODEX_HOME === undefined ? {} : { codexHomeDirectory: process.env.CODEX_HOME }),
-    ...(process.env.PI_CODING_AGENT_DIR === undefined
-      ? {}
-      : { piAgentDirectory: process.env.PI_CODING_AGENT_DIR }),
+    // Pi's getAgentDir treats an empty value as unset, so this does too.
+    ...(process.env.PI_CODING_AGENT_DIR
+      ? { piAgentDirectory: process.env.PI_CODING_AGENT_DIR }
+      : {}),
     ...(opts.pluginRoot === undefined ? {} : { pluginRoot: resolve(opts.pluginRoot) }),
   });
 };

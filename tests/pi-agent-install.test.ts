@@ -188,6 +188,29 @@ describe('Pi agent install: $PI_CODING_AGENT_DIR at user scope', () => {
     expect(checkInstallPlan(install).issues).toEqual([]);
   });
 
+  test('set to ~/<dir>: expands against the home directory, as Pi does', () => {
+    expect(userPlan('~/custom-pi').destinationRoot).toBe(
+      join(temporaryRoot, 'home/custom-pi/agents'),
+    );
+  });
+
+  test('CLI: an empty PI_CODING_AGENT_DIR falls back to HOME, as Pi does', () => {
+    const home = join(temporaryRoot, 'empty-env-home');
+    const result = runCli(
+      { HOME: home, PI_CODING_AGENT_DIR: '' },
+      'install',
+      FIXTURE_AGENT,
+      '--target',
+      'pi',
+      '--scope',
+      'user',
+      '--project-root',
+      join(temporaryRoot, 'empty-env-project'),
+    );
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(join(home, '.pi/agent/agents/vault-reader.md'))).toBe(true);
+  });
+
   test('does not move the project location or the Pi skill location', () => {
     const piAgentDirectory = join(temporaryRoot, 'pi-agent-dir');
     const context = {

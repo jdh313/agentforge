@@ -82,8 +82,12 @@ export function buildInstallPlan(options: BuildInstallPlanOptions): InstallPlan 
   const resolvedHomeDirectory = resolve(options.homeDirectory ?? homedir());
   const resolvedCodexHomeDirectory =
     options.codexHomeDirectory === undefined ? undefined : resolve(options.codexHomeDirectory);
+  // Pi's getAgentDir expands a leading `~` against the home directory before
+  // using the value; a literal `~` segment would name a directory Pi never reads.
   const resolvedPiAgentDirectory =
-    options.piAgentDirectory === undefined ? undefined : resolve(options.piAgentDirectory);
+    options.piAgentDirectory === undefined
+      ? undefined
+      : resolve(expandHome(options.piAgentDirectory, resolvedHomeDirectory));
   const resolvedProjectRoot = resolve(options.projectRoot);
   const resolvedPluginRoot =
     options.pluginRoot === undefined ? undefined : resolve(options.pluginRoot);
@@ -182,6 +186,11 @@ export function materializeInstallPlan(install: InstallPlan): MaterializationRes
   return install.ownership === 'snapshot'
     ? materializeCompilation(install.plan, install.destinationRoot)
     : materializeCompilationOutputs(install.plan, install.destinationRoot);
+}
+
+function expandHome(path: string, homeDirectory: string): string {
+  if (path === '~') return homeDirectory;
+  return path.startsWith('~/') ? join(homeDirectory, path.slice(2)) : path;
 }
 
 /**
