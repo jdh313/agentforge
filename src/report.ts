@@ -79,6 +79,8 @@ const DISPOSITION_BY_CODE: Readonly<Record<DiagnosticCode, Disposition>> = {
   'codex-role-policy-not-applied': 'carried-unenforced',
   // Emitted exactly as written; the pi-subagents loader runs 1 as 2 (L-015).
   'pi-max-turns-raised': 'carried-unenforced',
+  // Emitted exactly as written; the extension lets the caller replace it (L-016).
+  'pi-caller-may-override': 'carried-unenforced',
   'unclassified-construct': 'not-established',
   'unclassified-body-construct': 'not-established',
   'unrecognized-frontmatter-key': 'not-established',

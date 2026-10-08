@@ -127,16 +127,21 @@ const piAgentDocument: NativeAgentDocument = {
         : { max_turns: behavior.execution.maxTurns }),
       ...(background === undefined ? {} : { run_in_background: background }),
     };
-    const warnings: Warning[] =
-      behavior.execution.maxTurns === 1
-        ? [
-            {
-              kind: 'pi-max-turns-raised',
-              target: 'pi',
-              detail: `maxTurns 1 is emitted as max_turns 1, but ${PI_SUBAGENTS_PACKAGE} ${PI_SUBAGENTS_VERSION} runs it as 2 (docs/limitations.md L-015)`,
-            },
-          ]
-        : [];
+    const warnings: Warning[] = [];
+    if (behavior.execution.maxTurns === 1) {
+      warnings.push({
+        kind: 'pi-max-turns-raised',
+        target: 'pi',
+        detail: `maxTurns 1 is emitted as max_turns 1, but ${PI_SUBAGENTS_PACKAGE} ${PI_SUBAGENTS_VERSION} runs it as 2 (docs/limitations.md L-015)`,
+      });
+    }
+    if (behavior.execution.maxTurns !== undefined) {
+      warnings.push({
+        kind: 'pi-caller-may-override',
+        target: 'pi',
+        detail: `maxTurns ${behavior.execution.maxTurns} is emitted as max_turns ${behavior.execution.maxTurns}, but ${PI_SUBAGENTS_PACKAGE} ${PI_SUBAGENTS_VERSION} lets the calling parent replace it per call, so it is a default and not a ceiling on the caller (docs/limitations.md L-016)`,
+      });
+    }
     return { content: matter.stringify(behavior.instructions, frontmatter), warnings };
   },
 };
@@ -166,8 +171,9 @@ export const piTarget = {
       // (default `~/.pi/agent/agents`) and `<cwd>/.pi/agents` (ndr:az33k6), so
       // those are the only scopes. Each
       // agent is one file in a directory that holds the user's other agents,
-      // so install owns only its planned path (ndr:hjnabw). Whether the
-      // extension needs a setting to read project agents is unverified (#141).
+      // so install owns only its planned path (ndr:hjnabw). Project agents
+      // load with no setting, but only when pi starts in the directory holding
+      // `.pi/agents` (docs/pi-agent-acceptance.md, L-015).
       installLocations: {
         user: ({ homeDirectory, piAgentDirectory }) =>
           join(piAgentDirectory ?? join(homeDirectory, '.pi/agent'), 'agents'),

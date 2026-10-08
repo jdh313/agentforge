@@ -272,21 +272,39 @@ describe('Pi agent projection: losses named by the az33k6 decision', () => {
     expect(project(src, 'claude').warnings).toEqual([]);
   });
 
-  test('maxTurns 1 emits max_turns 1 and a pi-max-turns-raised diagnostic', () => {
+  test('maxTurns 1 emits max_turns 1 with a pi-max-turns-raised diagnostic', () => {
     const projection = project(source('maxTurns: 1\n'));
     expect(matter(projection.content).data.max_turns).toBe(1);
-    expect(projection.warnings).toEqual([
+    const raised = projection.warnings.filter(({ kind }) => kind === 'pi-max-turns-raised');
+    expect(raised).toEqual([
       {
         kind: 'pi-max-turns-raised',
         target: 'pi',
         detail: expect.stringContaining('runs it as 2'),
       },
     ]);
+    expect(raised[0]?.detail).toContain(PI_SUBAGENTS_VERSION);
+  });
+
+  test('maxTurns above 1 raises no pi-max-turns-raised diagnostic', () => {
+    const kinds = project(source('maxTurns: 2\n')).warnings.map(({ kind }) => kind);
+    expect(kinds).not.toContain('pi-max-turns-raised');
+  });
+
+  test('any maxTurns raises pi-caller-may-override, because the caller can replace it (L-016)', () => {
+    const projection = project(source('maxTurns: 3\n'));
+    expect(projection.warnings).toEqual([
+      {
+        kind: 'pi-caller-may-override',
+        target: 'pi',
+        detail: expect.stringContaining('docs/limitations.md L-016'),
+      },
+    ]);
     expect(projection.warnings[0]?.detail).toContain(PI_SUBAGENTS_VERSION);
   });
 
-  test('maxTurns above 1 raises no diagnostic', () => {
-    expect(project(source('maxTurns: 2\n')).warnings).toEqual([]);
+  test('no maxTurns raises neither maxTurns diagnostic', () => {
+    expect(project(source('')).warnings).toEqual([]);
   });
 });
 

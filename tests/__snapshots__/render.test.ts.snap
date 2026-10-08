@@ -867,6 +867,11 @@ exports[`render agent agent-basic → pi: warnings 1`] = `
     "kind": "claude-only-frontmatter-stripped",
     "target": "pi",
   },
+  {
+    "detail": "maxTurns 10 is emitted as max_turns 10, but @gotgenes/pi-subagents 23.2.0 lets the calling parent replace it per call, so it is a default and not a ceiling on the caller (docs/limitations.md L-016)",
+    "kind": "pi-caller-may-override",
+    "target": "pi",
+  },
 ]
 `;
 
@@ -893,6 +898,11 @@ exports[`render agent agent-overrides → pi: warnings 1`] = `
   {
     "detail": "stripped model, tools",
     "kind": "claude-only-frontmatter-stripped",
+    "target": "pi",
+  },
+  {
+    "detail": "maxTurns 8 is emitted as max_turns 8, but @gotgenes/pi-subagents 23.2.0 lets the calling parent replace it per call, so it is a default and not a ceiling on the caller (docs/limitations.md L-016)",
+    "kind": "pi-caller-may-override",
     "target": "pi",
   },
 ]
@@ -972,6 +982,11 @@ exports[`render agent agent-claude-fields → pi: warnings 1`] = `
   {
     "detail": "stripped model, tools, disallowedTools, permissionMode, isolation, memory, omitClaudeMd, skills, initialPrompt, color, mcpServers, hooks, experimental",
     "kind": "claude-only-frontmatter-stripped",
+    "target": "pi",
+  },
+  {
+    "detail": "maxTurns 6 is emitted as max_turns 6, but @gotgenes/pi-subagents 23.2.0 lets the calling parent replace it per call, so it is a default and not a ceiling on the caller (docs/limitations.md L-016)",
+    "kind": "pi-caller-may-override",
     "target": "pi",
   },
 ]

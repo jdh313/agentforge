@@ -52,6 +52,10 @@ export type DiagnosticCode =
   // extension raises every positive limit to a floor of 2 (docs/limitations.md
   // L-015).
   | 'pi-max-turns-raised'
+  // `maxTurns` on a Pi agent: emitted as `max_turns`, but the extension lets the
+  // calling parent replace it per call unless the file sets `locked`, so the
+  // value is a default, not a ceiling on the caller (L-016).
+  | 'pi-caller-may-override'
   // A construct the target supports only when a typed condition holds.
   // Distinct from every kind above, which reports an unconditional target
   // outcome: this warning carries the gate rather than averaging over it, and
@@ -88,6 +92,7 @@ export type WarningKind = Extract<
   | 'codex-short-description-length'
   | 'codex-role-policy-not-applied'
   | 'pi-max-turns-raised'
+  | 'pi-caller-may-override'
   | 'construct-support-gated'
 >;
 
