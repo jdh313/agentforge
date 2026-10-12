@@ -1,3 +1,30 @@
+# 2.0.0 — local version bump (2026-10-12)
+
+Version bumped locally at the user's request. No release tag or publication has
+been created; public releases remain managed by semantic-release.
+
+### BREAKING CHANGES
+
+* Group standalone commands under `artifact` and marketplace commands under
+  `marketplace`; no compatibility aliases remain.
+* Move Codex bundle lifecycle commands under `codex agents`.
+* Consolidate bundle previews into lifecycle commands with `--dry-run`.
+
+### Features
+
+* Compile and check standalone native Pi extension packages, optionally including
+  canonical skills, with explicit resources and non-executing static validation.
+* Render and install Pi leaf agents for pinned `@gotgenes/pi-subagents`, with
+  projection refusal for unsupported permission/tool policies.
+* Compile Claude package agents through the leaf agent projection.
+* Translate Codex reasoning-summary, verbosity, and skill short-description;
+  expose role sandbox/approval settings with runtime-policy warnings.
+
+### Verification
+
+* 649 tests passed, one optional native-validator skip; 127 snapshots unchanged.
+* Isolated native Pi 1.1.0 extension acceptance passed.
+
 # [1.3.0](https://github.com/jdh313/agentforge/compare/v1.2.0...v1.3.0) (2026-10-04)
 
 
