@@ -46,10 +46,46 @@ describe('grouped command contract', () => {
     const groups = [...commands.matchAll(/^ {2}([\w-]+)/gm)]
       .map((match) => match[1])
       .filter((name) => name !== 'help');
-    expect(groups.toSorted()).toEqual(['artifact', 'codex-bundle', 'marketplace', 'targets']);
+    expect(groups.toSorted()).toEqual(['artifact', 'codex', 'marketplace', 'targets']);
   });
 
+  test('codex help exposes only the agents group', () => {
+    const result = runCli('codex', '--help');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Usage: agentforge codex');
+    const commands = result.stdout.split('Commands:')[1];
+    expect(commands).toBeDefined();
+    const groups = [...commands.matchAll(/^ {2}([\w-]+)/gm)]
+      .map((match) => match[1])
+      .filter((name) => name !== 'help');
+    expect(groups).toEqual(['agents']);
+  });
+
+  test('codex agents repair help exposes update and remove', () => {
+    const result = runCli('codex', 'agents', 'repair', '--help');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Usage: agentforge codex agents repair');
+    const commands = result.stdout.split('Commands:')[1];
+    expect(commands).toBeDefined();
+    const operations = [...commands.matchAll(/^ {2}([\w-]+)/gm)]
+      .map((match) => match[1])
+      .filter((name) => name !== 'help');
+    expect(operations.toSorted()).toEqual(['remove', 'update']);
+  });
+
+  for (const operation of ['install', 'update', 'remove', 'sync']) {
+    test(`codex agents ${operation} help exposes dry-run at the leaf`, () => {
+      const result = runCli('codex', 'agents', operation, '--help');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(`Usage: agentforge codex agents ${operation}`);
+      expect(result.stdout).toContain('--dry-run');
+      expect(result.stdout).toContain('--scope <scope>');
+      expect(result.stdout).toContain('--project-root <dir>');
+    });
+  }
+
   for (const command of [
+    'codex-bundle',
     'render',
     'validate',
     'install',

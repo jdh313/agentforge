@@ -159,10 +159,10 @@ describe('compiled Codex package agent bundle', () => {
       'package_id="demo-roles"',
     );
     expect(setupScript?.kind === 'generated' && setupScript.content).toContain(
-      '"$agentforge_bin" codex-bundle "$operation" --dry-run',
+      '"$agentforge_bin" codex agents "$operation" --dry-run',
     );
     expect(setupScript?.kind === 'generated' && setupScript.content).toContain(
-      'exec "$agentforge_bin" codex-bundle "$operation"',
+      'exec "$agentforge_bin" codex agents "$operation"',
     );
     expect(one.diagnostics.map(({ message }) => message).join('\n')).toContain(
       'stripped tools, disallowedTools, permissionMode',
@@ -202,7 +202,7 @@ describe('compiled Codex package agent bundle', () => {
     chmodSync(incompatible, 0o755);
     const rejected = runSetupScript(script, { AGENTFORGE_BIN: incompatible }, 'install', 'user');
     expect(rejected.exitCode).toBe(69);
-    expect(rejected.stderr).toContain('codex-bundle install --help');
+    expect(rejected.stderr).toContain('codex agents install --help');
 
     const project = join(temporaryRoot, 'project with spaces; no eval');
     const codexHome = join(temporaryRoot, 'codex-home');
@@ -210,7 +210,7 @@ describe('compiled Codex package agent bundle', () => {
     const previewFailureTrace = join(temporaryRoot, 'agentforge-preview-failure-trace');
     writeFileSync(
       previewFailure,
-      `#!/bin/sh\ncase "$*" in *--help) exit 0 ;; esac\n{ printf '[%s]' "$@"; printf '\\n'; } >> "$AGENTFORGE_TRACE"\nif [ "$3" = "--dry-run" ]; then exit 87; fi\nexit 0\n`,
+      `#!/bin/sh\ncase "$*" in *--help) exit 0 ;; esac\n{ printf '[%s]' "$@"; printf '\\n'; } >> "$AGENTFORGE_TRACE"\nif [ "$4" = "--dry-run" ]; then exit 87; fi\nexit 0\n`,
     );
     chmodSync(previewFailure, 0o755);
     const bundleRoot = join(realpathSync(installedPlugin), '.agentforge/codex-agent-bundle');
@@ -228,7 +228,7 @@ describe('compiled Codex package agent bundle', () => {
         const subject = operation === 'remove' ? 'demo-roles' : bundleRoot;
         const projectArgs = scope === 'project' ? `[--project-root][${project}]` : '';
         expect(readFileSync(previewFailureTrace, 'utf8')).toBe(
-          `[codex-bundle][${operation}][--dry-run][${subject}][--scope][${scope}]${projectArgs}\n`,
+          `[codex][agents][${operation}][--dry-run][${subject}][--scope][${scope}]${projectArgs}\n`,
         );
         expect(existsSync(join(project, '.codex'))).toBe(false);
       }
@@ -246,10 +246,10 @@ describe('compiled Codex package agent bundle', () => {
       const args = `[${bundleRoot}][--scope][${scope}]${projectArgs}\n`;
       for (const operation of ['install', 'update']) {
         expect(readFileSync(trace, 'utf8')).toContain(
-          `[codex-bundle][${operation}][--dry-run]${args}[codex-bundle][${operation}]${args}`,
+          `[codex][agents][${operation}][--dry-run]${args}[codex][agents][${operation}]${args}`,
         );
       }
-      expect(readFileSync(trace, 'utf8')).toContain(`[codex-bundle][check]${args}`);
+      expect(readFileSync(trace, 'utf8')).toContain(`[codex][agents][check]${args}`);
       expect(readFileSync(trace, 'utf8')).not.toContain('[check][--dry-run]');
     }
 
@@ -274,7 +274,7 @@ describe('compiled Codex package agent bundle', () => {
       const projectArgs = scope === 'project' ? `[--project-root][${project}]` : '';
       const args = `[demo-roles][--scope][${scope}]${projectArgs}\n`;
       expect(readFileSync(trace, 'utf8')).toContain(
-        `[codex-bundle][remove][--dry-run]${args}[codex-bundle][remove]${args}`,
+        `[codex][agents][remove][--dry-run]${args}[codex][agents][remove]${args}`,
       );
     }
   });
@@ -1342,7 +1342,8 @@ describe('compiled Codex package agent bundle', () => {
     const project = join(temporaryRoot, 'project');
     const missing = runCli(
       {},
-      'codex-bundle',
+      'codex',
+      'agents',
       'check',
       bundleRoot,
       '--scope',
@@ -1357,7 +1358,8 @@ describe('compiled Codex package agent bundle', () => {
     );
     const current = runCli(
       {},
-      'codex-bundle',
+      'codex',
+      'agents',
       'check',
       bundleRoot,
       '--scope',
@@ -1373,7 +1375,8 @@ describe('compiled Codex package agent bundle', () => {
     writeFileSync(receiptPath, `${JSON.stringify(receipt)}\n`);
     const conflicted = runCli(
       {},
-      'codex-bundle',
+      'codex',
+      'agents',
       'check',
       bundleRoot,
       '--scope',
@@ -1388,7 +1391,8 @@ describe('compiled Codex package agent bundle', () => {
     writeFileSync(receiptPath, `${JSON.stringify(receipt)}\n`);
     const priorSchema = runCli(
       {},
-      'codex-bundle',
+      'codex',
+      'agents',
       'check',
       bundleRoot,
       '--scope',
@@ -1401,7 +1405,8 @@ describe('compiled Codex package agent bundle', () => {
     writeFileSync(receiptPath, '{}\n');
     const unsupported = runCli(
       {},
-      'codex-bundle',
+      'codex',
+      'agents',
       'check',
       bundleRoot,
       '--scope',
@@ -1473,12 +1478,12 @@ describe('compiled Codex package agent bundle', () => {
     mkdirSync(outside);
     symlinkSync(outside, join(project, '.codex/agents'));
     const args = ['--scope', 'project', '--project-root', project];
-    const preview = runCli({}, 'codex-bundle', 'install', '--dry-run', bundleRoot, ...args);
+    const preview = runCli({}, 'codex', 'agents', 'install', '--dry-run', bundleRoot, ...args);
     expect(preview.exitCode).toBe(0);
     expect(preview.stdout).toContain(
       `agents: ${join(project, '.codex/agents')} -> ${realpathSync(outside)}`,
     );
-    const install = runCli({}, 'codex-bundle', 'install', bundleRoot, ...args);
+    const install = runCli({}, 'codex', 'agents', 'install', bundleRoot, ...args);
     expect(install.exitCode).toBe(0);
     expect(install.stdout).toContain(
       `agents: ${join(project, '.codex/agents')} -> ${realpathSync(outside)}`,
@@ -1487,7 +1492,7 @@ describe('compiled Codex package agent bundle', () => {
     expect(existsSync(join(outside, 'demo-roles/alpha.toml'))).toBe(true);
     expect(existsSync(join(outside, '.agentforge/demo-roles.json'))).toBe(true);
     expect(existsSync(join(project, '.codex/config.toml'))).toBe(true);
-    const check = runCli({}, 'codex-bundle', 'check', bundleRoot, ...args);
+    const check = runCli({}, 'codex', 'agents', 'check', bundleRoot, ...args);
     expect(check.exitCode).toBe(0);
     expect(check.stdout).toContain('current:');
   });
@@ -1503,7 +1508,8 @@ describe('compiled Codex package agent bundle', () => {
     writeFileSync(lock, '{"schema":"agentforge.codex-agent-lifecycle-journal/v4"}\n');
     const preview = runCli(
       {},
-      'codex-bundle',
+      'codex',
+      'agents',
       'install',
       '--dry-run',
       bundleRoot,
@@ -1528,7 +1534,8 @@ describe('compiled Codex package agent bundle', () => {
     writeFileSync(lock, '{"schema":"agentforge.codex-agent-lifecycle-journal/v4"}\n');
     const preview = runCli(
       {},
-      'codex-bundle',
+      'codex',
+      'agents',
       'install',
       '--dry-run',
       bundleRoot,
@@ -1679,7 +1686,8 @@ describe('compiled Codex package agent bundle', () => {
     const codexHome = join(temporaryRoot, 'codex-home');
     const preview = runCli(
       { CODEX_HOME: codexHome },
-      'codex-bundle',
+      'codex',
+      'agents',
       'install',
       '--dry-run',
       bundleRoot,
@@ -1691,7 +1699,8 @@ describe('compiled Codex package agent bundle', () => {
     expect(existsSync(codexHome)).toBe(false);
     const installed = runCli(
       { CODEX_HOME: codexHome },
-      'codex-bundle',
+      'codex',
+      'agents',
       'install',
       bundleRoot,
       '--scope',
@@ -1801,7 +1810,8 @@ describe('compiled Codex package agent bundle', () => {
 
     const diagnostics = runCli(
       {},
-      'codex-bundle',
+      'codex',
+      'agents',
       'compile',
       CLAUDE_FIELDS_FIXTURE,
       '--package-id',

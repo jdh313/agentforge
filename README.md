@@ -501,12 +501,13 @@ Commands are grouped by the resource they manage:
   canonical artifact.
 - `marketplace`: compile publications and check their materialized output.
 - `targets`: list registered targets, supported artifacts, and install scopes.
-- `codex-bundle`: compile and manage native Codex agent bundles, including
-  installed-plugin sync and repair of interrupted updates or removals.
+- `codex`: `codex agents` manages the native Codex agent lifecycle, including
+  compilation, installed-plugin sync, and repair of interrupted updates or
+  removals. Install, check, and update take a compiled agent bundle as input.
 
 **Breaking migration:** the former flat commands are removed; there are no
 compatibility aliases. Update scripts and CI to use the groups below. Preview
-commands become `codex-bundle install`, `update`, or `remove` with `--dry-run`.
+commands become `codex agents install`, `update`, or `remove` with `--dry-run`.
 Regenerate compiled marketplace output so its bundle-management wrappers,
 setup skills, and session-start check hooks invoke the new commands; upgrading
 only the CLI leaves previously generated commands incompatible.
@@ -523,14 +524,14 @@ agentforge artifact render <artifact-source-dir> --target <name> --out <out-dir>
 agentforge artifact render <artifact-source-dir> --all-targets --out-base <out-base>
 agentforge artifact validate <artifact-source-dir>
 agentforge targets list
-agentforge codex-bundle compile <agent-source-dir> --package-id <id> --out <bundle-dir>
-agentforge codex-bundle install <compiled-bundle-dir> --scope <user|project> [--project-root <dir>] [--dry-run]
-agentforge codex-bundle check <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
-agentforge codex-bundle update <compiled-bundle-dir> --scope <user|project> [--project-root <dir>] [--dry-run]
-agentforge codex-bundle remove <package-id> --scope <user|project> [--project-root <dir>] [--dry-run]
-agentforge codex-bundle sync --scope <user|project> [--project-root <dir>] [--dry-run]
-agentforge codex-bundle repair update <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
-agentforge codex-bundle repair remove <package-id> --scope <user|project> [--project-root <dir>]
+agentforge codex agents compile <agent-source-dir> --package-id <id> --out <bundle-dir>
+agentforge codex agents install <compiled-bundle-dir> --scope <user|project> [--project-root <dir>] [--dry-run]
+agentforge codex agents check <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
+agentforge codex agents update <compiled-bundle-dir> --scope <user|project> [--project-root <dir>] [--dry-run]
+agentforge codex agents remove <package-id> --scope <user|project> [--project-root <dir>] [--dry-run]
+agentforge codex agents sync --scope <user|project> [--project-root <dir>] [--dry-run]
+agentforge codex agents repair update <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
+agentforge codex agents repair remove <package-id> --scope <user|project> [--project-root <dir>]
 ```
 
 - `marketplace compile` builds every publication when no filter is provided. Repeat
@@ -589,7 +590,7 @@ agentforge codex-bundle repair remove <package-id> --scope <user|project> [--pro
 - `artifact check-install` resolves and builds the same plan without writing. Snapshot
   installs report unexpected files inside their owned root; planned-file
   installs check only their owned paths and ignore unrelated siblings.
-- `codex-bundle install` (including `--dry-run`) and `codex-bundle check` take an
+- `codex agents install` (including `--dry-run`) and `codex agents check` take an
   explicit compiled Codex agent bundle. Use `--dry-run` on bundle `install`,
   `update`, or `remove` to preview the operation without writing; bundle `sync`
   also supports `--dry-run`. User scope resolves under `CODEX_HOME`

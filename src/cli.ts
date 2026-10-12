@@ -65,9 +65,10 @@ const artifactCommands = program
 const marketplaceCommands = program
   .command('marketplace')
   .description('Compile and check marketplaces');
-const codexBundleCommands = program
-  .command('codex-bundle')
-  .description('Compile and manage Codex agent bundles, distinct from leaf agent artifacts');
+const codexCommands = program.command('codex').description('Manage Codex integrations');
+const codexBundleCommands = codexCommands
+  .command('agents')
+  .description('Compile and manage native Codex agents from compiled bundles');
 const codexBundleRepairCommands = codexBundleCommands
   .command('repair')
   .description('Resume interrupted bundle lifecycle operations');

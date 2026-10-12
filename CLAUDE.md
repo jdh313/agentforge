@@ -46,11 +46,11 @@ shell, OS, and global preferences; only narrows or extends here.
   Codex-cli 0.155.1 discovers roles in both `$CODEX_HOME/agents` and a
   repository's `.codex/agents`; explicit project-role selection has fresh
   runtime acceptance (`docs/limitations.md` L-011 and L-012).
-  The compiled Codex agent bundle lifecycle (`codex-bundle install` and its
+  The native Codex agent lifecycle (`codex agents install` and its
   check/update/remove/repair siblings) writes through a symlinked scope
   `config.toml` or `agents/` — the dotfiles-managed case — and refuses every
   other symlink; its lock and journal stay at the real `<root>/.agentforge/`
-  (`docs/codex-agent-bundle-acceptance.md`). `codex-bundle sync` installs or
+  (`docs/codex-agent-bundle-acceptance.md`). `codex agents sync` installs or
   updates every enabled installed plugin's bundle in one command, and bundle
   packages ship a read-only `SessionStart` check hook that warns through
   `systemMessage` when roles are not current.
@@ -143,9 +143,9 @@ src/
   report.ts         — builds the `marketplace compile --report` output (JSON/MD),
                       grouping compiler diagnostics by disposition (what
                       became of the thing) rather than severity
-  cli.ts            — commander groups: artifact, marketplace, codex-bundle,
-                      targets; artifact inferred from canonical filename, or
-                      passed via `--artifact`
+  cli.ts            — commander groups: artifact, marketplace, codex, targets;
+                      codex nests agents; artifact inferred from canonical
+                      filename, or passed via `--artifact`
   targets/
     registry.ts     — the only target enumeration and projection lookup
     index.ts        — assembles target-owned optional marketplace capabilities
@@ -292,7 +292,7 @@ bun run src/cli.ts artifact check-install <source-dir> --target <name> --scope <
 bun run src/cli.ts artifact validate <source-dir>
 bun run src/cli.ts marketplace compile <MARKETPLACE.yaml> --out <dir>
 bun run src/cli.ts marketplace check <MARKETPLACE.yaml> --out <dir>
-bun run src/cli.ts codex-bundle install <bundle-dir> --scope <user|project> --dry-run
+bun run src/cli.ts codex agents install <bundle-dir> --scope <user|project> --dry-run
 # artifact inferred from SKILL.md / AGENT.md / OUTPUT_STYLE.md presence;
 # override with -a, --artifact <skill|agent|output-style>
 ```

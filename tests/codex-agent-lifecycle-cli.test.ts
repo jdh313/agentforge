@@ -57,13 +57,14 @@ describe('Codex agent lifecycle CLI', () => {
       const options = ['--scope', scope, '--project-root', project];
       const destination = scope === 'project' ? join(project, '.codex') : codexHome;
 
-      const missing = runCli(env, 'codex-bundle', 'check', bundle, ...options);
+      const missing = runCli(env, 'codex', 'agents', 'check', bundle, ...options);
       expect(missing.exitCode).toBe(1);
       expect(missing.stdout).toContain('missing:');
       const beforeInstall = snapshotTree(root);
       const installPreview = runCli(
         env,
-        'codex-bundle',
+        'codex',
+        'agents',
         'install',
         bundle,
         ...options,
@@ -72,32 +73,40 @@ describe('Codex agent lifecycle CLI', () => {
       expect(installPreview.exitCode).toBe(0);
       expect(installPreview.stdout).toContain('ready: demo-roles:alpha, demo-roles:beta');
       expect(snapshotTree(root)).toEqual(beforeInstall);
-      expect(runCli(env, 'codex-bundle', 'install', bundle, ...options).exitCode).toBe(0);
+      expect(runCli(env, 'codex', 'agents', 'install', bundle, ...options).exitCode).toBe(0);
       expect(existsSync(join(destination, 'agents/demo-roles/alpha.toml'))).toBe(true);
-      expect(runCli(env, 'codex-bundle', 'check', bundle, ...options).exitCode).toBe(0);
+      expect(runCli(env, 'codex', 'agents', 'check', bundle, ...options).exitCode).toBe(0);
       const beforeUpdate = snapshotTree(root);
-      expect(runCli(env, 'codex-bundle', 'update', '--dry-run', bundle, ...options).exitCode).toBe(
-        0,
-      );
+      expect(
+        runCli(env, 'codex', 'agents', 'update', '--dry-run', bundle, ...options).exitCode,
+      ).toBe(0);
       expect(snapshotTree(root)).toEqual(beforeUpdate);
-      expect(runCli(env, 'codex-bundle', 'update', bundle, ...options).exitCode).toBe(0);
+      expect(runCli(env, 'codex', 'agents', 'update', bundle, ...options).exitCode).toBe(0);
       const beforeRemove = snapshotTree(root);
-      const preview = runCli(env, 'codex-bundle', 'remove', '--dry-run', 'demo-roles', ...options);
+      const preview = runCli(
+        env,
+        'codex',
+        'agents',
+        'remove',
+        '--dry-run',
+        'demo-roles',
+        ...options,
+      );
       expect(preview.exitCode).toBe(0);
       expect(preview.stdout).toContain('remove:');
       expect(snapshotTree(root)).toEqual(beforeRemove);
 
       const lock = '.agentforge/.agentforge-lifecycle.lock';
       createManagedOutputLock(destination, lock, 'another scope mutation\n');
-      expect(runCli(env, 'codex-bundle', 'remove', 'demo-roles', ...options).exitCode).toBe(1);
+      expect(runCli(env, 'codex', 'agents', 'remove', 'demo-roles', ...options).exitCode).toBe(1);
       expect(existsSync(join(destination, 'agents/demo-roles/alpha.toml'))).toBe(true);
       rmSync(join(destination, lock));
 
       rmSync(out, { recursive: true, force: true });
-      expect(runCli(env, 'codex-bundle', 'remove', 'demo-roles', ...options).exitCode).toBe(0);
+      expect(runCli(env, 'codex', 'agents', 'remove', 'demo-roles', ...options).exitCode).toBe(0);
       expect(existsSync(join(destination, 'agents/demo-roles/alpha.toml'))).toBe(false);
       expect(existsSync(join(destination, 'agents/.agentforge/demo-roles.json'))).toBe(false);
-      expect(runCli(env, 'codex-bundle', 'remove', 'demo-roles', ...options).exitCode).toBe(0);
+      expect(runCli(env, 'codex', 'agents', 'remove', 'demo-roles', ...options).exitCode).toBe(0);
     });
   }
 });

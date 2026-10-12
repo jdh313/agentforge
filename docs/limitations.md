@@ -735,10 +735,10 @@ than only here. Two bounds on that coverage, both deliberate:
 
 **Mitigation.** A package that opts into a compiled Codex agent bundle ships
 its agents as native role TOML built from the leaf projection
-(`src/codex-agent-bundle.ts`). `codex-bundle install` and its
+(`src/codex-agent-bundle.ts`). `codex agents install` and its
 check/update/remove/repair siblings install those roles at user
 (`$CODEX_HOME/agents`) or project (`.codex/agents`) scope, and
-`codex-bundle sync` installs or updates the bundle of every enabled installed
+`codex agents sync` installs or updates the bundle of every enabled installed
 plugin in one command (`docs/codex-agent-bundle-acceptance.md`). The roles then
 reach a real config layer, where L-011 and L-012 establish that Codex selects
 them. The trade-off is lifecycle coupling: the roles live outside the plugin, so
@@ -1026,12 +1026,12 @@ bundle both surface it (the bundle as a compile diagnostic). Claude stays silent
 and the marketplace companion bundle (`targets.codex.codex-agent-bundle: true`)
 — `sandbox_mode`, `approval_policy` in the role TOML — for every canonical agent
 that sets either key. The warning is a compile-time diagnostic only:
-`codex-bundle install` and `codex-bundle sync` copy the compiled role without
+`codex agents install` and `codex agents sync` copy the compiled role without
 re-raising it, so whoever installs a bundle sees the fields but not the warning.
 
 **Evidence.** Fresh runtime probe 2026-10-07, codex-cli 0.160.0, isolated
 `CODEX_HOME`, project `.codex/agents` roles installed with
-`codex-bundle install` and selected through `spawn_agent` `agent_type`. Method
+`codex agents install` and selected through `spawn_agent` `agent_type`. Method
 and results are in `docs/codex-agent-bundle-acceptance.md` § Fibery #137
 role-scoped policy runtime acceptance. The child's rollout `turn_context` recorded the
 parent's `sandbox_policy` and `approval_policy` in every run, including when the

@@ -368,7 +368,7 @@ function compileCodexAgentBundleSetupSkill(
 
 const CODEX_AGENT_CHECK_HOOK = 'hooks/agentforge-codex-agents.json';
 const CODEX_AGENT_CHECK_SCRIPT = '.agentforge/check-codex-agents.sh';
-// Two read-only `codex-bundle check` runs, well under Codex's default hook
+// Two read-only `codex agents check` runs, well under Codex's default hook
 // budget (ndr:bm3m2j).
 const CODEX_AGENT_CHECK_TIMEOUT_SECONDS = 10;
 
@@ -453,7 +453,7 @@ bundle_root="$plugin_root/.agentforge/codex-agent-bundle"
 
 # Sets $status to current, missing, or the first token of a refusing result.
 check_scope() {
-  if out=$("$agentforge_bin" codex-bundle check "$bundle_root" "$@" 2>/dev/null); then
+  if out=$("$agentforge_bin" codex agents check "$bundle_root" "$@" 2>/dev/null); then
     status=current
   else
     status=$(printf '%s\\n' "$out" | head -n 1 | cut -d: -f1)
@@ -466,9 +466,9 @@ advise() {
   shift
   extra=$*
   if [ "$status" = missing ]; then
-    fix="run agentforge codex-bundle sync --scope $scope"
+    fix="run agentforge codex agents sync --scope $scope"
   else
-    fix="run agentforge codex-bundle check $bundle_root --scope $scope\${extra:+ $extra} to review"
+    fix="run agentforge codex agents check $bundle_root --scope $scope\${extra:+ $extra} to review"
   fi
   warn "$package_id: agent roles are not current at $scope scope; $fix"
 }
@@ -568,7 +568,7 @@ visible script in a terminal authorized to write it, then rerun \`check\`.
 ## Register every installed plugin at once
 
 When the user asks to set up every installed plugin at once, run
-\`agentforge codex-bundle sync --scope user\` (add \`--dry-run\` to preview). It
+\`agentforge codex agents sync --scope user\` (add \`--dry-run\` to preview). It
 installs or updates the roles of every enabled plugin that ships a Codex agent
 bundle; treat a nonzero result as a failure, as above. The per-plugin script
 above remains available.
@@ -626,13 +626,13 @@ incompatible() {
   exit 69
 }
 if ! command -v "$agentforge_bin" >/dev/null 2>&1; then
-  incompatible codex-bundle "$operation"
+  incompatible codex agents "$operation"
 fi
-if ! "$agentforge_bin" codex-bundle "$operation" --help >/dev/null 2>&1; then
-  incompatible codex-bundle "$operation"
+if ! "$agentforge_bin" codex agents "$operation" --help >/dev/null 2>&1; then
+  incompatible codex agents "$operation"
 fi
-if [ "$operation" != check ] && ! "$agentforge_bin" codex-bundle "$operation" --dry-run --help >/dev/null 2>&1; then
-  incompatible codex-bundle "$operation" --dry-run
+if [ "$operation" != check ] && ! "$agentforge_bin" codex agents "$operation" --dry-run --help >/dev/null 2>&1; then
+  incompatible codex agents "$operation" --dry-run
 fi
 
 script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
@@ -642,11 +642,11 @@ package_id=${quotedPackageId}
 
 if [ "$operation" = remove ]; then
   if [ "$scope" = user ]; then
-    "$agentforge_bin" codex-bundle "$operation" --dry-run "$package_id" --scope user
-    exec "$agentforge_bin" codex-bundle "$operation" "$package_id" --scope user
+    "$agentforge_bin" codex agents "$operation" --dry-run "$package_id" --scope user
+    exec "$agentforge_bin" codex agents "$operation" "$package_id" --scope user
   fi
-  "$agentforge_bin" codex-bundle "$operation" --dry-run "$package_id" --scope project --project-root "$project_root"
-  exec "$agentforge_bin" codex-bundle "$operation" "$package_id" --scope project --project-root "$project_root"
+  "$agentforge_bin" codex agents "$operation" --dry-run "$package_id" --scope project --project-root "$project_root"
+  exec "$agentforge_bin" codex agents "$operation" "$package_id" --scope project --project-root "$project_root"
 fi
 
 if [ ! -f "$bundle_root/agentforge-codex-agent-bundle.json" ]; then
@@ -656,14 +656,14 @@ fi
 
 if [ "$scope" = user ]; then
   if [ "$operation" != check ]; then
-    "$agentforge_bin" codex-bundle "$operation" --dry-run "$bundle_root" --scope user
+    "$agentforge_bin" codex agents "$operation" --dry-run "$bundle_root" --scope user
   fi
-  exec "$agentforge_bin" codex-bundle "$operation" "$bundle_root" --scope user
+  exec "$agentforge_bin" codex agents "$operation" "$bundle_root" --scope user
 fi
 if [ "$operation" != check ]; then
-  "$agentforge_bin" codex-bundle "$operation" --dry-run "$bundle_root" --scope project --project-root "$project_root"
+  "$agentforge_bin" codex agents "$operation" --dry-run "$bundle_root" --scope project --project-root "$project_root"
 fi
-exec "$agentforge_bin" codex-bundle "$operation" "$bundle_root" --scope project --project-root "$project_root"
+exec "$agentforge_bin" codex agents "$operation" "$bundle_root" --scope project --project-root "$project_root"
 `;
 }
 
