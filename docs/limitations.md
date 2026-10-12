@@ -1219,3 +1219,27 @@ are deliberately outside AgentForge's compile/check boundary.
 **Where to look.** `src/package-compiler.ts`, `src/targets/pi-package.ts`,
 `src/check.ts`; `scripts/pi-extension-acceptance.ts` provides isolated executable
 acceptance rather than running extension code during a build.
+
+## L-018 — Pi 1.1.0 does not apply skill-level `allowed-tools`
+
+**Gap.** Pi's skills documentation lists `allowed-tools` as experimental, but
+its installed 1.1.0 skill loader does not apply the field as tool permissions,
+pre-approvals, or command filters. Recognizing a metadata format is not evidence
+of runtime permission enforcement.
+
+**Affects.** Pi skill leaf renders/installations and mixed native packages.
+AgentForge strips both string and array declarations, including Pi-only
+frontmatter overrides, with `claude-only-frontmatter-stripped` (the existing
+legacy diagnostic name). Claude output remains unchanged.
+
+**Evidence.** Installed Pi 1.1.0 `dist/core/skills.js` `loadSkillFromFile` reads
+name, description and `disable-model-invocation`, but does not apply
+`allowed-tools`; inspected 2026-10-12. Decision: ndr:5gv6dg.
+
+**Status.** unsupported in the pinned runtime. Revisit only with verified native
+skill permission semantics. Pi agent-extension tool configuration is separate
+and unchanged. A native destructive-command guard enforces only its implemented
+patterns and is not an automatic replacement for a skill tool policy.
+
+**Where to look.** `src/frontmatter.ts`, `src/capabilities.ts`, `src/targets/pi.ts`,
+`tests/pi-skill-tool-policy.test.ts`.

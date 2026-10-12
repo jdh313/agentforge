@@ -284,7 +284,9 @@ export const projectArtifact = (opts: ArtifactProjectionOptions): ArtifactProjec
     // A key the target translates into a native artifact is not stripped, so it
     // does not belong in a stripped warning. The capability table is asked
     // rather than the answer being restated as a condition here.
-    const claudeOnlyPresent = Object.keys(canonicalFrontmatter).filter(
+    // Include override-only keys: an explicit target override cannot make an
+    // unsupported field operational, and must not disappear without a warning.
+    const claudeOnlyPresent = Object.keys(merged).filter(
       (key) =>
         artifactDef.canonicalKeys.has(key) &&
         !acceptedKeys.has(key) &&

@@ -1,3 +1,26 @@
+# 2.1.0 — local version bump (2026-10-12)
+
+Version bumped locally at the user's request. No release tag or publication has
+been created; public releases remain managed by semantic-release.
+
+### Features
+
+* Allow explicitly selected `PACKAGE.<target>.yaml` definitions for standalone
+  package compilation/checking, with suffix/target matching and unchanged
+  canonical-only marketplace loading.
+
+### Bug Fixes
+
+* Strip skill `allowed-tools` from Pi output with a compatibility warning instead
+  of retaining unenforced metadata or rejecting array declarations. Preserve
+  Claude output and report unsupported override-only fields.
+
+### Verification
+
+* 691 tests passed, one optional native-validator skip; 127 snapshots passed.
+* Typecheck, lint, compiled-binary smoke, and isolated Pi 1.1.0 extension acceptance
+  passed; the actual mixed commit package compiled and checked successfully.
+
 # 2.0.0 — local version bump (2026-10-12)
 
 Version bumped locally at the user's request. No release tag or publication has

@@ -15,7 +15,6 @@ import type { Warning } from '../types.ts';
 const PiOutputFrontmatter = z.looseObject({
   name: z.string().optional(),
   description: z.string(),
-  'allowed-tools': z.string().optional(),
   'disable-model-invocation': z.boolean().optional(),
 });
 

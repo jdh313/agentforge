@@ -28,7 +28,7 @@ import { type CompilationPlan, compileMarketplace, type RootAnchoredOutput } fro
 import {
   type LoadedMarketplace,
   loadMarketplaceDefinition,
-  loadPackageDefinition,
+  loadStandalonePackageDefinition,
 } from './definitions.ts';
 import {
   buildInstallPlan,
@@ -238,7 +238,7 @@ const compileStandalonePackage = async (path: string, target: string): Promise<C
     throw new Error(`unknown target: ${target}. valid: ${TARGET_NAMES.join(', ')}`);
   }
   const adapter = getTarget(target);
-  const loaded = await loadPackageDefinition(resolve(path));
+  const loaded = await loadStandalonePackageDefinition(resolve(path), target);
   return compilePackage(loaded, adapter);
 };
 

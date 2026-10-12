@@ -1,6 +1,6 @@
 {
   "name": "agentforge",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Render canonical AI agent artifacts for multiple harnesses (Claude Code, Codex, OpenCode, Pi)",
   "license": "Apache-2.0",
   "author": "Jacob Hoehler <accts@jdh.onl>",

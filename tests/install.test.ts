@@ -394,7 +394,7 @@ describe('scoped artifact installation', () => {
     );
   });
 
-  test('Pi retains its native explicit-only and allowed-tools fields', () => {
+  test('Pi retains explicit-only invocation but strips allowed-tools with a warning', () => {
     const source = fixtureSkill({ explicitOnly: true });
     const install = buildInstallPlan({
       sourceDir: source,
@@ -408,26 +408,39 @@ describe('scoped artifact installation', () => {
     expect(canonical?.kind).toBe('generated');
     if (canonical?.kind !== 'generated') throw new Error('missing Pi SKILL.md');
     expect(canonical.content).toContain('disable-model-invocation: true');
-    expect(canonical.content).toContain('allowed-tools: Read Bash');
-    expect(install.plan.diagnostics).toEqual([]);
+    expect(canonical.content).not.toContain('allowed-tools:');
+    expect(install.plan.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'claude-only-frontmatter-stripped',
+        message: expect.stringContaining('allowed-tools'),
+      }),
+    ]);
   });
 
-  test('Pi rejects the array form of allowed-tools that its native schema cannot express', () => {
+  test('Pi strips array allowed-tools instead of rejecting the skill installation', () => {
     const source = fixtureSkill();
     writeFileSync(
       join(source, 'SKILL.md'),
       '---\nname: demo\ndescription: Demonstrate installation.\nallowed-tools:\n  - Read\n---\n\n# Demo\n',
     );
 
-    expect(() =>
-      buildInstallPlan({
-        sourceDir: source,
-        target: 'pi',
-        artifact: 'skill',
-        scope: 'project',
-        projectRoot: join(temporaryRoot, 'project'),
+    const install = buildInstallPlan({
+      sourceDir: source,
+      target: 'pi',
+      artifact: 'skill',
+      scope: 'project',
+      projectRoot: join(temporaryRoot, 'project'),
+    });
+    const canonical = install.plan.outputs.find(({ destination }) => destination === 'SKILL.md');
+    expect(canonical?.kind).toBe('generated');
+    if (canonical?.kind !== 'generated') throw new Error('missing Pi SKILL.md');
+    expect(canonical.content).not.toContain('allowed-tools:');
+    expect(install.plan.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'claude-only-frontmatter-stripped',
+        message: expect.stringContaining('allowed-tools'),
       }),
-    ).toThrow();
+    ]);
   });
 
   test('refuses unsupported-scope installation', () => {

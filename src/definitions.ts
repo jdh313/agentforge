@@ -6,7 +6,7 @@ import {
   PackagePayloadPlanError,
   type PackagePayloadPlans,
 } from './package-payload-plan.ts';
-import { TARGET_NAMES } from './types.ts';
+import { TARGET_NAMES, type TargetName as TargetNameT } from './types.ts';
 
 export const PACKAGE_FILENAME = 'PACKAGE.yaml';
 export const MARKETPLACE_FILENAME = 'MARKETPLACE.yaml';
@@ -363,6 +363,35 @@ export const parseMarketplaceDefinition = (source: string, sourceName = MARKETPL
 
 export async function loadPackageDefinition(path: string): Promise<LoadedPackage> {
   requireFilename(path, PACKAGE_FILENAME);
+  return loadPackageSource(path);
+}
+
+/** Explicit standalone loading; marketplace discovery remains canonical-only. */
+export async function loadStandalonePackageDefinition(
+  path: string,
+  target: TargetNameT,
+): Promise<LoadedPackage> {
+  if (!TARGET_NAMES.includes(target)) {
+    throw new DefinitionError(`unknown standalone target "${target}"`, path);
+  }
+  const filename = basename(path);
+  const suffixTarget = TARGET_NAMES.find((name) => filename === `PACKAGE.${name}.yaml`);
+  if (suffixTarget !== undefined && suffixTarget !== target) {
+    throw new DefinitionError(
+      `filename target "${suffixTarget}" does not match standalone target "${target}"`,
+      path,
+    );
+  }
+  if (filename !== PACKAGE_FILENAME && suffixTarget === undefined) {
+    throw new DefinitionError(
+      `expected standalone filename ${PACKAGE_FILENAME} or PACKAGE.${target}.yaml`,
+      path,
+    );
+  }
+  return loadPackageSource(path);
+}
+
+async function loadPackageSource(path: string): Promise<LoadedPackage> {
   const definition = parsePackageDefinition(await readFile(path, 'utf8'), path);
   const root = dirname(resolve(path));
   const artifacts = new Map<string, LoadedArtifact[]>();

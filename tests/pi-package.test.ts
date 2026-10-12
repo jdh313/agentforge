@@ -88,12 +88,13 @@ describe('Pi package compilation library', () => {
     expect(skill.content.trim()).toBe('Inspect [the contract](references/contract.md).');
     expect(skill.data.upstream).toBeUndefined();
     expect(skill.data['mystery-key']).toBeUndefined();
-    expect(skill.data['allowed-tools']).toBe('Read');
+    expect(skill.data['allowed-tools']).toBeUndefined();
     expect(skill.data.context).toBeUndefined();
     const diagnostics = JSON.stringify(plan.diagnostics);
     expect(diagnostics).toContain('unrecognized-frontmatter-key');
     expect(diagnostics).toContain('claude-only-frontmatter-stripped');
     expect(diagnostics).toContain('mystery-key');
+    expect(diagnostics).toContain('allowed-tools');
     expect(diagnostics).not.toContain('upstream');
     expect(diagnostics).not.toContain('claude-only-body-feature');
     expect(readFileSync(join(out, 'skills/inspect/references/contract.md'), 'utf8')).toContain(

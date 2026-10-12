@@ -55,8 +55,10 @@ known keys are `interface.display_name`, `interface.short_description`,
 `interface.icon_small`, `interface.icon_large`, `interface.brand_color`,
 `interface.default_prompt`, `dependencies.tools[]` and
 `policy.allow_implicit_invocation` — so that file is the one place a future
-mapping could land. Pi implements Agent Skills and retains four keys natively:
-`name`, `description`, `allowed-tools` and `disable-model-invocation`. Its
+mapping could land. Pi implements Agent Skills and retains three keys natively:
+`name`, `description` and `disable-model-invocation`. Pi 1.1.0 lists
+`allowed-tools` as experimental in its docs, but its skill loader does not apply
+it; AgentForge strips it with a frontmatter-loss warning. Its
 documented frontmatter has no other field a Claude-only key could land in.
 
 ### Shared by all three harnesses
@@ -72,8 +74,8 @@ documented frontmatter has no other field a Claude-only key could land in.
 
 | Canonical field | Claude | Codex | Pi |
 | --- | --- | --- | --- |
-| `allowed-tools` <br> string \| string[] | **Native** — `allowed-tools` | **No analogue.** No tool allowlist on a Codex skill or in `openai.yaml`; `sandbox_mode` is agent-role only and cannot back a per-tool guarantee (L-002). | **Native** — `allowed-tools`. Pi documents it as experimental. |
-| `disallowed-tools` | **Native** — `disallowed-tools` | **No analogue.** No denylist on any Codex skill surface. | **No analogue.** Pi's tool field is an allowlist only; nothing removes one named tool. |
+| `allowed-tools` <br> string \| string[] | **Native** — `allowed-tools` | **No analogue.** No tool allowlist on a Codex skill or in `openai.yaml`; `sandbox_mode` is agent-role only and cannot back a per-tool guarantee (L-002). | **Not applied in Pi 1.1.0.** Stripped with `claude-only-frontmatter-stripped` (legacy code name); no tool permissions or command filters are enforced by skill metadata. |
+| `disallowed-tools` | **Native** — `disallowed-tools` | **No analogue.** No denylist on any Codex skill surface. | **No analogue on skills.** Pi 1.1.0 applies neither a skill allowlist nor denylist. Agent-extension tool configuration is a separate surface. |
 | `when_to_use` | **Native** — `when_to_use` | **Blocked** → `description`, Codex's only routing field (`interface.short_description` is a UI blurb and does not steer selection). Concatenating into it rewrites the text the author wrote for every target; `targets.codex.description` is the manual route today. | **Blocked** → `description`, Pi's only routing field. Concatenating into it rewrites the text the author wrote for every target; `targets.pi.description` is the manual route today. |
 | `argument-hint` | **Native** — `argument-hint` | **No analogue** on the skill surface. Codex substitutes arguments on its *prompt* surface only, which is a different artifact, not a field a skill can set. | **No analogue.** Pi appends whatever follows `/skill:name` as a user request; no field declares or hints at that text. |
 | `arguments` | **Native** — `arguments` | **No analogue.** Same reason as `argument-hint`: a Codex skill takes no invocation-time argument. | **No analogue.** No named arguments and no substitution: trailing text arrives as one appended request. |

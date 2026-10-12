@@ -552,6 +552,11 @@ pi install --local /tmp/tool-guard
   and scripts and preserve the relative layout their code expects.
 - Mixed packages declare canonical skills using the existing `artifacts`
   patterns; AgentForge projects them for Pi and lists their generated roots.
+  Skill `allowed-tools` is stripped, including Pi-specific overrides, with the
+  existing `claude-only-frontmatter-stripped` warning (a legacy code name).
+  Pi 1.1.0 does not apply that metadata as tool permissions or command filters.
+  Native guards provide only the blocking behavior their handlers implement;
+  they are not an automatic replacement for the skill's tool policy.
 - Compile/check do not execute extensions, lifecycle scripts, or package
   managers. Static checks establish package integrity, not code safety or event
   correctness. Hooks in canonical skill/agent frontmatter are not translated.
@@ -570,6 +575,69 @@ pi install --local /tmp/tool-guard
 See [Pi extension acceptance](docs/pi-extension-acceptance.md) for the pinned
 runtime, exercised behavior, and remaining gaps. Native Pi package support does
 not add a Pi marketplace registry or an AgentForge package-install lifecycle.
+
+### Adjacent target-specific definitions
+
+Standalone `package compile/check` accepts an explicitly supplied `PACKAGE.yaml`
+or `PACKAGE.<registered-target>.yaml`. The suffix **must match `--target`**:
+`PACKAGE.pi.yaml --target pi` is accepted, while `PACKAGE.pi.yaml --target codex`
+is rejected. Names are case-sensitive; arbitrary YAML filenames and unknown
+suffixes are rejected. Recognizing a registered target's suffix does not add
+standalone compilation support for that target; currently only Pi supports it.
+
+An adjacent definition can share source files without changing a canonical
+Claude/Codex definition that declares hooks unsupported by Pi:
+
+```text
+plugins/commit/
+  PACKAGE.yaml                  # Existing Claude/Codex definition, unchanged
+  PACKAGE.pi.yaml               # Explicit standalone Pi definition
+  skills/commit/SKILL.md
+  skills/commit/references/*.md
+  pi/destructive-vcs-guard.ts
+  pi/policy/destructive-vcs-policy.ts
+```
+
+```yaml
+# plugins/commit/PACKAGE.pi.yaml
+schema: agentforge.package/v1
+id: commit-pi
+defaults:
+  name: commit-pi
+  version: 1.0.0
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+targets:
+  pi:
+    native:
+      peerDependencies:
+        '@earendil-works/pi-coding-agent': '*'
+      pi:
+        extensions: ['./pi/destructive-vcs-guard.ts']
+    payloads:
+      include:
+        - source: pi/destructive-vcs-guard.ts
+        - source: pi/policy/destructive-vcs-policy.ts
+```
+
+```sh
+agentforge package compile ./plugins/commit/PACKAGE.pi.yaml --target pi --out /tmp/commit-pi
+agentforge package check ./plugins/commit/PACKAGE.pi.yaml --target pi --out /tmp/commit-pi
+```
+
+Artifacts and payloads resolve relative to the actual definition's containing
+folder; provenance retains its actual path. No adjacent definitions are merged,
+no source tree is copied, and no parent traversal is permitted. Canonical skill
+projection supplies the generated `pi.skills` list and referenced skill resources;
+leave `native.pi.skills` omitted or empty rather than manually listing skills.
+
+Marketplace loading and `loadPackageDefinition(path)` remain **canonical-only**.
+Keep marketplace patterns such as `plugins/*/PACKAGE.yaml`; broader patterns
+that also match `PACKAGE.pi.yaml` still fail canonical filename validation.
+Library callers selecting a standalone definition should use
+`loadStandalonePackageDefinition(path, target)` from `agentforge/definitions`.
+See [decision gf2904](decisions/gf2904-accept-target-suffixed-definitions-only-through-explicit-standalone-loading.md).
 
 ## CLI
 

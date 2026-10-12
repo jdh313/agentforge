@@ -1,0 +1,18 @@
+schema: agentforge.marketplace/v1
+id: adjacent-marketplace
+defaults:
+  name: adjacent-marketplace
+  owner:
+    name: Fixture Author
+packages: [PACKAGE.yaml]
+publications:
+  - id: claude
+    target: claude
+    destination: claude/.claude-plugin/marketplace.json
+    enrollment:
+      mode: all-compatible
+  - id: codex
+    target: codex
+    destination: codex/.agents/plugins/marketplace.json
+    enrollment:
+      mode: all-compatible

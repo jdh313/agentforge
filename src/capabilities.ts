@@ -274,10 +274,10 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
   [
     'pi/skill',
     {
-      supported: ['allowed-tools', 'disable-model-invocation'],
-      unsupported: CLAUDE_TOKENS,
+      supported: ['disable-model-invocation'],
+      unsupported: [...CLAUDE_TOKENS, 'allowed-tools'],
       source:
-        'https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md — Pi implements Agent Skills, natively accepts allowed-tools and disable-model-invocation, and documents no Claude Code body templating. Verified 2026-09-14. `agent-reference` is unsupported because compiled Pi packages register no agent roles, and the Pi `agent` artifact installs only to the user and project agent directories (`src/targets/pi.ts`), so a collaborator named in a skill body is never installed with it.',
+        'https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md — Pi implements Agent Skills and documents allowed-tools as experimental. Installed Pi 1.1.0 dist/core/skills.js loadSkillFromFile reads name, description and disable-model-invocation, but does not apply allowed-tools or enforce its command filters (source inspection, 2026-10-12). AgentForge strips it with a frontmatter-loss warning; accepting a metadata spelling is not permission enforcement. disable-model-invocation is native. Pi documents no Claude Code body templating. `agent-reference` is unsupported because compiled Pi packages register no agent roles, and the Pi `agent` artifact installs only to the user and project agent directories (`src/targets/pi.ts`), so a collaborator named in a skill body is never installed with it.',
     },
   ],
   [

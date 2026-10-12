@@ -1,0 +1,24 @@
+schema: agentforge.package/v1
+id: adjacent-tools
+defaults:
+  name: adjacent-tools
+  version: 1.0.0
+  description: Shared skill and hook package
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+  - type: hook
+    pattern: hooks/hooks.json
+targets:
+  claude:
+    payloads:
+      include:
+        - source: hooks/guard.sh
+  codex:
+    native:
+      interface:
+        displayName: Adjacent Tools
+        category: Developer Tools
+    payloads:
+      include:
+        - source: hooks/guard.sh

@@ -1,0 +1,20 @@
+schema: agentforge.package/v1
+id: adjacent-tools-pi
+defaults:
+  name: adjacent-tools-pi
+  version: 1.0.0
+  description: Shared skill with native Pi extension
+artifacts:
+  - type: skill
+    pattern: skills/*/SKILL.md
+targets:
+  pi:
+    native:
+      peerDependencies:
+        '@earendil-works/pi-coding-agent': '*'
+      pi:
+        extensions: ['./pi/destructive-vcs-guard.ts']
+    payloads:
+      include:
+        - source: pi/destructive-vcs-guard.ts
+        - source: pi/policy/destructive-vcs-policy.ts

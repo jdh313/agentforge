@@ -22,9 +22,9 @@ const ACCEPTANCE: Readonly<
       source: 'Agent Skills description field; Claude and Claude Chat native skill metadata.',
     },
     'allowed-tools': {
-      targets: ['claude', 'pi'],
+      targets: ['claude'],
       source:
-        'Claude Code skills documentation; Pi skills documentation marks allowed-tools experimental.',
+        'Claude Code skills documentation. Pi 1.1.0 documents allowed-tools as experimental, but its core/skills loader does not apply it; strip with a loss warning rather than imply permission enforcement.',
     },
     'disable-model-invocation': {
       targets: ['claude', 'pi'],

@@ -78,11 +78,18 @@ shell, OS, and global preferences; only narrows or extends here.
   no setting, but only when pi starts in the directory holding `.pi/agents`
   (L-015).
 - Standalone native Pi packages compile through `package compile/check --target pi`.
+  Explicit standalone loading accepts `PACKAGE.yaml` or `PACKAGE.<target>.yaml`;
+  a suffix must match `--target`. `loadStandalonePackageDefinition` owns this
+  exception; `loadPackageDefinition` and marketplace loading stay canonical-only
+  (ndr:gf2904). Sources and provenance use the actual definition's directory/path.
   `targets.pi.native.pi.extensions` declares exact output-relative entry points;
   target payloads preserve their code and supporting files. Extension-only
   sources use `artifacts: []` with producing payload declarations; mixed sources
   can project canonical skills. Generated manifests have explicit resource
   lists, and compile/check never execute extensions or install dependencies.
+  Pi 1.1.0 does not apply skill `allowed-tools`; projection strips it with a
+  frontmatter-loss warning, including Pi-only overrides (ndr:5gv6dg, L-018).
+  Native guards and Pi agent-extension tool configuration are separate surfaces.
   Pi package agents, hook translation, and Pi marketplace compilation remain
   unsupported. See `docs/pi-native-extension-plan.md` and
   `docs/pi-extension-acceptance.md` for scope and evidence.

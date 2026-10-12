@@ -111,7 +111,6 @@ description: >-
   Test fixture exercising Claude-only frontmatter and $ARGUMENTS body
   substitution.
 disable-model-invocation: true
-allowed-tools: Bash(git *) Read
 ---
 
 Fix GitHub issue $ARGUMENTS following the project's coding standards.
@@ -125,7 +124,7 @@ Fix GitHub issue $ARGUMENTS following the project's coding standards.
 exports[`render skill claude-rich → pi: warnings 1`] = `
 [
   {
-    "detail": "stripped argument-hint, disallowed-tools",
+    "detail": "stripped argument-hint, allowed-tools, disallowed-tools",
     "kind": "claude-only-frontmatter-stripped",
     "target": "pi",
   },
@@ -248,7 +247,6 @@ exports[`render skill with-overrides → pi: canonical 1`] = `
 name: with-overrides
 description: Test fixture for per-target body and field overrides.
 disable-model-invocation: true
-allowed-tools: Bash(git *)
 ---
 
 Fix issue $ARGUMENTS following the project's coding standards.
@@ -257,6 +255,11 @@ Fix issue $ARGUMENTS following the project's coding standards.
 
 exports[`render skill with-overrides → pi: warnings 1`] = `
 [
+  {
+    "detail": "stripped allowed-tools",
+    "kind": "claude-only-frontmatter-stripped",
+    "target": "pi",
+  },
   {
     "detail": "body uses $ARGUMENTS but no targets.pi.body override",
     "kind": "claude-only-body-feature",
