@@ -1,0 +1,28 @@
+schema: agentforge.package/v1
+id: af-acceptance-native
+defaults:
+  name: af-acceptance-native
+  version: 1.0.0
+  description: Deterministic native Pi acceptance fixture
+artifacts: []
+targets:
+  pi:
+    native:
+      type: module
+      keywords: [pi-package]
+      peerDependencies:
+        '@earendil-works/pi-coding-agent': '*'
+        '@earendil-works/pi-ai': '*'
+      pi:
+        extensions: ['./extensions/guard.js']
+        skills: []
+        prompts: []
+        themes: []
+    payloads:
+      include:
+        - source: pi/extensions/
+          destination: extensions/
+        - source: pi/lib/
+          destination: lib/
+        - source: pi/assets/
+          destination: assets/

@@ -5,6 +5,7 @@
       "src/**",
       "tests/**",
       "scripts/pi-agent-acceptance.ts",
+      "scripts/pi-extension-acceptance.ts",
       "!!tests/fixtures/expected",
       "!!tests/fixtures/definitions/codex-hook-locations/packages/duplicated/hooks/hooks.json",
       "*.json",

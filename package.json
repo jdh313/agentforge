@@ -27,6 +27,7 @@
     "./install": "./src/install.ts",
     "./materializer": "./src/materializer.ts",
     "./marketplace-adapters": "./src/marketplace-adapters.ts",
+    "./package-compiler": "./src/package-compiler.ts",
     "./report": "./src/report.ts",
     "./render": "./src/render.ts"
   },
@@ -36,6 +37,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "acceptance:pi-agents": "bun run scripts/pi-agent-acceptance.ts",
+    "acceptance:pi-extensions": "bun run scripts/pi-extension-acceptance.ts",
     "format": "biome format --write .",
     "build": "bun build --compile src/cli.ts --outfile dist/agentforge",
     "install:bin": "bun run build && ln -sf \"$PWD/dist/agentforge\" ~/.local/bin/agentforge"

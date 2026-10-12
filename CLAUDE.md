@@ -77,6 +77,15 @@ shell, OS, and global preferences; only narrows or extends here.
   collision detector has nothing to arbitrate there. Project agents load with
   no setting, but only when pi starts in the directory holding `.pi/agents`
   (L-015).
+- Standalone native Pi packages compile through `package compile/check --target pi`.
+  `targets.pi.native.pi.extensions` declares exact output-relative entry points;
+  target payloads preserve their code and supporting files. Extension-only
+  sources use `artifacts: []` with producing payload declarations; mixed sources
+  can project canonical skills. Generated manifests have explicit resource
+  lists, and compile/check never execute extensions or install dependencies.
+  Pi package agents, hook translation, and Pi marketplace compilation remain
+  unsupported. See `docs/pi-native-extension-plan.md` and
+  `docs/pi-extension-acceptance.md` for scope and evidence.
 - Releases are automated (semantic-release + per-platform binaries; see
   § Releases).
 
@@ -115,7 +124,9 @@ src/
                       see § Collaborator references.
   deep-merge.ts     — small typed deep-merge (no lodash)
   target-adapter.ts — one target shape: artifact projections, normative scoped
-                      install locations, plus optional marketplace compilation
+                      install locations, optional marketplace and package compilation
+  package-compiler.ts — standalone package plans and source/output overlap guard;
+                      reuses the shared materializer, without a runtime registry
   paths.ts          — `portableRelative` (POSIX-separated relative paths, for
                       values that ship inside documents) and `isContainedPath`
                       (strict containment test); shared by the materializer,
@@ -143,7 +154,7 @@ src/
   report.ts         — builds the `marketplace compile --report` output (JSON/MD),
                       grouping compiler diagnostics by disposition (what
                       became of the thing) rather than severity
-  cli.ts            — commander groups: artifact, marketplace, codex, targets;
+  cli.ts            — commander groups: artifact, marketplace, package, codex, targets;
                       codex nests agents; artifact inferred from canonical
                       filename, or passed via `--artifact`
   targets/
@@ -160,6 +171,8 @@ src/
                       artifacts.agent (`.md` via `nativeDocument`;
                       ~/.pi/agent/agents, .pi/agents; no plugin scope, with
                       the reason in `unsupportedInstallScopeReasons`)
+    pi-package.ts   — native Pi package manifest, payloads, projected skills,
+                      and output-owned static resource validation
     claude-chat.ts  — artifacts.skill (~/Downloads/claude-skills, zipped)
 tests/
   fixtures/         — 5 matrix skills + focused skill fixtures + 3 agents +
@@ -293,6 +306,8 @@ bun run src/cli.ts artifact validate <source-dir>
 bun run src/cli.ts marketplace compile <MARKETPLACE.yaml> --out <dir>
 bun run src/cli.ts marketplace check <MARKETPLACE.yaml> --out <dir>
 bun run src/cli.ts codex agents install <bundle-dir> --scope <user|project> --dry-run
+bun run src/cli.ts package compile <PACKAGE.yaml> --target pi --out <dir>
+bun run src/cli.ts package check <PACKAGE.yaml> --target pi --out <dir>
 # artifact inferred from SKILL.md / AGENT.md / OUTPUT_STYLE.md presence;
 # override with -a, --artifact <skill|agent|output-style>
 ```

@@ -4,7 +4,7 @@ import { dirname, join, parse, resolve } from 'node:path';
 import { Command } from 'commander';
 import matter from 'gray-matter';
 import pkg from '../package.json' with { type: 'json' };
-import { checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
+import { checkCompilationSnapshot, checkMarketplace, type MarketplaceCheckIssue } from './check.ts';
 import {
   buildCodexAgentBundleInstallPlan,
   buildCodexAgentBundleRemovePlan,
@@ -25,7 +25,11 @@ import {
   userCodexHome,
 } from './codex-installed-plugins.ts';
 import { type CompilationPlan, compileMarketplace, type RootAnchoredOutput } from './compiler.ts';
-import { type LoadedMarketplace, loadMarketplaceDefinition } from './definitions.ts';
+import {
+  type LoadedMarketplace,
+  loadMarketplaceDefinition,
+  loadPackageDefinition,
+} from './definitions.ts';
 import {
   buildInstallPlan,
   checkInstallPlan,
@@ -33,12 +37,13 @@ import {
   refusedInstallResult,
 } from './install.ts';
 import { materializeCompilation } from './materializer.ts';
+import { compilePackage, materializePackage } from './package-compiler.ts';
 import { render } from './render.ts';
 import { buildCheckReport, formatFromPath, type ReportFormat, renderReport } from './report.ts';
 import { rootDisplayPath } from './root-manifest.ts';
 import { ARTIFACT_DEFS } from './schema.ts';
 import { ProjectionRefusedError } from './target-adapter.ts';
-import { allTargets } from './targets/index.ts';
+import { allTargets, getTarget } from './targets/index.ts';
 import {
   ARTIFACT_TYPES,
   type ArtifactType,
@@ -65,6 +70,9 @@ const artifactCommands = program
 const marketplaceCommands = program
   .command('marketplace')
   .description('Compile and check marketplaces');
+const packageCommands = program
+  .command('package')
+  .description('Compile and check standalone native packages');
 const codexCommands = program.command('codex').description('Manage Codex integrations');
 const codexBundleCommands = codexCommands
   .command('agents')
@@ -224,6 +232,60 @@ const compileSelectedMarketplace = (
     redactions: loaded.definition.redactions ?? [],
   };
 };
+
+const compileStandalonePackage = async (path: string, target: string): Promise<CompilationPlan> => {
+  if (!isTargetName(target)) {
+    throw new Error(`unknown target: ${target}. valid: ${TARGET_NAMES.join(', ')}`);
+  }
+  const adapter = getTarget(target);
+  const loaded = await loadPackageDefinition(resolve(path));
+  return compilePackage(loaded, adapter);
+};
+
+packageCommands
+  .command('compile <package>')
+  .description('Compile a package definition into a complete owned output snapshot')
+  .requiredOption('-t, --target <name>', 'target with standalone package compilation support')
+  .requiredOption('-o, --out <dir>', 'owned package output directory (must not overlap source)')
+  .action(async (path: string, opts: { target: string; out: string }) => {
+    try {
+      const plan = await compileStandalonePackage(path, opts.target);
+      materializePackage(plan, resolve(opts.out));
+      console.log(formatCompilation(plan));
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  });
+
+packageCommands
+  .command('check <package>')
+  .description(
+    'Check a compiled package and its native resources without writing or executing code',
+  )
+  .requiredOption('-t, --target <name>', 'target with standalone package compilation support')
+  .requiredOption('-o, --out <dir>', 'compiled package output directory')
+  .option('--json', 'emit the result as a JSON document on stdout instead of human lines')
+  .action(async (path: string, opts: { target: string; out: string; json?: boolean }) => {
+    try {
+      const plan = await compileStandalonePackage(path, opts.target);
+      const outputRoot = resolve(opts.out);
+      const result = checkCompilationSnapshot(plan, outputRoot);
+      if (opts.json) {
+        console.log(JSON.stringify(buildCheckReport(plan, result), null, 2));
+      } else {
+        console.log(
+          `${result.issues.length === 0 ? 'ok' : 'failed'}: ${result.filesChecked.length} managed files at ${outputRoot}`,
+        );
+        for (const line of formatCompilationDiagnostics(plan)) console.log(line);
+        for (const issue of result.issues) console.error(formatCheckIssue(issue));
+      }
+      if (result.issues.length > 0) process.exitCode = 1;
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  });
 
 marketplaceCommands
   .command('compile <marketplace>')

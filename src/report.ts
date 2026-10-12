@@ -497,11 +497,16 @@ export function buildCheckReport(
     ...plan.rootOutputs.map(({ provenance }) => provenance.publicationId),
   ]);
 
+  // Standalone package paths are not publication-prefixed. Attribute checked
+  // files through plan provenance rather than inferring ownership from names.
+  const publicationByPath = new Map(
+    plan.outputs.map(({ destination, provenance }) => [destination, provenance.publicationId]),
+  );
   const publications = [...publicationIds].toSorted(compareReportStrings).map((id) => ({
     id,
     status: (failed.has(id) ? 'failed' : 'ok') as 'ok' | 'failed',
     filesChecked:
-      result.filesChecked.filter((path) => path.startsWith(`${id}/`)).length +
+      result.filesChecked.filter((path) => publicationByPath.get(path) === id).length +
       result.rootFilesChecked.filter(({ publicationId }) => publicationId === id).length,
   }));
 

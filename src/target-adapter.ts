@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import type { CanonicalAgentBehavior } from './agent-command.ts';
 import type {
+  CompilationPackage,
   PublicationCompilation,
   TargetCompilationResult,
   TargetCompilerAdapter,
@@ -103,6 +104,10 @@ export interface ArtifactConfig {
   reportsTranslationOnlyKeys?: boolean;
 }
 
+export interface PackageCapability {
+  compilePackage(input: CompilationPackage): TargetCompilationResult;
+}
+
 export interface MarketplaceCapability {
   compilePublication(input: PublicationCompilation): TargetCompilationResult;
 }
@@ -119,6 +124,7 @@ export interface TargetAdapter {
   label: string;
   artifacts: Partial<Record<ArtifactType, ArtifactConfig>>;
   marketplace?: MarketplaceCapability;
+  package?: PackageCapability;
 }
 
 interface AgentSkillsTargetOptions {

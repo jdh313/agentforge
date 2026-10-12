@@ -277,7 +277,7 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
       supported: ['allowed-tools', 'disable-model-invocation'],
       unsupported: CLAUDE_TOKENS,
       source:
-        'https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md — Pi implements Agent Skills, natively accepts allowed-tools and disable-model-invocation, and documents no Claude Code body templating. Verified 2026-09-14. `agent-reference` is unsupported because agentforge compiles no Pi package, and the Pi `agent` artifact installs only to the user and project agent directories (`src/targets/pi.ts`), so a collaborator named in a skill body is never installed with it.',
+        'https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/skills.md — Pi implements Agent Skills, natively accepts allowed-tools and disable-model-invocation, and documents no Claude Code body templating. Verified 2026-09-14. `agent-reference` is unsupported because compiled Pi packages register no agent roles, and the Pi `agent` artifact installs only to the user and project agent directories (`src/targets/pi.ts`), so a collaborator named in a skill body is never installed with it.',
     },
   ],
   [
@@ -290,7 +290,7 @@ const CAPABILITIES: ReadonlyMap<string, CapabilityRow> = new Map([
       supported: [],
       unsupported: CLAUDE_TOKENS,
       source:
-        "@gotgenes/pi-subagents 23.2.0 `src/session/prompts.ts buildAgentPrompt` and `src/config/custom-agents.ts loadFromDir` (code read of the installed package, 2026-10-08): the file body is `.trim()`ed and placed in the child system prompt, wrapped in `<agent_instructions>` or appended after the inherited parent prompt. No templating, argument pass, shell injection or tool namespace exists in that path, so `$ARGUMENTS`, `${CLAUDE_*}`, `!` shell and `mcp-tool` names are inert text; the extension was not run against a probe body (Fibery #141). `agent-reference` is unsupported on this repository's own basis, as on `pi/skill`: agentforge compiles no Pi package, so a collaborator a body names is never installed with it.",
+        "@gotgenes/pi-subagents 23.2.0 `src/session/prompts.ts buildAgentPrompt` and `src/config/custom-agents.ts loadFromDir` (code read of the installed package, 2026-10-08): the file body is `.trim()`ed and placed in the child system prompt, wrapped in `<agent_instructions>` or appended after the inherited parent prompt. No templating, argument pass, shell injection or tool namespace exists in that path, so `$ARGUMENTS`, `${CLAUDE_*}`, `!` shell and `mcp-tool` names are inert text; the extension was not run against a probe body (Fibery #141). `agent-reference` is unsupported on this repository's own basis, as on `pi/skill`: compiled Pi packages register no agent roles, so a collaborator a body names is never installed with it.",
     },
   ],
   [

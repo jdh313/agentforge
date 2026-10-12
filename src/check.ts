@@ -27,6 +27,7 @@ export type MarketplaceCheckIssueCode =
   | 'invalid-output-document'
   | 'unsafe-output-content'
   | 'unsafe-output-entry'
+  | 'missing-native-resource'
   // check-install only: a shared install destination (e.g. a plugin
   // skills/ directory) already holds a different target's projection of
   // this source. Reported here rather than thrown, since check-install is
@@ -93,6 +94,7 @@ export function checkMarketplace(
   }
 
   issues.push(...validatePluginPaths(plan, outputRoot));
+  issues.push(...validateNativeResources(plan, outputRoot));
   issues.push(...validateManifestParity(plan, outputRoot));
   issues.push(...validateArtifactFrontmatter(plan, outputRoot));
 
@@ -128,9 +130,9 @@ export function checkCompilationSnapshot(
   const issues: MarketplaceCheckIssue[] = [];
 
   for (const output of plan.outputs) {
-    issues.push(...checkManagedOutput(output, publicationAnchor(outputRoot), plan.redactions));
+    issues.push(...checkManagedOutputInRealRoot(output, outputRoot, plan.redactions));
   }
-  for (const path of listFiles(outputRoot)) {
+  for (const path of listFiles(outputRoot, true)) {
     if (expected.has(path)) continue;
     issues.push({
       code: 'unexpected-output',
@@ -139,6 +141,8 @@ export function checkCompilationSnapshot(
       message: 'file is not managed by the compilation plan',
     });
   }
+  issues.push(...validateManifestParity(plan, outputRoot));
+  issues.push(...validateNativeResources(plan, outputRoot));
   issues.push(...validateArtifactFrontmatter(plan, outputRoot));
   issues.sort(
     (left, right) => compareStrings(left.path, right.path) || compareStrings(left.code, right.code),
@@ -159,6 +163,8 @@ export function checkCompilationOutputs(
   const issues = plan.outputs.flatMap((output) =>
     checkManagedOutputInRealRoot(output, outputRoot, plan.redactions),
   );
+  issues.push(...validateManifestParity(plan, outputRoot));
+  issues.push(...validateNativeResources(plan, outputRoot));
   issues.push(...validateArtifactFrontmatter(plan, outputRoot));
   issues.sort(
     (left, right) => compareStrings(left.path, right.path) || compareStrings(left.code, right.code),
@@ -373,7 +379,7 @@ function validateArtifactFrontmatter(
     }
     const config = getArtifactConfig(output.target, 'skill');
     const actualPath = join(outputRoot, ...output.destination.split('/'));
-    if (!config || !isRegularFile(actualPath)) continue;
+    if (!config || !isContainedRegularFile(outputRoot, output.destination)) continue;
     let frontmatter: unknown;
     try {
       frontmatter = matter(readFileSync(actualPath, 'utf8')).data;
@@ -411,16 +417,10 @@ function validateManifestParity(
 ): MarketplaceCheckIssue[] {
   const issues: MarketplaceCheckIssue[] = [];
   for (const output of plan.outputs) {
-    if (
-      output.kind !== 'generated' ||
-      output.provenance.packageId === undefined ||
-      !output.destination.endsWith('/plugin.json')
-    ) {
-      continue;
-    }
-    const native = nativeDocumentFor(output);
+    if (!isPackageManifest(output)) continue;
+    const native = output.nativeDocument;
     const actualPath = join(outputRoot, ...output.destination.split('/'));
-    if (!native || !isRegularFile(actualPath)) continue;
+    if (!isContainedRegularFile(outputRoot, output.destination)) continue;
     let expectedDocument: unknown;
     let actualDocument: unknown;
     try {
@@ -432,8 +432,8 @@ function validateManifestParity(
     const expected = native.schema.safeParse(expectedDocument);
     const actual = native.schema.safeParse(actualDocument);
     if (!expected.success || !actual.success) continue;
-    const expectedManifest = expected.data as { name?: unknown; version?: unknown };
-    const actualManifest = actual.data as { name?: unknown; version?: unknown };
+    const expectedManifest = native.identity(expected.data);
+    const actualManifest = native.identity(actual.data);
     if (actualManifest.name !== expectedManifest.name) {
       issues.push(
         issueFor(
@@ -451,6 +451,39 @@ function validateManifestParity(
           `plugin manifest version ${JSON.stringify(actualManifest.version)} does not match compiled package version ${JSON.stringify(expectedManifest.version)}`,
         ),
       );
+    }
+  }
+  return issues;
+}
+
+// Native resource policy belongs to the producing target. Pass only real files
+// currently present on disk, relative to the manifest's package root; never
+// substitute planned paths, import modules, or resolve their dependencies.
+function validateNativeResources(
+  plan: CompilationPlan,
+  outputRoot: string,
+): MarketplaceCheckIssue[] {
+  const issues: MarketplaceCheckIssue[] = [];
+  for (const output of plan.outputs) {
+    if (!isPackageManifest(output)) continue;
+    const native = output.nativeDocument;
+    const validateResources = native.validateResources;
+    if (!validateResources || !isContainedRegularFile(outputRoot, output.destination)) continue;
+    const actualPath = join(outputRoot, ...output.destination.split('/'));
+    let document: unknown;
+    try {
+      document = JSON.parse(readFileSync(actualPath, 'utf8'));
+    } catch {
+      continue;
+    }
+    const parsed = native.schema.safeParse(document);
+    if (!parsed.success) continue;
+    const packageRoot = dirname(actualPath);
+    const files = new Set(listFiles(packageRoot));
+    for (const resource of validateResources(parsed.data, files)) {
+      const directory = dirname(output.destination);
+      const path = directory === '.' ? resource.path : `${directory}/${resource.path}`;
+      issues.push(issueFor(output, 'missing-native-resource', resource.message, path));
     }
   }
   return issues;
@@ -667,15 +700,31 @@ function isRegularFile(path: string): boolean {
   return existsSync(path) && lstatSync(path).isFile();
 }
 
-function listFiles(root: string): string[] {
-  if (!existsSync(root)) return [];
+function isContainedRegularFile(root: string, destination: string): boolean {
+  let current = root;
+  const segments = destination.split('/');
+  const rootEntry = lstatSync(root, { throwIfNoEntry: false });
+  if (!rootEntry?.isDirectory() || rootEntry.isSymbolicLink()) return false;
+  for (const [index, segment] of segments.entries()) {
+    current = join(current, segment);
+    const entry = lstatSync(current, { throwIfNoEntry: false });
+    if (!entry || entry.isSymbolicLink()) return false;
+    if (index === segments.length - 1) return entry.isFile();
+    if (!entry.isDirectory()) return false;
+  }
+  return false;
+}
+
+function listFiles(root: string, includeIrregular = false): string[] {
+  const rootEntry = lstatSync(root, { throwIfNoEntry: false });
+  if (!rootEntry?.isDirectory() || rootEntry.isSymbolicLink()) return [];
   const files: string[] = [];
   const visit = (directory: string): void => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
       if (entry.isDirectory()) {
         visit(path);
-      } else if (entry.isFile()) {
+      } else if (entry.isFile() || includeIrregular) {
         files.push(relative(root, path).split(sep).join('/'));
       }
     }

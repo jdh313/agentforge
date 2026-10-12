@@ -5,6 +5,7 @@ import type {
   DeclaredLossDefinition,
   LoadedArtifact,
   LoadedMarketplace,
+  LoadedPackage,
   MarketplaceDefinition,
   NativeOverlay,
   PackageDefinition,
@@ -59,6 +60,11 @@ export interface MarketplaceRegistryHandle extends NativeDocumentHandleBase {
 export interface PackageManifestHandle extends NativeDocumentHandleBase {
   role: 'package-manifest';
   identity(document: unknown): { name: string | undefined; version: string | undefined };
+  /** Output-root-relative files, never source paths or filesystem access. */
+  validateResources?(
+    document: unknown,
+    files: ReadonlySet<string>,
+  ): readonly { path: string; message: string }[];
 }
 
 export type NativeDocumentHandle =
@@ -151,6 +157,7 @@ export interface CompilationPackage {
   native: NativeOverlay;
   artifacts: ReadonlyMap<string, readonly LoadedArtifact[]>;
   files: readonly string[];
+  fileModes?: ReadonlyMap<string, number>;
   resources: readonly LoadedArtifact[];
   exemptDocuments: ReadonlySet<string>;
   // Frontmatter keys declared authoring-layer: stripped from every target's
@@ -380,24 +387,37 @@ function resolvePackages(
       );
     }
 
-    return {
-      id: packageId,
-      path: loadedPackage.path,
-      metadata: deepMerge(
-        { ...loadedPackage.definition.defaults },
-        { ...(target.overrides ?? {}) },
-      ) as PackageMetadata,
-      native: target.native ?? {},
-      artifacts: loadedPackage.artifacts,
-      files: loadedPackage.files,
-      resources: loadedPackage.resources,
-      exemptDocuments: loadedPackage.exemptDocuments,
-      authoringKeys: new Set(loadedPackage.definition['authoring-keys'] ?? []),
-      payloads: loadedPackage.payloads[publication.target] ?? [],
-      losses: target.losses ?? [],
-      codexAgentBundle: target['codex-agent-bundle'] === true,
-    };
+    return resolvePackageInput(loadedPackage, publication.target);
   });
+}
+
+export function resolvePackageInput(
+  loaded: LoadedPackage,
+  targetName: TargetName,
+): CompilationPackage {
+  const target = loaded.definition.targets[targetName];
+  if (!target)
+    throw new CompilationError(
+      `package "${loaded.definition.id}" does not declare target "${targetName}"`,
+    );
+  return {
+    id: loaded.definition.id,
+    path: loaded.path,
+    metadata: deepMerge(
+      { ...loaded.definition.defaults },
+      { ...(target.overrides ?? {}) },
+    ) as PackageMetadata,
+    native: target.native ?? {},
+    artifacts: loaded.artifacts,
+    files: loaded.files,
+    fileModes: loaded.fileModes,
+    resources: loaded.resources,
+    exemptDocuments: loaded.exemptDocuments,
+    authoringKeys: new Set(loaded.definition['authoring-keys'] ?? []),
+    payloads: loaded.payloads[targetName] ?? [],
+    losses: target.losses ?? [],
+    codexAgentBundle: target['codex-agent-bundle'] === true,
+  };
 }
 
 function provenanceFor(
@@ -590,7 +610,7 @@ function unsafeDestinationReason(destination: string): string | undefined {
   return undefined;
 }
 
-function destinationCollisionKey(destination: string): string {
+export function destinationCollisionKey(destination: string): string {
   return destination.normalize('NFC').toLowerCase();
 }
 

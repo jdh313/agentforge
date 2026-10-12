@@ -1,0 +1,32 @@
+schema: agentforge.package/v1
+id: tool-guard
+defaults:
+  name: tool-guard
+  version: 1.2.3
+  description: Byte-preserved native extension fixture
+  license: MIT
+artifacts: []
+targets:
+  pi:
+    native:
+      keywords: [pi-package, fixture]
+      peerDependencies:
+        '@earendil-works/pi-coding-agent': '*'
+      dependencies:
+        fixture-dependency: 1.0.0
+      scripts:
+        postinstall: node scripts/lifecycle.js
+      x-fixture:
+        preserved: true
+      pi:
+        extensions: ['./extensions/guard.ts']
+    payloads:
+      include:
+        - source: native/extensions/
+          destination: extensions/
+        - source: native/lib/
+          destination: lib/
+        - source: native/assets/
+          destination: assets/
+        - source: native/scripts/
+          destination: scripts/

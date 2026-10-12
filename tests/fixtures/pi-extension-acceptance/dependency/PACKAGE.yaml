@@ -1,0 +1,22 @@
+schema: agentforge.package/v1
+id: af-acceptance-dependency
+defaults:
+  name: af-acceptance-dependency
+  version: 1.0.0
+  description: Missing then locally provisioned dependency fixture
+artifacts: []
+targets:
+  pi:
+    native:
+      type: module
+      dependencies:
+        af-acceptance-tiny-dependency: '1.0.0'
+      pi:
+        extensions: ['./extensions/dependency.js']
+        skills: []
+        prompts: []
+        themes: []
+    payloads:
+      include:
+        - source: pi/extensions/
+          destination: extensions/

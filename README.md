@@ -294,7 +294,9 @@ targets:
 - `id` is the stable AgentForge identity and cannot be changed by target data.
 - `defaults` is the normalized shared metadata set: `name`, `version`,
   `description`, `author`, `license`, and `keywords`.
-- `artifacts` declares open package-level projection types and patterns. Leaf
+- `artifacts` declares open package-level projection types and patterns. Use an
+  explicit `artifacts: []` for a native-only package with producing payload
+  declarations; metadata-only packages are rejected. Leaf
   `ArtifactType` remains the smaller canonical renderer vocabulary; package-level
   types such as `hook` do not expand it. How a type is projected is the target's
   call: Claude copies `hook` through untouched, while Codex translates it into
@@ -493,6 +495,82 @@ const plan = compileMarketplace(marketplaceResult, [
 - Known native fields are type-checked with open target schemas; unrecognized
   native keys remain available for target evolution.
 
+## Native Pi packages
+
+AgentForge can package **existing Pi-native extension code** and optional
+canonical skills. This is packaging, not translation of Claude/Codex hooks.
+Pi package-contained agents, prompts, themes, and marketplace compilation are
+not supported by this package compiler.
+
+Declare entry points using **output-relative paths** in `targets.pi.native.pi`,
+and ship their code and supporting files through `targets.pi.payloads`:
+
+```yaml
+schema: agentforge.package/v1
+id: tool-guard
+defaults:
+  name: tool-guard
+  version: 1.0.0
+  description: A native Pi tool guard
+artifacts: []
+targets:
+  pi:
+    native:
+      peerDependencies:
+        '@earendil-works/pi-coding-agent': '*'
+      pi:
+        extensions: ['./extensions/tool-guard.ts']
+    payloads:
+      include:
+        - source: pi/extensions/
+          destination: extensions/
+        - source: pi/lib/
+          destination: lib/
+```
+
+The example assumes both source directories contain files; remove unused
+payload declarations. Every declaration must match something.
+
+```sh
+agentforge package compile ./PACKAGE.yaml --target pi --out /tmp/tool-guard
+agentforge package check ./PACKAGE.yaml --target pi --out /tmp/tool-guard
+
+# Separate, explicit activation owned by Pi:
+pi install /tmp/tool-guard
+# From the intended consumer project, for project-local registration:
+pi install --local /tmp/tool-guard
+```
+
+- `package.json` is generated from resolved package metadata and explicit native
+  fields. Its name/version cannot conflict with the resolved metadata, and a
+  supplied payload cannot replace the generated manifest.
+- Exact `.ts`/`.js` entry points and directories containing `index.ts` or
+  `index.js` are supported. Glob/exclusion activation syntax is not supported
+  in this first slice. Resource lists are explicit, avoiding accidental helper
+  activation through conventional discovery.
+- Extension bytes are preserved. Authors must declare helper modules, assets,
+  and scripts and preserve the relative layout their code expects.
+- Mixed packages declare canonical skills using the existing `artifacts`
+  patterns; AgentForge projects them for Pi and lists their generated roots.
+- Compile/check do not execute extensions, lifecycle scripts, or package
+  managers. Static checks establish package integrity, not code safety or event
+  correctness. Hooks in canonical skill/agent frontmatter are not translated.
+- Host-provided Pi modules belong in `peerDependencies`, not `dependencies` or
+  vendored `node_modules`. Other runtime dependencies belong in native
+  `dependencies`; AgentForge does not install or resolve them.
+- Pi loads local packages in place and does not install their dependencies.
+  Provision dependencies separately in a consumer copy when needed. A registered
+  local path is not an immutable installation; rebuilds affect its next load.
+- `--out` is a complete AgentForge-owned snapshot. Source/output overlap is
+  refused. Do not compile into a directory containing unmanaged dependencies
+  or other consumer data.
+- Pi extensions execute with the Pi process's permissions. Review code before
+  installation; project packages remain subject to Pi's project trust rules.
+
+See [Pi extension acceptance](docs/pi-extension-acceptance.md) for the pinned
+runtime, exercised behavior, and remaining gaps. Native Pi package support does
+not add a Pi marketplace registry or an AgentForge package-install lifecycle.
+
 ## CLI
 
 Commands are grouped by the resource they manage:
@@ -500,6 +578,7 @@ Commands are grouped by the resource they manage:
 - `artifact`: `render`, `validate`, `install`, and `check-install` for one
   canonical artifact.
 - `marketplace`: compile publications and check their materialized output.
+- `package`: compile and check one standalone native package (currently Pi).
 - `targets`: list registered targets, supported artifacts, and install scopes.
 - `codex`: `codex agents` manages the native Codex agent lifecycle, including
   compilation, installed-plugin sync, and repair of interrupted updates or
@@ -524,6 +603,8 @@ agentforge artifact render <artifact-source-dir> --target <name> --out <out-dir>
 agentforge artifact render <artifact-source-dir> --all-targets --out-base <out-base>
 agentforge artifact validate <artifact-source-dir>
 agentforge targets list
+agentforge package compile <PACKAGE.yaml> --target pi --out <package-dir>
+agentforge package check <PACKAGE.yaml> --target pi --out <package-dir>
 agentforge codex agents compile <agent-source-dir> --package-id <id> --out <bundle-dir>
 agentforge codex agents install <compiled-bundle-dir> --scope <user|project> [--project-root <dir>] [--dry-run]
 agentforge codex agents check <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]

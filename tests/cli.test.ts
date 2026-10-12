@@ -38,7 +38,7 @@ afterAll(() => {
 });
 
 describe('grouped command contract', () => {
-  test('top-level help exposes exactly the four command groups', () => {
+  test('top-level help exposes exactly the five command groups', () => {
     const result = runCli('--help');
     expect(result.exitCode).toBe(0);
     const commands = result.stdout.split('Commands:')[1];
@@ -46,8 +46,29 @@ describe('grouped command contract', () => {
     const groups = [...commands.matchAll(/^ {2}([\w-]+)/gm)]
       .map((match) => match[1])
       .filter((name) => name !== 'help');
-    expect(groups.toSorted()).toEqual(['artifact', 'codex', 'marketplace', 'targets']);
+    expect(groups.toSorted()).toEqual(['artifact', 'codex', 'marketplace', 'package', 'targets']);
   });
+
+  test('package help exposes only compile and check', () => {
+    const result = runCli('package', '--help');
+    expect(result.exitCode).toBe(0);
+    const commands = result.stdout.split('Commands:')[1];
+    expect(commands).toBeDefined();
+    const operations = [...commands.matchAll(/^ {2}([\w-]+)/gm)]
+      .map((match) => match[1])
+      .filter((name) => name !== 'help');
+    expect(operations.toSorted()).toEqual(['check', 'compile']);
+  });
+
+  for (const operation of ['compile', 'check']) {
+    test(`package ${operation} help requires an explicit target and output`, () => {
+      const result = runCli('package', operation, '--help');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(`Usage: agentforge package ${operation}`);
+      expect(result.stdout).toContain('--target <name>');
+      expect(result.stdout).toContain('--out <dir>');
+    });
+  }
 
   test('codex help exposes only the agents group', () => {
     const result = runCli('codex', '--help');

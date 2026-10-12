@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { lstat, readFile } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { z } from 'zod';
 import {
@@ -141,7 +141,7 @@ export const CanonicalPackage = z
     schema: z.literal('agentforge.package/v1'),
     id: Slug,
     defaults: PackageDefaults,
-    artifacts: z.array(ArtifactPattern).min(1),
+    artifacts: z.array(ArtifactPattern),
     documents: z.array(DocumentClass).min(1).optional(),
     'authoring-keys': z.array(AuthoringKey).min(1).optional(),
     payloads: PayloadDeclaration.optional(),
@@ -150,6 +150,17 @@ export const CanonicalPackage = z
       .refine((targets) => Object.keys(targets).length > 0, 'declare at least one target'),
   })
   .superRefine((definition, context) => {
+    if (
+      definition.artifacts.length === 0 &&
+      !definition.payloads &&
+      !Object.values(definition.targets).some((target) => target?.payloads)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['artifacts'],
+        message: 'empty artifacts requires a producing payload declaration',
+      });
+    }
     reportDuplicates(
       definition.artifacts,
       ({ type, pattern }) => `${type}:${pattern}`,
@@ -279,6 +290,8 @@ export interface LoadedPackage {
   // they are exempt from body scanning.
   exemptDocuments: ReadonlySet<string>;
   payloads: PackagePayloadPlans;
+  /** Source mode facts loaded ahead of pure compilation. */
+  fileModes?: ReadonlyMap<string, number>;
 }
 
 export interface LoadedArtifact {
@@ -373,7 +386,10 @@ export async function loadPackageDefinition(path: string): Promise<LoadedPackage
   }
 
   const resolvedPath = resolve(path);
-  const files = await expandPattern(root, '**/*');
+  const files = await expandPattern(root, '**/*', true);
+  const fileModes = new Map(
+    await Promise.all(files.map(async (file) => [file, (await lstat(file)).mode] as const)),
+  );
   let payloads: PackagePayloadPlans;
   try {
     payloads = normalizePackagePayloads(resolvedPath, definition, files);
@@ -396,7 +412,12 @@ export async function loadPackageDefinition(path: string): Promise<LoadedPackage
   const artifactPaths = new Set([...artifacts.values()].flat().map(({ path: each }) => each));
   const resources = await Promise.all(
     files
-      .filter((file) => !artifactPaths.has(file) && isResourcePath(root, file))
+      .filter(
+        (file) =>
+          !artifactPaths.has(file) &&
+          ((fileModes.get(file) ?? 0) & 0o170000) !== 0o120000 &&
+          isResourcePath(root, file),
+      )
       .map(async (file) => ({ path: file, content: await readFile(file, 'utf8') })),
   );
 
@@ -408,6 +429,7 @@ export async function loadPackageDefinition(path: string): Promise<LoadedPackage
     resources,
     exemptDocuments,
     payloads,
+    fileModes,
   };
 }
 
@@ -480,13 +502,34 @@ function parseDefinition<T>(source: string, sourceName: string, schema: z.ZodTyp
   return result.data;
 }
 
-async function expandPattern(root: string, pattern: string): Promise<string[]> {
+async function expandPattern(
+  root: string,
+  pattern: string,
+  includeSymlinkCandidates = false,
+): Promise<string[]> {
   const glob = new Bun.Glob(pattern);
   const matches: string[] = [];
-  for await (const match of glob.scan({ cwd: root, absolute: true, onlyFiles: true })) {
-    matches.push(resolve(match));
+  for await (const match of glob.scan({ cwd: root, absolute: true, onlyFiles: false })) {
+    const info = await lstat(match);
+    // Only the payload file inventory retains symlinks, so its validator can
+    // refuse them rather than disguise them as a no-match. Artifact/document
+    // collection must never read a symlink's target as canonical source.
+    if (info.isFile() || (includeSymlinkCandidates && info.isSymbolicLink())) {
+      if (!includeSymlinkCandidates && (await traversesSymlink(root, match))) continue;
+      matches.push(resolve(match));
+    }
   }
   return matches.toSorted();
+}
+
+async function traversesSymlink(root: string, file: string): Promise<boolean> {
+  let current = resolve(file);
+  const boundary = resolve(root);
+  while (current !== boundary && dirname(current) !== current) {
+    if ((await lstat(current)).isSymbolicLink()) return true;
+    current = dirname(current);
+  }
+  return false;
 }
 
 function requireFilename(path: string, expected: string): void {

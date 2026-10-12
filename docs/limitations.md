@@ -1189,3 +1189,33 @@ bound writes it in the parent's instructions, not in the agent file.
 **Where to look.** `src/targets/pi.ts` — `piAgentDocument.serialize`.
 `src/report.ts` — `DISPOSITION_BY_CODE`. `tests/pi-agent-render.test.ts`.
 `scripts/pi-agent-acceptance.ts` — the `caller-override` row.
+
+## L-017 — Native Pi package checks do not establish extension behavior or dependency completeness
+
+**Gap.** AgentForge validates declared Pi resources and package integrity but
+neither resolves arbitrary extension imports nor executes supplied code. A
+successful static check cannot establish that an extension loads, runs its
+handlers correctly, or enforces the author's intended policy.
+
+**Manifests as.** A package can pass `package check --target pi` while a missing
+third-party dependency or an exception prevents the extension from loading in
+Pi. Hooks remain native extension code; no Claude/Codex event mapping or blocking
+semantics are implied by packaging them.
+
+**Affects.** Standalone Pi extension-only and mixed skill/extension packages.
+Local Pi packages are loaded in place without dependency installation. Authors
+must supply all supporting files and provision third-party runtime dependencies
+in the consumer environment. Host-provided Pi modules must not be vendored.
+
+**Evidence.** Pi 1.1.0 package/extension documentation checked 2026-10-12 states
+that local packages are not installed or modified and that extensions execute
+inside Pi with its operating-system permissions. Fresh runtime findings and
+unexercised cases are recorded separately in `docs/pi-extension-acceptance.md`;
+static package checks are not runtime acceptance. Decision: ndr:nt12pb.
+
+**Status.** by-design. Import resolution, dependency installation, and execution
+are deliberately outside AgentForge's compile/check boundary.
+
+**Where to look.** `src/package-compiler.ts`, `src/targets/pi-package.ts`,
+`src/check.ts`; `scripts/pi-extension-acceptance.ts` provides isolated executable
+acceptance rather than running extension code during a build.

@@ -1,4 +1,9 @@
-import type { ArtifactConfig, MarketplaceCapability, TargetAdapter } from '../target-adapter.ts';
+import type {
+  ArtifactConfig,
+  MarketplaceCapability,
+  PackageCapability,
+  TargetAdapter,
+} from '../target-adapter.ts';
 import type { ArtifactType, TargetName } from '../types.ts';
 import { claudeTarget } from './claude.ts';
 import { claudeChatTarget } from './claude-chat.ts';
@@ -20,6 +25,10 @@ const REGISTRY: Record<TargetName, TargetAdapter> = {
 
 export function attachMarketplace(target: TargetName, capability: MarketplaceCapability): void {
   REGISTRY[target].marketplace = capability;
+}
+
+export function attachPackage(target: TargetName, capability: PackageCapability): void {
+  REGISTRY[target].package = capability;
 }
 
 export const getTarget = (name: TargetName): TargetAdapter => REGISTRY[name];
