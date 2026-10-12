@@ -52,25 +52,25 @@ sequence through 1.0.
 bun install
 bun test
 
-bun run src/cli.ts list-targets
-bun run src/cli.ts render tests/fixtures/claude-rich --all-targets --out-base /tmp/agentforge-spike
-bun run src/cli.ts validate tests/fixtures/claude-rich
-bun run src/cli.ts compile tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-marketplace
-bun run src/cli.ts check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-marketplace
-bun run src/cli.ts install tests/fixtures/common-subset --target pi --scope project --project-root /tmp/example-project
-bun run src/cli.ts check-install tests/fixtures/common-subset --target pi --scope project --project-root /tmp/example-project
+bun run src/cli.ts targets list
+bun run src/cli.ts artifact render tests/fixtures/claude-rich --all-targets --out-base /tmp/agentforge-spike
+bun run src/cli.ts artifact validate tests/fixtures/claude-rich
+bun run src/cli.ts marketplace compile tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-marketplace
+bun run src/cli.ts marketplace check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-marketplace
+bun run src/cli.ts artifact install tests/fixtures/common-subset --target pi --scope project --project-root /tmp/example-project
+bun run src/cli.ts artifact check-install tests/fixtures/common-subset --target pi --scope project --project-root /tmp/example-project
 ```
 
 ### Compilation reports
 
-`compile` accepts `--report <path>`, writing one compile's diagnostics to a file
+`marketplace compile` accepts `--report <path>`, writing one compile's diagnostics to a file
 instead of leaving them in terminal scrollback. The format is taken from the
 extension — `.json` for machine consumers, `.md` for reading — and an
 unrecognized extension is an error rather than a guess.
 
 ```sh
-bun run src/cli.ts compile <marketplace> --out /tmp/out --report /tmp/report.md
-bun run src/cli.ts compile <marketplace> --out /tmp/out --report /tmp/report.json
+bun run src/cli.ts marketplace compile <marketplace> --out /tmp/out --report /tmp/report.md
+bun run src/cli.ts marketplace compile <marketplace> --out /tmp/out --report /tmp/report.json
 ```
 
 The report is written to its own path, never under `--out`, so it is not an
@@ -124,7 +124,7 @@ builds `dist/agentforge` and symlinks it into `~/.local/bin/agentforge`:
 
 ```sh
 bun run install:bin
-agentforge list-targets
+agentforge targets list
 ```
 
 Run `bun run build` to compile the binary without installing it. The `dist/`
@@ -495,29 +495,45 @@ const plan = compileMarketplace(marketplaceResult, [
 
 ## CLI
 
-```
-agentforge compile <MARKETPLACE.yaml> --out <out-dir>
-agentforge compile <MARKETPLACE.yaml> --out <out-dir> --publication <id>
-agentforge check <MARKETPLACE.yaml> --out <out-dir>
-agentforge check <MARKETPLACE.yaml> --out <out-dir> --publication <id>
-agentforge check <MARKETPLACE.yaml> --out <out-dir> --claude-native
-agentforge install <artifact-source-dir> --target <name> --scope <user|project|plugin>
-agentforge check-install <artifact-source-dir> --target <name> --scope <user|project|plugin>
-agentforge preview-codex-agent <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
-agentforge install-codex-agent <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
-agentforge check-codex-agent <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
-agentforge preview-codex-agent-update <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
-agentforge update-codex-agent <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
-agentforge preview-codex-agent-remove <package-id> --scope <user|project> [--project-root <dir>]
-agentforge remove-codex-agent <package-id> --scope <user|project> [--project-root <dir>]
-agentforge sync-codex-agents --scope <user|project> [--project-root <dir>] [--dry-run]
-agentforge render <artifact-source-dir> --target <name> --out <out-dir>
-agentforge render <artifact-source-dir> --all-targets --out-base <out-base>
-agentforge validate <artifact-source-dir>
-agentforge list-targets
+Commands are grouped by the resource they manage:
+
+- `artifact`: `render`, `validate`, `install`, and `check-install` for one
+  canonical artifact.
+- `marketplace`: compile publications and check their materialized output.
+- `targets`: list registered targets, supported artifacts, and install scopes.
+- `codex-bundle`: compile and manage native Codex agent bundles, including
+  installed-plugin sync and repair of interrupted updates or removals.
+
+**Breaking migration:** the former flat commands are removed; there are no
+compatibility aliases. Update scripts and CI to use the groups below. Preview
+commands become `codex-bundle install`, `update`, or `remove` with `--dry-run`.
+Regenerate compiled marketplace output so its bundle-management wrappers,
+setup skills, and session-start check hooks invoke the new commands; upgrading
+only the CLI leaves previously generated commands incompatible.
+
+```sh
+agentforge marketplace compile <MARKETPLACE.yaml> --out <out-dir>
+agentforge marketplace compile <MARKETPLACE.yaml> --out <out-dir> --publication <id>
+agentforge marketplace check <MARKETPLACE.yaml> --out <out-dir>
+agentforge marketplace check <MARKETPLACE.yaml> --out <out-dir> --publication <id>
+agentforge marketplace check <MARKETPLACE.yaml> --out <out-dir> --claude-native
+agentforge artifact install <artifact-source-dir> --target <name> --scope <user|project|plugin>
+agentforge artifact check-install <artifact-source-dir> --target <name> --scope <user|project|plugin>
+agentforge artifact render <artifact-source-dir> --target <name> --out <out-dir>
+agentforge artifact render <artifact-source-dir> --all-targets --out-base <out-base>
+agentforge artifact validate <artifact-source-dir>
+agentforge targets list
+agentforge codex-bundle compile <agent-source-dir> --package-id <id> --out <bundle-dir>
+agentforge codex-bundle install <compiled-bundle-dir> --scope <user|project> [--project-root <dir>] [--dry-run]
+agentforge codex-bundle check <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
+agentforge codex-bundle update <compiled-bundle-dir> --scope <user|project> [--project-root <dir>] [--dry-run]
+agentforge codex-bundle remove <package-id> --scope <user|project> [--project-root <dir>] [--dry-run]
+agentforge codex-bundle sync --scope <user|project> [--project-root <dir>] [--dry-run]
+agentforge codex-bundle repair update <compiled-bundle-dir> --scope <user|project> [--project-root <dir>]
+agentforge codex-bundle repair remove <package-id> --scope <user|project> [--project-root <dir>]
 ```
 
-- `compile` builds every publication when no filter is provided. Repeat
+- `marketplace compile` builds every publication when no filter is provided. Repeat
   `--publication <id>` to select a deterministic subset.
 - Each publication is isolated under `<out-dir>/<publication-id>/`, preserving
   its compiled relative destinations without allowing cross-target package
@@ -525,7 +541,7 @@ agentforge list-targets
 - The output directory is a complete snapshot. AgentForge stages every
   generated document and copied artifact before replacing an existing build;
   planning or staging failures leave the prior output intact.
-- `render` follows the same complete-snapshot contract for its `--out`
+- `artifact render` follows the same complete-snapshot contract for its `--out`
   directory. It uses the shared compilation plan and materializer, so stale
   files are removed, executable intent is normalized, unsafe resource symlinks
   are rejected, and a failed rebuild leaves the prior render intact. Bundled
@@ -538,12 +554,12 @@ agentforge list-targets
   files: `<package-dir>/agents/<name>.md` plus declared `references/`,
   `scripts/`, and `assets/` at the package root. User/project agent installs
   remain one-file and warn when their body relies on `${CLAUDE_PLUGIN_ROOT}`.
-- `check` derives the same expected publication plans in memory, validates
+- `marketplace check` derives the same expected publication plans in memory, validates
   registries, plugin manifests, local plugin references, package identity and
   version parity, and projected skill frontmatter, then reports missing,
   changed, permission-drifted, and unexpected managed files without modifying
   the output tree.
-- `check` mirrors repeatable `--publication` selection. Only selected
+- `marketplace check` mirrors repeatable `--publication` selection. Only selected
   `<out-dir>/<publication-id>/` trees are managed; paths outside them are left
   alone. Validation errors and drift exit nonzero, while translation notes and
   warnings remain nonfatal.
@@ -558,7 +574,7 @@ agentforge list-targets
   the issues in their stable path-then-code order, and the compilation
   diagnostics. Read `status` rather than inferring success from an empty
   `issues` array. Exit codes are unchanged.
-- `install` requires an explicit scope. User and project scopes resolve through
+- `artifact install` requires an explicit scope. User and project scopes resolve through
   the selected target; project scope uses the current repository root (or the
   current directory outside a repository) unless `--project-root` is supplied.
   Plugin scope requires `--plugin-root` and is
@@ -570,11 +586,13 @@ agentforge list-targets
   directory. It may replace a regular file at the identity-derived path, but
   refuses symlinks and directories, preserves every sibling, and does not prune
   an old filename after a rename.
-- `check-install` resolves and builds the same plan without writing. Snapshot
+- `artifact check-install` resolves and builds the same plan without writing. Snapshot
   installs report unexpected files inside their owned root; planned-file
   installs check only their owned paths and ignore unrelated siblings.
-- `preview-codex-agent`, `install-codex-agent`, and `check-codex-agent` take an
-  explicit compiled Codex agent bundle. User scope resolves under `CODEX_HOME`
+- `codex-bundle install` (including `--dry-run`) and `codex-bundle check` take an
+  explicit compiled Codex agent bundle. Use `--dry-run` on bundle `install`,
+  `update`, or `remove` to preview the operation without writing; bundle `sync`
+  also supports `--dry-run`. User scope resolves under `CODEX_HOME`
   (or `~/.codex`); project scope resolves under the project root. Each scope
   keeps its own package receipt. New bundles place definitions under
   `agents/<package-id>/<agent-id>.toml`, so packages with the same agent id can
@@ -639,10 +657,10 @@ publications:
   when the definition loads.
 - **Blast radius.** Only that one file is written at the marketplace root.
   AgentForge never stages, prunes, or otherwise manages its siblings, and
-  `check` reports drift or absence of the root copy without treating unrelated
+  `marketplace check` reports drift or absence of the root copy without treating unrelated
   root files as unexpected output.
-- `compile` lists it as `[<publication>] root manifest <root>/<destination>`,
-  and `compile --report` records it under `rootManifests`.
+- `marketplace compile` lists it as `[<publication>] root manifest <root>/<destination>`,
+  and `marketplace compile --report` records it under `rootManifests`.
 
 ## Beta acceptance corpus
 
@@ -656,9 +674,9 @@ declared executable, `0644` otherwise). From a clean AgentForge checkout,
 compile and validate both publications with:
 
 ```sh
-bun run src/cli.ts compile tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-beta
-bun run src/cli.ts check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-beta
-bun run src/cli.ts check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-beta --publication claude --claude-native
+bun run src/cli.ts marketplace compile tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-beta
+bun run src/cli.ts marketplace check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-beta
+bun run src/cli.ts marketplace check tests/fixtures/definitions/cc-marketplace/MARKETPLACE.yaml --out /tmp/agentforge-beta --publication claude --claude-native
 UV_PROJECT_ENVIRONMENT=/tmp/agentforge-cc-marketplace-venv uv run --frozen --project ../cc-marketplace marketplace validate --format codex --manifest /tmp/agentforge-beta/codex/.agents/plugins/marketplace.json --plugins-root /tmp/agentforge-beta/codex/packages
 AGENTFORGE_CC_MARKETPLACE_PROJECT=../cc-marketplace bun test tests/cli.test.ts
 ```

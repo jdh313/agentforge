@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { DISPOSITION_ORDER, dispositionOf } from '../src/report.ts';
 
 // Coverage for the compilation report companion contract (Fibery #31):
-// `agentforge compile --report <path>` renders that compile's diagnostics to
+// `agentforge marketplace compile --report <path>` renders that compile's diagnostics to
 // a file outside the -o publication tree, format inferred from extension.
 // See CONTEXT.md's
 // "compilation report" / "omission" glossary entries; L-007 is
@@ -97,12 +97,20 @@ afterAll(() => {
   }
 });
 
-describe('compile --report', () => {
+describe('marketplace compile --report', () => {
   test('writes a JSON report carrying every diagnostic with retainedSource intact, plus counts by code, severity and disposition', () => {
     const outDir = join(temporaryRoot, 'json-report-out');
     const reportPath = join(temporaryRoot, 'json-report', 'report.json');
 
-    const result = runCli('compile', HOOK_FIXTURE, '--out', outDir, '--report', reportPath);
+    const result = runCli(
+      'marketplace',
+      'compile',
+      HOOK_FIXTURE,
+      '--out',
+      outDir,
+      '--report',
+      reportPath,
+    );
 
     expect(result.exitCode).toBe(0);
     expect(existsSync(reportPath)).toBe(true);
@@ -155,7 +163,15 @@ describe('compile --report', () => {
     const outDir = join(temporaryRoot, 'md-report-out');
     const reportPath = join(temporaryRoot, 'md-report', 'report.md');
 
-    const result = runCli('compile', HOOK_FIXTURE, '--out', outDir, '--report', reportPath);
+    const result = runCli(
+      'marketplace',
+      'compile',
+      HOOK_FIXTURE,
+      '--out',
+      outDir,
+      '--report',
+      reportPath,
+    );
 
     expect(result.exitCode).toBe(0);
     expect(existsSync(reportPath)).toBe(true);
@@ -200,7 +216,7 @@ describe('compile --report', () => {
 
   test('never writes the report anywhere under the -o publication tree', () => {
     const outDir = join(temporaryRoot, 'out-of-tree-out');
-    const baseline = runCli('compile', HOOK_FIXTURE, '--out', outDir);
+    const baseline = runCli('marketplace', 'compile', HOOK_FIXTURE, '--out', outDir);
     expect(baseline.exitCode).toBe(0);
     const baselineFiles = listRelativeFiles(outDir);
 
@@ -209,6 +225,7 @@ describe('compile --report', () => {
     const reportPath = join(temporaryRoot, 'out-of-tree-report', 'report.json');
 
     const result = runCli(
+      'marketplace',
       'compile',
       HOOK_FIXTURE,
       '--out',
@@ -234,6 +251,7 @@ describe('compile --report', () => {
     const mdReportPath = join(temporaryRoot, 'header-report', 'report.md');
 
     const jsonResult = runCli(
+      'marketplace',
       'compile',
       HOOK_FIXTURE,
       '--out',
@@ -242,6 +260,7 @@ describe('compile --report', () => {
       jsonReportPath,
     );
     const mdResult = runCli(
+      'marketplace',
       'compile',
       HOOK_FIXTURE,
       '--out',

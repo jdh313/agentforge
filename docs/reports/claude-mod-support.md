@@ -69,7 +69,7 @@ copied from the default working copy. The brief's PACKAGE.yaml was used plus
         note: The ticket-tracking mod is a Claude Code function-hook module; Codex hooks run shell commands only, so Codex users get the skills and agent without it.
 ```
 
-`AGENTFORGE_PROJECT=~/Projects/agentforge scripts/agentforge.sh compile MARKETPLACE.yaml --out marketplaces`:
+`AGENTFORGE_PROJECT=~/Projects/agentforge scripts/agentforge.sh marketplace compile MARKETPLACE.yaml --out marketplaces`:
 
 ```
 [claude] wrote 245 files
@@ -108,5 +108,5 @@ jdh-agents must add the loss block above.
 3. In jdh-agents `plugins/linear/PACKAGE.yaml`: add `native: {types: ./types/index.d.ts}`
    under `targets.claude`, and add the `hook-module` loss under
    `targets.codex.losses`.
-4. Run `scripts/agentforge.sh compile MARKETPLACE.yaml --out marketplaces`,
-   then `check ... --claude-native`, and commit the regenerated tree.
+4. Run `scripts/agentforge.sh marketplace compile MARKETPLACE.yaml --out marketplaces`,
+   then `marketplace check ... --claude-native`, and commit the regenerated tree.

@@ -23,7 +23,7 @@ bun run acceptance:pi-agents --keep   # keep the throwaway directory
 ```
 
 The script (`scripts/pi-agent-acceptance.ts`) installs the fixtures in
-`tests/fixtures/pi-acceptance/` with `agentforge install --target pi` into a
+`tests/fixtures/pi-acceptance/` with `agentforge artifact install --target pi` into a
 throwaway project and a throwaway `PI_CODING_AGENT_DIR`, then runs seven fresh
 `pi -p --mode json` sessions with the extension loaded through `-e`. It reads
 what the extension reports on each `subagent` tool result (`modelName`, `tags`,
@@ -63,7 +63,7 @@ generated, and what the run observed.
 
 | Control | Documented claim | Generated artifact | Observed |
 | --- | --- | --- | --- |
-| Project discovery | A project agent in `<cwd>/.pi/agents/<name>.md` is available as a `subagent_type`. | `.pi/agents/acc-settings.md` from `install --scope project`. | **Holds.** Found with no settings file in the agent dir and no `--approve`; also found under `--no-approve` (one extra manual run: that flag gates Pi's own project files, not the extension's scan). |
+| Project discovery | A project agent in `<cwd>/.pi/agents/<name>.md` is available as a `subagent_type`. | `.pi/agents/acc-settings.md` from `artifact install --scope project`. | **Holds.** Found with no settings file in the agent dir and no `--approve`; also found under `--no-approve` (one extra manual run: that flag gates Pi's own project files, not the extension's scan). |
 | Delegation | The parent delegates through the `subagent` tool. | The same file. | **Holds.** The parent called `subagent` with `subagent_type: "acc-settings"`; the result was `status completed` and the child's `ACC_SETTINGS_OK`. |
 | `model` | The agent runs on its `model`; the caller may override. | `model: openai/gpt-5.6-terra` (from `targets.pi.model`). | **Holds.** Result details `modelName: openai/gpt-5.6-terra` under a `openai/gpt-6-luna` parent. |
 | `thinking` | The agent runs at its `thinking` level. | `thinking: low` (from `effort: low`). | **Holds.** Result details `tags` include `thinking: low` under a parent at `off`. |
@@ -72,7 +72,7 @@ generated, and what the run observed.
 | `max_turns` of 1 | A limit below 2 is raised to 2 (minimum 2). | `max_turns: 1`. | **As documented; the render still emits 1.** `turnBudget.maxTurns` was 2, and the tool result says `max_turns 1 is below the minimum of 2 ... so the subagent runs with 2`. Already diagnosed by `pi-max-turns-raised` (L-015). |
 | Caller override | A `subagent` call's `model`, `thinking` and `max_turns` win over the agent file unless the file sets `locked`. | `max_turns: 3`, no `locked` key (AgentForge emits none). | **Holds as documented, so the file value is not a bound.** A call passing `max_turns: 5` ran `turnBudget.maxTurns 5` against the file's 3. Diagnosed by `pi-caller-may-override` (L-016). |
 | `resume` | A call with `resume: <Agent ID>` continues the same subagent with its context. | None: a tool parameter, no frontmatter key. | **Holds.** The resumed call kept the same `agentId` and answered `PELICAN-42`; a fresh `acc-memory` call without `resume` did not know it. |
-| User scope | Agents in `$PI_CODING_AGENT_DIR/agents` are available from any directory. | `$PI_CODING_AGENT_DIR/agents/acc-user.md` from `install --scope user`. | **Holds.** Found from a directory with no `.pi/agents`. The default `~/.pi/agent` was not exercised; it is the same `getAgentDir()` call. |
+| User scope | Agents in `$PI_CODING_AGENT_DIR/agents` are available from any directory. | `$PI_CODING_AGENT_DIR/agents/acc-user.md` from `artifact install --scope user`. | **Holds.** Found from a directory with no `.pi/agents`. The default `~/.pi/agent` was not exercised; it is the same `getAgentDir()` call. |
 | Project agents from a subdirectory | Discovery reads `<cwd>/.pi/agents` (the extension does not mention walking up). | `<root>/.pi/agents/acc-settings.md`, as AgentForge's project scope installs at the repository root. | **Does not load, and the failure is a fallback, not an error.** With pi started in `<root>/sub`, the result began `Note: Unknown agent type "acc-settings" — using general-purpose.` and ran a child on the parent model with the default tools and none of the file's controls. Confirms L-015's cwd-only claim and adds the fallback. |
 | Extension absent | Not documented by the extension; core Pi reads no agent files (`README.md` of pi 1.0.2). | `.pi/agents/acc-settings.md` present. | **Holds, with the weaker evidence.** With `--no-extensions` and no `-e`, the parent reported it had no `subagent` tool and made no call; the same prompt shape delegates when the extension is loaded. A file read cannot be observed from outside, so "nothing reads the files" rests on the missing tool plus the core README, not on a trace. |
 

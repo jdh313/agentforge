@@ -155,8 +155,8 @@ a canonical `AGENT.md` alongside its three first-step references, then installed
 into an isolated copy of the Librarian package with:
 
 ```sh
-agentforge install <source> --target claude --scope plugin --plugin-root <package>
-agentforge check-install <source> --target claude --scope plugin --plugin-root <package>
+agentforge artifact install <source> --target claude --scope plugin --plugin-root <package>
+agentforge artifact check-install <source> --target claude --scope plugin --plugin-root <package>
 ```
 
 Install and check both passed with four managed files, and `claude plugin
@@ -178,7 +178,7 @@ literally.
 ### Claude plugin agent effort (2026-10-07)
 
 Two synthetic canonical agents, `probe-low` (`effort: low`) and `probe-max`
-(`effort: max`), were rendered with `agentforge render --target claude` and
+(`effort: max`), were rendered with `agentforge artifact render --target claude` and
 loaded as an inline plugin (`--plugin-dir`) on Claude Code 2.1.292. A headless
 parent ran at `--effort medium` and dispatched each in the foreground. Neither
 `Agent` call passed an `effort` argument.

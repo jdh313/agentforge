@@ -119,9 +119,9 @@ user discovery, delegation, `model` in `provider/id` form, `thinking`, the
 `tools` allowlist, `max_turns` (including the raise from 1 to 2 and caller
 override), and absence of the extension. Every other Pi cell, including each
 loss and the fuzzy-match and background behaviors, rests on source and the
-extension's README, not on a run. `render` writes `<name>.md`; install
-and `check-install` own that one file at user and project scope. The Pi-only
-keys the loader reads (`display_name`, `prompt_mode`, `inherit_context`,
+extension's README, not on a run. `artifact render` writes `<name>.md`;
+`artifact install` and `artifact check-install` own that one file at user and
+project scope. The Pi-only keys the loader reads (`display_name`, `prompt_mode`, `inherit_context`,
 `enabled`, `locked`) have no canonical source and are not emitted.
 
 Claude emits Markdown frontmatter under the same key names its own loader reads.

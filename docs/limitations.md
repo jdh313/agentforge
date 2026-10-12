@@ -735,10 +735,10 @@ than only here. Two bounds on that coverage, both deliberate:
 
 **Mitigation.** A package that opts into a compiled Codex agent bundle ships
 its agents as native role TOML built from the leaf projection
-(`src/codex-agent-bundle.ts`). `install-codex-agent` and its
+(`src/codex-agent-bundle.ts`). `codex-bundle install` and its
 check/update/remove/repair siblings install those roles at user
 (`$CODEX_HOME/agents`) or project (`.codex/agents`) scope, and
-`sync-codex-agents` installs or updates the bundle of every enabled installed
+`codex-bundle sync` installs or updates the bundle of every enabled installed
 plugin in one command (`docs/codex-agent-bundle-acceptance.md`). The roles then
 reach a real config layer, where L-011 and L-012 establish that Codex selects
 them. The trade-off is lifecycle coupling: the roles live outside the plugin, so
@@ -1026,12 +1026,12 @@ bundle both surface it (the bundle as a compile diagnostic). Claude stays silent
 and the marketplace companion bundle (`targets.codex.codex-agent-bundle: true`)
 — `sandbox_mode`, `approval_policy` in the role TOML — for every canonical agent
 that sets either key. The warning is a compile-time diagnostic only:
-`install-codex-agent` and `sync-codex-agents` copy the compiled role without
+`codex-bundle install` and `codex-bundle sync` copy the compiled role without
 re-raising it, so whoever installs a bundle sees the fields but not the warning.
 
 **Evidence.** Fresh runtime probe 2026-10-07, codex-cli 0.160.0, isolated
 `CODEX_HOME`, project `.codex/agents` roles installed with
-`install-codex-agent` and selected through `spawn_agent` `agent_type`. Method
+`codex-bundle install` and selected through `spawn_agent` `agent_type`. Method
 and results are in `docs/codex-agent-bundle-acceptance.md` § Fibery #137
 role-scoped policy runtime acceptance. The child's rollout `turn_context` recorded the
 parent's `sandbox_policy` and `approval_policy` in every run, including when the
@@ -1089,8 +1089,8 @@ why a shared `tools`, a non-empty `disallowedTools`, or a `permissionMode` other
 `bypassPermissions` refuses the Pi render unless `targets.pi.tools` is written
 (ndr:jybfry).
 
-**Affects.** The `pi` target's `agent` artifact (`render`, plus `install` and
-`check-install` at user and project scope only: the extension reads no Pi
+**Affects.** The `pi` target's `agent` artifact (`artifact render`, plus `artifact install` and
+`artifact check-install` at user and project scope only: the extension reads no Pi
 package, so plugin scope is refused with that reason). Every key reported as not
 accepted by Pi in `docs/field-parity.md`.
 
@@ -1099,7 +1099,7 @@ else `~/.pi/agent/agents`, matching the extension's `getAgentDir()`. Project
 scope is narrower than it looks: pi-subagents 23.2.0 reads project agents only
 from `<cwd>/.pi/agents` and never walks up, while agentforge's project scope
 resolves the repository root, so Pi started from a subdirectory does not load
-them and `check-install` still reports `ok`. Pi skills share the same gap.
+them and `artifact check-install` still reports `ok`. Pi skills share the same gap.
 Confirmed at runtime (Fibery #141): started in `<root>/sub`, pi 1.0.2 with the
 extension reports `Unknown agent type "<name>" — using general-purpose` and runs
 a child on the parent model with the default tools and none of the file's
@@ -1162,7 +1162,7 @@ set on a Pi agent, citing this entry. `model` and `thinking` have the same
 property but no diagnostic: Claude's Task tool also accepts a per-call `model`,
 and neither value is a limit on the agent.
 
-**Affects.** Pi `agent` projection (`render`, `install`) for every canonical
+**Affects.** Pi `agent` projection (`artifact render`, `artifact install`) for every canonical
 agent that sets `maxTurns`. The diagnostic is raised by `piAgentDocument.serialize`
 and is compile-time only, like L-014's.
 

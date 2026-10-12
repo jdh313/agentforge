@@ -139,7 +139,7 @@ did not improvise a write.
 
 ## Generated artifact findings
 
-`scripts/agentforge.sh check MARKETPLACE.yaml --out marketplaces --json`
+`scripts/agentforge.sh marketplace check MARKETPLACE.yaml --out marketplaces --json`
 reports `status: ok` with zero issues across both publications, before and
 after the corrections. PM contributes eight diagnostics, all on `codex`, and
 each has a reviewed disposition:

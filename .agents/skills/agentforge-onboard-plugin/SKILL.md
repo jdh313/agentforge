@@ -112,7 +112,7 @@ Validate from a clean, temporary output root:
 
 1. Load and validate the package and marketplace definitions.
 2. Compile every declared publication.
-3. Run `agentforge check` against the materialized output.
+3. Run `agentforge marketplace check` against the materialized output.
 4. Run the installed Claude strict validator for Claude publications when available.
 5. Run the repository's Codex-native marketplace validator when configured.
 6. Compare expected and current native output paths, contents, and normalized modes.

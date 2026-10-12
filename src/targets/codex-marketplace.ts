@@ -368,7 +368,7 @@ function compileCodexAgentBundleSetupSkill(
 
 const CODEX_AGENT_CHECK_HOOK = 'hooks/agentforge-codex-agents.json';
 const CODEX_AGENT_CHECK_SCRIPT = '.agentforge/check-codex-agents.sh';
-// Two read-only `check-codex-agent` runs, well under Codex's default hook
+// Two read-only `codex-bundle check` runs, well under Codex's default hook
 // budget (ndr:bm3m2j).
 const CODEX_AGENT_CHECK_TIMEOUT_SECONDS = 10;
 
@@ -453,7 +453,7 @@ bundle_root="$plugin_root/.agentforge/codex-agent-bundle"
 
 # Sets $status to current, missing, or the first token of a refusing result.
 check_scope() {
-  if out=$("$agentforge_bin" check-codex-agent "$bundle_root" "$@" 2>/dev/null); then
+  if out=$("$agentforge_bin" codex-bundle check "$bundle_root" "$@" 2>/dev/null); then
     status=current
   else
     status=$(printf '%s\\n' "$out" | head -n 1 | cut -d: -f1)
@@ -466,9 +466,9 @@ advise() {
   shift
   extra=$*
   if [ "$status" = missing ]; then
-    fix="run agentforge sync-codex-agents --scope $scope"
+    fix="run agentforge codex-bundle sync --scope $scope"
   else
-    fix="run agentforge check-codex-agent $bundle_root --scope $scope\${extra:+ $extra} to review"
+    fix="run agentforge codex-bundle check $bundle_root --scope $scope\${extra:+ $extra} to review"
   fi
   warn "$package_id: agent roles are not current at $scope scope; $fix"
 }
@@ -550,8 +550,8 @@ sh "$script" remove project '<project-root>'
 
 Run an action only when the user selected it. The script resolves its own
 plugin root and invokes the installed \`agentforge\` command. It checks the
-required subcommand first, including the matching preview before update or
-removal. If a command is missing or incompatible, stop before modifying Codex files and install a release binary from
+required subcommand first, including the matching dry-run preview before installation,
+update, or removal. If a command is missing or incompatible, stop before modifying Codex files and install a release binary from
 \`https://github.com/jdh313/agentforge/releases\` whose \`--help\` lists that
 subcommand. A version number alone is not compatibility evidence.
 
@@ -568,7 +568,7 @@ visible script in a terminal authorized to write it, then rerun \`check\`.
 ## Register every installed plugin at once
 
 When the user asks to set up every installed plugin at once, run
-\`agentforge sync-codex-agents --scope user\` (add \`--dry-run\` to preview). It
+\`agentforge codex-bundle sync --scope user\` (add \`--dry-run\` to preview). It
 installs or updates the roles of every enabled plugin that ships a Codex agent
 bundle; treat a nonzero result as a failure, as above. The per-plugin script
 above remains available.
@@ -605,16 +605,7 @@ scope=\${2:-}
 project_root=\${3:-}
 
 case "$operation" in
-  install) subcommand=install-codex-agent ;;
-  check) subcommand=check-codex-agent ;;
-  update)
-    preview_subcommand=preview-codex-agent-update
-    subcommand=update-codex-agent
-    ;;
-  remove)
-    preview_subcommand=preview-codex-agent-remove
-    subcommand=remove-codex-agent
-    ;;
+  install|check|update|remove) ;;
   *) usage ;;
 esac
 
@@ -630,18 +621,18 @@ esac
 
 agentforge_bin=\${AGENTFORGE_BIN:-agentforge}
 incompatible() {
-  echo "AgentForge is missing or incompatible: expected \\"$agentforge_bin $1 --help\\" to succeed." >&2
-  echo "Install a released AgentForge binary from https://github.com/jdh313/agentforge/releases whose --help lists $1, put it on PATH, then retry." >&2
+  echo "AgentForge is missing or incompatible: expected \\"$agentforge_bin $* --help\\" to succeed." >&2
+  echo "Install a released AgentForge binary from https://github.com/jdh313/agentforge/releases whose --help lists $*, put it on PATH, then retry." >&2
   exit 69
 }
 if ! command -v "$agentforge_bin" >/dev/null 2>&1; then
-  incompatible "$subcommand"
+  incompatible codex-bundle "$operation"
 fi
-if ! "$agentforge_bin" "$subcommand" --help >/dev/null 2>&1; then
-  incompatible "$subcommand"
+if ! "$agentforge_bin" codex-bundle "$operation" --help >/dev/null 2>&1; then
+  incompatible codex-bundle "$operation"
 fi
-if [ -n "\${preview_subcommand:-}" ] && ! "$agentforge_bin" "$preview_subcommand" --help >/dev/null 2>&1; then
-  incompatible "$preview_subcommand"
+if [ "$operation" != check ] && ! "$agentforge_bin" codex-bundle "$operation" --dry-run --help >/dev/null 2>&1; then
+  incompatible codex-bundle "$operation" --dry-run
 fi
 
 script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
@@ -651,11 +642,11 @@ package_id=${quotedPackageId}
 
 if [ "$operation" = remove ]; then
   if [ "$scope" = user ]; then
-    "$agentforge_bin" "$preview_subcommand" "$package_id" --scope user
-    exec "$agentforge_bin" "$subcommand" "$package_id" --scope user
+    "$agentforge_bin" codex-bundle "$operation" --dry-run "$package_id" --scope user
+    exec "$agentforge_bin" codex-bundle "$operation" "$package_id" --scope user
   fi
-  "$agentforge_bin" "$preview_subcommand" "$package_id" --scope project --project-root "$project_root"
-  exec "$agentforge_bin" "$subcommand" "$package_id" --scope project --project-root "$project_root"
+  "$agentforge_bin" codex-bundle "$operation" --dry-run "$package_id" --scope project --project-root "$project_root"
+  exec "$agentforge_bin" codex-bundle "$operation" "$package_id" --scope project --project-root "$project_root"
 fi
 
 if [ ! -f "$bundle_root/agentforge-codex-agent-bundle.json" ]; then
@@ -664,15 +655,15 @@ if [ ! -f "$bundle_root/agentforge-codex-agent-bundle.json" ]; then
 fi
 
 if [ "$scope" = user ]; then
-  if [ "$operation" = update ]; then
-    "$agentforge_bin" "$preview_subcommand" "$bundle_root" --scope user
+  if [ "$operation" != check ]; then
+    "$agentforge_bin" codex-bundle "$operation" --dry-run "$bundle_root" --scope user
   fi
-  exec "$agentforge_bin" "$subcommand" "$bundle_root" --scope user
+  exec "$agentforge_bin" codex-bundle "$operation" "$bundle_root" --scope user
 fi
-if [ "$operation" = update ]; then
-  "$agentforge_bin" "$preview_subcommand" "$bundle_root" --scope project --project-root "$project_root"
+if [ "$operation" != check ]; then
+  "$agentforge_bin" codex-bundle "$operation" --dry-run "$bundle_root" --scope project --project-root "$project_root"
 fi
-exec "$agentforge_bin" "$subcommand" "$bundle_root" --scope project --project-root "$project_root"
+exec "$agentforge_bin" codex-bundle "$operation" "$bundle_root" --scope project --project-root "$project_root"
 `;
 }
 

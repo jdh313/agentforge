@@ -22,6 +22,7 @@ describe('install commands', () => {
     const destination = join(projectRoot, '.pi/skills/demo');
 
     const installed = runCli(
+      'artifact',
       'install',
       source,
       '--target',
@@ -32,6 +33,7 @@ describe('install commands', () => {
       projectRoot,
     );
     const checked = runCli(
+      'artifact',
       'check-install',
       source,
       '--target',
@@ -64,11 +66,11 @@ describe('install commands', () => {
       '--project-root',
       projectRoot,
     ];
-    expect(runCli('install', ...args).exitCode).toBe(0);
+    expect(runCli('artifact', 'install', ...args).exitCode).toBe(0);
     const installedPath = join(projectRoot, '.claude/skills/demo/SKILL.md');
     writeFileSync(installedPath, 'changed\n');
 
-    const checked = runCli('check-install', ...args);
+    const checked = runCli('artifact', 'check-install', ...args);
 
     expect(checked.exitCode).toBe(1);
     expect(checked.stdout).toContain('failed: 2 managed files');
@@ -77,7 +79,7 @@ describe('install commands', () => {
   });
 
   test('requires the installation scope explicitly', () => {
-    const result = runCli('install', fixtureSkill(), '--target', 'pi');
+    const result = runCli('artifact', 'install', fixtureSkill(), '--target', 'pi');
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("required option '-s, --scope <scope>' not specified");
@@ -98,8 +100,8 @@ describe('install commands', () => {
       projectRoot,
     ];
 
-    const installed = runCli('install', ...args);
-    const checked = runCli('check-install', ...args);
+    const installed = runCli('artifact', 'install', ...args);
+    const checked = runCli('artifact', 'check-install', ...args);
 
     expect(installed.exitCode).toBe(0);
     expect(installed.stdout).toContain(`installed 1 files at ${agentsRoot}`);
@@ -131,8 +133,8 @@ describe('install commands', () => {
     writeFileSync(join(pluginRoot, 'keep.txt'), 'keep\n');
     const args = [source, '--target', 'claude', '--scope', 'plugin', '--plugin-root', pluginRoot];
 
-    const installed = runCli('install', ...args);
-    const checked = runCli('check-install', ...args);
+    const installed = runCli('artifact', 'install', ...args);
+    const checked = runCli('artifact', 'check-install', ...args);
 
     expect(installed.exitCode).toBe(0);
     expect(installed.stdout).toContain(`installed 2 files at ${pluginRoot}`);
@@ -164,8 +166,8 @@ describe('install commands', () => {
       '--project-root',
       projectRoot,
     ];
-    const installed = runCli('install', ...args);
-    const checked = runCli('check-install', ...args);
+    const installed = runCli('artifact', 'install', ...args);
+    const checked = runCli('artifact', 'check-install', ...args);
 
     expect(installed.exitCode).toBe(0);
     expect(installed.stdout).toContain(`installed 1 files at ${agentsRoot}`);

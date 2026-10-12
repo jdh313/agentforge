@@ -72,7 +72,7 @@ available and whether the fallback is followed.
 
 ## Generated artifact findings
 
-`agentforge check` reports the Codex publication clean at 212 managed files.
+`agentforge marketplace check` reports the Codex publication clean at 212 managed files.
 For Teach it reports four distinct dispositions:
 
 1. The body retains DEVONthink MCP references without a Codex body override.

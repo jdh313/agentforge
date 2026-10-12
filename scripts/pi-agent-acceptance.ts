@@ -208,6 +208,7 @@ function install(agent: string, scope: 'project' | 'user') {
     [
       'run',
       join(REPO, 'src/cli.ts'),
+      'artifact',
       'install',
       join(FIXTURES, agent),
       '--target',

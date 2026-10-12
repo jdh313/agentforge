@@ -69,7 +69,7 @@ describe('Codex agent bundle SessionStart check hook', () => {
     expect(generated(plan, SCRIPT)).toContain("package_id='demo-roles'");
     expect(manifestHooks(plan)).toBe('./hooks/agentforge-codex-agents.json');
     expect(generated(plan, 'packages/demo/skills/setup-codex-agents/SKILL.md')).toContain(
-      'agentforge sync-codex-agents --scope user',
+      'agentforge codex-bundle sync --scope user',
     );
   });
 
@@ -109,6 +109,7 @@ describe('generated check script behavior', () => {
       [
         '#!/bin/sh',
         'echo "$*" >> "$FAKE_LOG"',
+        '[ "$1" = codex-bundle ] && [ "$2" = check ] || exit 99',
         'case "$*" in',
         '  *"--scope user"*) status=$FAKE_USER ;;',
         '  *) status=$FAKE_PROJECT ;;',
@@ -157,7 +158,7 @@ describe('generated check script behavior', () => {
     const { run } = await setup();
     const result = run({});
     expect(result).toMatchObject({ code: 0, out: '', err: '' });
-    expect(result.log).toContain('check-codex-agent');
+    expect(result.log).toContain('codex-bundle check');
     expect(result.log).toContain('--scope user');
     expect(result.log).not.toContain('--scope project');
   });
@@ -168,7 +169,7 @@ describe('generated check script behavior', () => {
     expect(result.code).toBe(0);
     expect(result.out.trim().split('\n')).toHaveLength(1);
     expect(result.message).toBe(
-      'demo-roles: agent roles are not current at user scope; run agentforge sync-codex-agents --scope user',
+      'demo-roles: agent roles are not current at user scope; run agentforge codex-bundle sync --scope user',
     );
   });
 
@@ -182,7 +183,7 @@ describe('generated check script behavior', () => {
     const result = run({ FAKE_USER: status });
     expect(result.code).toBe(0);
     expect(result.message).toBe(
-      `demo-roles: agent roles are not current at user scope; run agentforge check-codex-agent ${join(realpathSync(plugin), '.agentforge/codex-agent-bundle')} --scope user to review`,
+      `demo-roles: agent roles are not current at user scope; run agentforge codex-bundle check ${join(realpathSync(plugin), '.agentforge/codex-agent-bundle')} --scope user to review`,
     );
   });
 
@@ -216,7 +217,7 @@ describe('generated check script behavior', () => {
     const result = run({ FAKE_USER: 'missing', FAKE_PROJECT: 'missing' });
     expect(result.code).toBe(0);
     expect(result.message).toBe(
-      'demo-roles: agent roles are not current at project scope; run agentforge sync-codex-agents --scope project',
+      'demo-roles: agent roles are not current at project scope; run agentforge codex-bundle sync --scope project',
     );
   });
 
@@ -228,7 +229,7 @@ describe('generated check script behavior', () => {
       { cwd: join(project, 'nested/deeper') },
     );
     expect(result.log).toContain(`--project-root ${realpathSync(project)}`);
-    expect(result.message).toContain('at project scope; run agentforge check-codex-agent');
+    expect(result.message).toContain('at project scope; run agentforge codex-bundle check');
     expect(result.message).toContain(`--project-root ${realpathSync(project)} to review`);
   });
 

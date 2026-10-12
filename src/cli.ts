@@ -54,8 +54,24 @@ const program = new Command();
 program
   .name('agentforge')
   .description('Render canonical AI agent artifacts for multiple harnesses')
-  // release-please bumps package.json; the binary reports the same number.
+  // semantic-release bumps package.json; the binary reports the same number.
   .version(pkg.version);
+
+const artifactCommands = program
+  .command('artifact')
+  .description(
+    'Render, validate, and install canonical leaf artifacts (skills, agents, output styles)',
+  );
+const marketplaceCommands = program
+  .command('marketplace')
+  .description('Compile and check marketplaces');
+const codexBundleCommands = program
+  .command('codex-bundle')
+  .description('Compile and manage Codex agent bundles, distinct from leaf agent artifacts');
+const codexBundleRepairCommands = codexBundleCommands
+  .command('repair')
+  .description('Resume interrupted bundle lifecycle operations');
+const targetCommands = program.command('targets').description('Inspect registered targets');
 
 const formatResult = (target: TargetName, result: RenderResult): string => {
   const lines = [`[${target}] wrote ${result.outputPath}`];
@@ -208,7 +224,7 @@ const compileSelectedMarketplace = (
   };
 };
 
-program
+marketplaceCommands
   .command('compile <marketplace>')
   .description('Compile a marketplace definition into a complete output directory')
   .requiredOption('-o, --out <dir>', 'output directory')
@@ -257,7 +273,7 @@ const reportTarget = (path: string): { path: string; format: ReportFormat } => {
   return { path: resolve(path), format };
 };
 
-program
+marketplaceCommands
   .command('check <marketplace>')
   .description('Validate a compiled marketplace and report output drift without writing')
   .requiredOption('-o, --out <dir>', 'compiled output directory')
@@ -286,8 +302,8 @@ program
 
         // `--json` owns stdout entirely: a consumer parses the whole stream, so
         // one stray human line makes the document unparseable. The native
-        // cross-check below still writes through, because it is a separate
-        // tool's output and suppressing it would hide why the run failed.
+        // cross-check below sends its stdout to stderr in JSON mode so its
+        // diagnostics remain visible without contaminating the document.
         if (opts.json) {
           console.log(JSON.stringify(buildCheckReport(plan, result), null, 2));
         } else {
@@ -328,7 +344,9 @@ program
                 stdout: 'pipe',
                 stderr: 'pipe',
               });
-              if (native.stdout.length > 0) process.stdout.write(native.stdout);
+              if (native.stdout.length > 0) {
+                (opts.json ? process.stderr : process.stdout).write(native.stdout);
+              }
               if (native.stderr.length > 0) process.stderr.write(native.stderr);
               if (native.exitCode !== 0) {
                 failed = true;
@@ -398,6 +416,7 @@ const addInstallOptions = (command: Command): Command =>
 interface CodexBundleInstallOptions {
   scope: string;
   projectRoot?: string;
+  dryRun?: boolean;
 }
 
 const resolveCodexBundleInstall = (bundleRoot: string, opts: CodexBundleInstallOptions) => {
@@ -436,8 +455,8 @@ const printCodexLifecyclePreview = (
   if (preview.status !== 'ready') process.exitCode = 1;
 };
 
-program
-  .command('compile-codex-agent <source-dir>')
+codexBundleCommands
+  .command('compile <source-dir>')
   .description('Compile one canonical agent into a legacy-compatible Codex agent bundle')
   .requiredOption('--package-id <id>', 'stable package identity used to namespace the role')
   .requiredOption('-o, --out <dir>', 'bundle output directory')
@@ -456,35 +475,25 @@ program
     }
   });
 
-program
-  .command('preview-codex-agent <bundle-dir>')
-  .description('Validate a compiled Codex agent bundle and show its destination without writing')
-  .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
-  .option('--project-root <dir>', 'project root used for project-scope installation')
-  .action((bundleDir: string, opts: CodexBundleInstallOptions) => {
-    try {
-      const install = resolveCodexBundleInstall(bundleDir, opts);
-      validateCodexAgentBundleInstallPlan(install);
-      console.log(`ready: ${install.agentNames.join(', ')}`);
-      for (const definition of install.definitionPaths) {
-        console.log(`definition: ${join(install.destinationRoot, definition)}`);
-      }
-      console.log(`receipt: ${join(install.destinationRoot, install.receiptPath)}`);
-      for (const line of describeCodexScopeAnchors(install.anchors)) console.log(line);
-    } catch (error) {
-      console.error(error instanceof Error ? error.message : String(error));
-      process.exitCode = 1;
-    }
-  });
-
-program
-  .command('install-codex-agent <bundle-dir>')
+codexBundleCommands
+  .command('install <bundle-dir>')
   .description('Install one validated compiled Codex agent bundle')
   .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
   .option('--project-root <dir>', 'project root used for project-scope installation')
+  .option('--dry-run', 'validate the bundle and print its destinations without writing')
   .action((bundleDir: string, opts: CodexBundleInstallOptions) => {
     try {
       const install = resolveCodexBundleInstall(bundleDir, opts);
+      if (opts.dryRun) {
+        validateCodexAgentBundleInstallPlan(install);
+        console.log(`ready: ${install.agentNames.join(', ')}`);
+        for (const definition of install.definitionPaths) {
+          console.log(`definition: ${join(install.destinationRoot, definition)}`);
+        }
+        console.log(`receipt: ${join(install.destinationRoot, install.receiptPath)}`);
+        for (const line of describeCodexScopeAnchors(install.anchors)) console.log(line);
+        return;
+      }
       materializeCodexAgentBundleInstallPlan(install);
       console.log(`installed ${install.agentNames.join(', ')} at ${install.destinationRoot}`);
       for (const line of describeCodexScopeAnchors(install.anchors)) console.log(line);
@@ -494,8 +503,8 @@ program
     }
   });
 
-program
-  .command('check-codex-agent <bundle-dir>')
+codexBundleCommands
+  .command('check <bundle-dir>')
   .description('Check one compiled Codex agent bundle installation without writing')
   .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
   .option('--project-root <dir>', 'project root used for project-scope installation')
@@ -519,35 +528,22 @@ program
     }
   });
 
-program
-  .command('preview-codex-agent-update <bundle-dir>')
-  .description('Preview owned Codex agent changes from a compiled bundle')
-  .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
-  .option('--project-root <dir>', 'project root used for project-scope installation')
-  .action((bundleDir: string, opts: CodexBundleInstallOptions) => {
-    try {
-      const plan = buildCodexAgentBundleUpdatePlan({
-        bundleRoot: resolve(bundleDir),
-        ...codexBundleScopeOptions(opts),
-      });
-      printCodexLifecyclePreview(previewCodexAgentBundleLifecyclePlan(plan), plan.anchors);
-    } catch (error) {
-      console.error(error instanceof Error ? error.message : String(error));
-      process.exitCode = 1;
-    }
-  });
-
-program
-  .command('update-codex-agent <bundle-dir>')
+codexBundleCommands
+  .command('update <bundle-dir>')
   .description('Update owned Codex agents from a compiled bundle')
   .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
   .option('--project-root <dir>', 'project root used for project-scope installation')
+  .option('--dry-run', 'preview owned-agent changes without writing')
   .action((bundleDir: string, opts: CodexBundleInstallOptions) => {
     try {
       const plan = buildCodexAgentBundleUpdatePlan({
         bundleRoot: resolve(bundleDir),
         ...codexBundleScopeOptions(opts),
       });
+      if (opts.dryRun) {
+        printCodexLifecyclePreview(previewCodexAgentBundleLifecyclePlan(plan), plan.anchors);
+        return;
+      }
       materializeCodexAgentBundleLifecyclePlan(plan);
       console.log(`updated Codex agents at ${plan.destinationRoot}`);
     } catch (error) {
@@ -556,35 +552,22 @@ program
     }
   });
 
-program
-  .command('preview-codex-agent-remove <package-id>')
-  .description('Preview removal using the installed ownership receipt')
-  .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
-  .option('--project-root <dir>', 'project root used for project-scope installation')
-  .action((packageId: string, opts: CodexBundleInstallOptions) => {
-    try {
-      const plan = buildCodexAgentBundleRemovePlan({
-        packageId,
-        ...codexBundleScopeOptions(opts),
-      });
-      printCodexLifecyclePreview(previewCodexAgentBundleLifecyclePlan(plan), plan.anchors);
-    } catch (error) {
-      console.error(error instanceof Error ? error.message : String(error));
-      process.exitCode = 1;
-    }
-  });
-
-program
-  .command('remove-codex-agent <package-id>')
+codexBundleCommands
+  .command('remove <package-id>')
   .description('Remove owned Codex agents using only the installed receipt')
   .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
   .option('--project-root <dir>', 'project root used for project-scope installation')
+  .option('--dry-run', 'preview removal using the installed receipt without writing')
   .action((packageId: string, opts: CodexBundleInstallOptions) => {
     try {
       const plan = buildCodexAgentBundleRemovePlan({
         packageId,
         ...codexBundleScopeOptions(opts),
       });
+      if (opts.dryRun) {
+        printCodexLifecyclePreview(previewCodexAgentBundleLifecyclePlan(plan), plan.anchors);
+        return;
+      }
       materializeCodexAgentBundleLifecyclePlan(plan);
       console.log(`removed owned Codex agents for ${packageId} at ${plan.destinationRoot}`);
     } catch (error) {
@@ -593,8 +576,8 @@ program
     }
   });
 
-program
-  .command('repair-codex-agent-remove <package-id>')
+codexBundleRepairCommands
+  .command('remove <package-id>')
   .description('Resume interrupted owned-agent removal after inspection')
   .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
   .option('--project-root <dir>', 'project root used for project-scope installation')
@@ -612,8 +595,8 @@ program
     }
   });
 
-program
-  .command('repair-codex-agent-update <bundle-dir>')
+codexBundleRepairCommands
+  .command('update <bundle-dir>')
   .description('Resume an interrupted owned-agent update after inspection')
   .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
   .option('--project-root <dir>', 'project root used for project-scope installation')
@@ -631,8 +614,8 @@ program
     }
   });
 
-program
-  .command('sync-codex-agents')
+codexBundleCommands
+  .command('sync')
   .description('Install or update Codex agent bundles shipped by installed, enabled Codex plugins')
   .requiredOption('-s, --scope <scope>', 'installation scope (user, project)')
   .option('--project-root <dir>', 'project root used for project-scope installation')
@@ -673,7 +656,7 @@ const workingProjectRoot = (start: string): string => {
 };
 
 addInstallOptions(
-  program.command('install <source-dir>').description('Install one canonical artifact'),
+  artifactCommands.command('install <source-dir>').description('Install one canonical artifact'),
 ).action((sourceDir: string, opts: InstallCommandOptions) => {
   try {
     const install = resolveInstallPlan(sourceDir, opts);
@@ -691,7 +674,7 @@ addInstallOptions(
 });
 
 addInstallOptions(
-  program
+  artifactCommands
     .command('check-install <source-dir>')
     .description('Check one installed canonical artifact without writing'),
 ).action((sourceDir: string, opts: InstallCommandOptions) => {
@@ -723,7 +706,7 @@ addInstallOptions(
   }
 });
 
-program
+artifactCommands
   .command('render <source-dir>')
   .description('Render a canonical artifact source directory to one or all targets')
   .option('-t, --target <name>', `target name (${TARGET_NAMES.join(', ')})`)
@@ -735,6 +718,14 @@ program
     `artifact type (${ARTIFACT_TYPES.join(', ')}); inferred if omitted`,
   )
   .action(async (sourceDir: string, opts: Record<string, string | boolean | undefined>) => {
+    if (opts.allTargets && (opts.target !== undefined || opts.out !== undefined)) {
+      console.error('--all-targets cannot be combined with --target or --out');
+      process.exit(1);
+    }
+    if (!opts.allTargets && opts.outBase !== undefined) {
+      console.error('--out-base requires --all-targets');
+      process.exit(1);
+    }
     const src = resolve(sourceDir);
     if (!existsSync(src)) {
       console.error(`source dir not found: ${src}`);
@@ -791,7 +782,7 @@ program
     console.log(formatResult(target, result));
   });
 
-program
+artifactCommands
   .command('validate <source-dir>')
   .description('Validate the canonical artifact file against its schema')
   .option(
@@ -822,8 +813,8 @@ program
     console.log(`ok: ${canonicalFile}`);
   });
 
-program
-  .command('list-targets')
+targetCommands
+  .command('list')
   .description('List registered targets, artifacts, and install scopes')
   .action(() => {
     for (const adapter of allTargets()) {

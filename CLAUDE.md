@@ -38,7 +38,7 @@ shell, OS, and global preferences; only narrows or extends here.
   translation keeps the Markdown-procedure fallback for Codex. Leaf agents
   install with planned-file ownership at Claude user, project, and plugin
   scope, and at Codex and Pi user and project scope (Pi: Fibery #140; a source
-  Pi refuses makes `install` write nothing and `check-install` fail with a
+  Pi refuses makes `artifact install` write nothing and `artifact check-install` fail with a
   `projection-refused` issue, ndr:jybfry). Claude plugin-scope installation
   anchors one planned-file operation at the package root: the agent lands in
   `agents/`, while declared `references/`, `scripts/`, and `assets/` land where
@@ -46,11 +46,11 @@ shell, OS, and global preferences; only narrows or extends here.
   Codex-cli 0.155.1 discovers roles in both `$CODEX_HOME/agents` and a
   repository's `.codex/agents`; explicit project-role selection has fresh
   runtime acceptance (`docs/limitations.md` L-011 and L-012).
-  The compiled Codex agent bundle lifecycle (`install-codex-agent` and its
+  The compiled Codex agent bundle lifecycle (`codex-bundle install` and its
   check/update/remove/repair siblings) writes through a symlinked scope
   `config.toml` or `agents/` — the dotfiles-managed case — and refuses every
   other symlink; its lock and journal stay at the real `<root>/.agentforge/`
-  (`docs/codex-agent-bundle-acceptance.md`). `sync-codex-agents` installs or
+  (`docs/codex-agent-bundle-acceptance.md`). `codex-bundle sync` installs or
   updates every enabled installed plugin's bundle in one command, and bundle
   packages ship a read-only `SessionStart` check hook that warns through
   `systemMessage` when roles are not current.
@@ -63,15 +63,15 @@ shell, OS, and global preferences; only narrows or extends here.
   `targets.pi`; a shared `tools`, a non-empty `disallowedTools`, or any
   `permissionMode` other than `bypassPermissions`, without `targets.pi.tools`,
   refuses the render with `ProjectionRefusedError` (ndr:jybfry), which
-  `render --all-targets` reports as a skip. Runtime acceptance (Fibery #141):
+  `artifact render --all-targets` reports as a skip. Runtime acceptance (Fibery #141):
   `bun run acceptance:pi-agents` re-runs it and its exit code is the verdict;
   results in `docs/pi-agent-acceptance.md`, gaps in L-015 and L-016.
 - Pi agent install (Fibery #140) installs and checks one `<name>.md` per agent
   at user (`~/.pi/agent/agents`) and project (`.pi/agents`) scope, with the
   planned-file ownership Claude and Codex agents use (ndr:hjnabw): siblings are
   untouched and a rename leaves the old file. Plugin scope is refused with the
-  reason the Pi target supplies (the extension reads no Pi package). `install`
-  of a source Pi refuses writes nothing; `check-install` reports it as a
+  reason the Pi target supplies (the extension reads no Pi package). `artifact install`
+  of a source Pi refuses writes nothing; `artifact check-install` reports it as a
   `projection-refused` issue instead of throwing or reporting an earlier file
   current. No other target resolves an agent to a Pi agents directory, so the
   collision detector has nothing to arbitrate there. Project agents load with
@@ -83,7 +83,7 @@ shell, OS, and global preferences; only narrows or extends here.
 ## Stack
 
 - **Runtime/test:** Bun 1.3+ (`bun test`, `bun run src/cli.ts …`).
-- **CLI:** commander 14.
+- **CLI:** commander 15.
 - **Frontmatter:** gray-matter 4 (`matter()`, `matter.stringify()`).
 - **Validation:** zod 4 — `.passthrough()` is deprecated; use
   `z.looseObject({…})` for open shapes.
@@ -140,11 +140,11 @@ src/
                       bytes against the installing target's own plan, then
                       (only on a mismatch) against every other target's
                       projection of the same source, via `targets/registry.ts`
-  report.ts         — builds the `compile --report` output (JSON/MD),
+  report.ts         — builds the `marketplace compile --report` output (JSON/MD),
                       grouping compiler diagnostics by disposition (what
                       became of the thing) rather than severity
-  cli.ts            — commander entry: install, check-install, render, validate;
-                      artifact inferred from canonical filename, or
+  cli.ts            — commander groups: artifact, marketplace, codex-bundle,
+                      targets; artifact inferred from canonical filename, or
                       passed via `--artifact`
   targets/
     registry.ts     — the only target enumeration and projection lookup
@@ -257,8 +257,8 @@ persisted state — at install time for target `T` into `destinationRoot`:
 2. Otherwise, project the same source directory for every *other* target in
    `targets/registry.ts` that supports the artifact, and compare each
    projection's bytes against what is on disk.
-3. A match against another target's projection is a collision: `install`
-   refuses before anything is staged or swapped, and `check-install` reports
+3. A match against another target's projection is a collision: `artifact install`
+   refuses before anything is staged or swapped, and `artifact check-install` reports
    it as a `cross-target-install-collision` diagnostic instead (it is
    read-only, so it never throws).
 4. No match anywhere: an ordinary upgrade of `T`'s own earlier output, and
@@ -284,12 +284,15 @@ bunx biome check .                # lint + format check
 bunx biome check . --write        # auto-fix (re-run tests after)
 bunx tsc --noEmit                 # typecheck only
 
-bun run src/cli.ts list-targets
-bun run src/cli.ts render <source-dir> --target <name> --out <dir>
-bun run src/cli.ts render <source-dir> --all-targets --out-base <dir>
-bun run src/cli.ts install <source-dir> --target <name> --scope <user|project|plugin>
-bun run src/cli.ts check-install <source-dir> --target <name> --scope <user|project|plugin>
-bun run src/cli.ts validate <source-dir>
+bun run src/cli.ts targets list
+bun run src/cli.ts artifact render <source-dir> --target <name> --out <dir>
+bun run src/cli.ts artifact render <source-dir> --all-targets --out-base <dir>
+bun run src/cli.ts artifact install <source-dir> --target <name> --scope <user|project|plugin>
+bun run src/cli.ts artifact check-install <source-dir> --target <name> --scope <user|project|plugin>
+bun run src/cli.ts artifact validate <source-dir>
+bun run src/cli.ts marketplace compile <MARKETPLACE.yaml> --out <dir>
+bun run src/cli.ts marketplace check <MARKETPLACE.yaml> --out <dir>
+bun run src/cli.ts codex-bundle install <bundle-dir> --scope <user|project> --dry-run
 # artifact inferred from SKILL.md / AGENT.md / OUTPUT_STYLE.md presence;
 # override with -a, --artifact <skill|agent|output-style>
 ```
@@ -306,7 +309,7 @@ immediately; still requires `bun` on `$PATH` at runtime):
 ```sh
 bun link            # from the repo root
 # ensure ~/.bun/bin is on $PATH; then:
-agentforge list-targets
+agentforge targets list
 ```
 
 **`bun build --compile`** (standalone binary — no `bun` runtime
@@ -340,7 +343,7 @@ binaries. Pin `vX.Y.Z` + the `SHA256SUMS` entry, never a commit SHA.
   break surfaces before tag time.
 - **Known limitation:** the release commit is pushed with `[skip ci]`, so no CI
   runs on it; `main` was already green, and the build job smoke-tests each
-  binary (`--version`, `list-targets`) before publishing.
+  binary (`--version`, `targets list`) before publishing.
 
 ## Adding a new target
 
@@ -437,13 +440,13 @@ root** — the directory holding `MARKETPLACE.yaml` — beside the usual
   inside `outputs`, so every consumer that assumes "everything is under the
   output root" stays correct and opts into the second anchor deliberately. The
   materializer writes that one file directly (no staging swap, no sibling
-  management — the marketplace root is the user's repo), `check` reports its
+  management — the marketplace root is the user's repo), `marketplace check` reports its
   drift/absence under the publication id with a `<root>/…` path, and
   `--claude-native` validates the marketplace root as a second plugin root.
 
 ## Output content checks
 
-`check` reads every managed output's bytes for the drift comparison already, so
+`marketplace check` reads every managed output's bytes for the drift comparison already, so
 two content gates ride on that same read — covering **copied passthrough
 resources**, not only generated documents:
 
@@ -459,10 +462,10 @@ resources**, not only generated documents:
   Both harnesses parse these at load time, so a file that does not parse is one
   the runtime rejects.
 
-Both are gates on `check`, never on `compile`: compilation stays total, and
+Both are gates on `marketplace check`, never on `marketplace compile`: compilation stays total, and
 whether a tree is publishable is a judgement about a finished tree (ndr:tfee0d).
 A leak that reaches disk under `--out` has not been published; one that survives
-`check` is about to be.
+`marketplace check` is about to be.
 
 Deliberately **not** ported from the repo-local linter these replace: an empty
 or short markdown file, and an allowed-extension list. Neither is a runtime

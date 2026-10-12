@@ -37,11 +37,51 @@ afterAll(() => {
   }
 });
 
-describe('compile command', () => {
+describe('grouped command contract', () => {
+  test('top-level help exposes exactly the four command groups', () => {
+    const result = runCli('--help');
+    expect(result.exitCode).toBe(0);
+    const commands = result.stdout.split('Commands:')[1];
+    expect(commands).toBeDefined();
+    const groups = [...commands.matchAll(/^ {2}([\w-]+)/gm)]
+      .map((match) => match[1])
+      .filter((name) => name !== 'help');
+    expect(groups.toSorted()).toEqual(['artifact', 'codex-bundle', 'marketplace', 'targets']);
+  });
+
+  for (const command of [
+    'render',
+    'validate',
+    'install',
+    'check-install',
+    'compile',
+    'check',
+    'list-targets',
+    'compile-codex-agent',
+    'preview-codex-agent',
+    'install-codex-agent',
+    'check-codex-agent',
+    'update-codex-agent',
+    'remove-codex-agent',
+    'sync-codex-agents',
+    'preview-codex-agent-update',
+    'preview-codex-agent-remove',
+    'repair-codex-agent-update',
+    'repair-codex-agent-remove',
+  ]) {
+    test(`rejects legacy top-level command ${command}`, () => {
+      const result = runCli(command);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(`unknown command '${command}'`);
+    });
+  }
+});
+
+describe('marketplace compile command', () => {
   test('matches the committed payload-fidelity trees byte-for-byte with normalized modes', () => {
     const outDir = join(temporaryRoot, 'payload-fidelity');
 
-    const result = runCli('compile', MARKETPLACE, '--out', outDir);
+    const result = runCli('marketplace', 'compile', MARKETPLACE, '--out', outDir);
 
     expect(result.exitCode).toBe(0);
     expect(
@@ -75,7 +115,7 @@ describe('compile command', () => {
   test('materializes the complete five-package acceptance interface', () => {
     const outDir = join(temporaryRoot, 'acceptance-interface');
 
-    const result = runCli('compile', MARKETPLACE, '--out', outDir);
+    const result = runCli('marketplace', 'compile', MARKETPLACE, '--out', outDir);
 
     expect(result.exitCode).toBe(0);
     expect(listRelativeFiles(outDir)).toEqual([
@@ -128,7 +168,7 @@ describe('compile command', () => {
   test('materializes every publication and summarizes nonfatal diagnostics', () => {
     const outDir = join(temporaryRoot, 'all-publications');
 
-    const result = runCli('compile', MARKETPLACE, '--out', outDir);
+    const result = runCli('marketplace', 'compile', MARKETPLACE, '--out', outDir);
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
@@ -151,7 +191,15 @@ describe('compile command', () => {
   test('materializes only repeatably selected publications', () => {
     const outDir = join(temporaryRoot, 'selected-publication');
 
-    const result = runCli('compile', MARKETPLACE, '--out', outDir, '--publication', 'codex');
+    const result = runCli(
+      'marketplace',
+      'compile',
+      MARKETPLACE,
+      '--out',
+      outDir,
+      '--publication',
+      'codex',
+    );
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toMatch(/^\[codex\] wrote \d+ files\n/);
@@ -163,9 +211,25 @@ describe('compile command', () => {
   test('produces deterministic summaries and output across rebuilds', () => {
     const outDir = join(temporaryRoot, 'deterministic-rebuild');
 
-    const first = runCli('compile', MARKETPLACE, '--out', outDir, '--publication', 'claude');
+    const first = runCli(
+      'marketplace',
+      'compile',
+      MARKETPLACE,
+      '--out',
+      outDir,
+      '--publication',
+      'claude',
+    );
     const firstTree = snapshotOutputTree(join(outDir, 'claude'));
-    const second = runCli('compile', MARKETPLACE, '--out', outDir, '--publication', 'claude');
+    const second = runCli(
+      'marketplace',
+      'compile',
+      MARKETPLACE,
+      '--out',
+      outDir,
+      '--publication',
+      'claude',
+    );
     const secondTree = snapshotOutputTree(join(outDir, 'claude'));
 
     expect(first.exitCode).toBe(0);
@@ -179,7 +243,15 @@ describe('compile command', () => {
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, 'sentinel.txt'), 'keep me\n');
 
-    const result = runCli('compile', MARKETPLACE, '--out', outDir, '--publication', 'missing');
+    const result = runCli(
+      'marketplace',
+      'compile',
+      MARKETPLACE,
+      '--out',
+      outDir,
+      '--publication',
+      'missing',
+    );
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('unknown publication: missing');
@@ -190,6 +262,7 @@ describe('compile command', () => {
     const outDir = join(temporaryRoot, 'duplicate-publication');
 
     const result = runCli(
+      'marketplace',
       'compile',
       MARKETPLACE,
       '--out',
@@ -206,12 +279,12 @@ describe('compile command', () => {
   });
 });
 
-describe('check command', () => {
+describe('marketplace check command', () => {
   test('accepts the payload corpus cleanly and detects intentional sidecar drift', () => {
     const outDir = join(temporaryRoot, 'payload-drift');
-    expect(runCli('compile', MARKETPLACE, '--out', outDir).exitCode).toBe(0);
+    expect(runCli('marketplace', 'compile', MARKETPLACE, '--out', outDir).exitCode).toBe(0);
 
-    const clean = runCli('check', MARKETPLACE, '--out', outDir);
+    const clean = runCli('marketplace', 'check', MARKETPLACE, '--out', outDir);
     expect(clean.exitCode).toBe(0);
 
     const sidecar = join(
@@ -238,7 +311,7 @@ describe('check command', () => {
       );
       chmodSync(script, 0o644);
     }
-    const drifted = runCli('check', MARKETPLACE, '--out', outDir);
+    const drifted = runCli('marketplace', 'check', MARKETPLACE, '--out', outDir);
 
     expect(drifted.exitCode).toBe(1);
     expect(drifted.stderr).toContain(
@@ -253,13 +326,13 @@ describe('check command', () => {
 
   test('accepts clean output and keeps translation diagnostics nonfatal', () => {
     const outDir = join(temporaryRoot, 'clean-check');
-    expect(runCli('compile', MARKETPLACE, '--out', outDir).exitCode).toBe(0);
+    expect(runCli('marketplace', 'compile', MARKETPLACE, '--out', outDir).exitCode).toBe(0);
     const before = readFileSync(
       join(outDir, 'codex', '.agents', 'plugins', 'marketplace.json'),
       'utf8',
     );
 
-    const result = runCli('check', MARKETPLACE, '--out', outDir);
+    const result = runCli('marketplace', 'check', MARKETPLACE, '--out', outDir);
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
@@ -276,14 +349,23 @@ describe('check command', () => {
   test('exits nonzero with actionable drift diagnostics', () => {
     const outDir = join(temporaryRoot, 'drift-check');
     expect(
-      runCli('compile', MARKETPLACE, '--out', outDir, '--publication', 'claude').exitCode,
+      runCli('marketplace', 'compile', MARKETPLACE, '--out', outDir, '--publication', 'claude')
+        .exitCode,
     ).toBe(0);
     writeFileSync(
       join(outDir, 'claude', '.claude-plugin', 'marketplace.json'),
       '{"changed":true}\n',
     );
 
-    const result = runCli('check', MARKETPLACE, '--out', outDir, '--publication', 'claude');
+    const result = runCli(
+      'marketplace',
+      'check',
+      MARKETPLACE,
+      '--out',
+      outDir,
+      '--publication',
+      'claude',
+    );
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain(
@@ -303,10 +385,19 @@ describe('check command', () => {
     writeFileSync(claude, '#!/bin/sh\nprintf "%s\\n" "$@" > "$AGENTFORGE_CLAUDE_ARGS"\n');
     chmodSync(claude, 0o755);
     expect(
-      runCli('compile', MARKETPLACE, '--out', outDir, '--publication', 'claude').exitCode,
+      runCli('marketplace', 'compile', MARKETPLACE, '--out', outDir, '--publication', 'claude')
+        .exitCode,
     ).toBe(0);
 
-    const withoutNative = runCli('check', MARKETPLACE, '--out', outDir, '--publication', 'claude');
+    const withoutNative = runCli(
+      'marketplace',
+      'check',
+      MARKETPLACE,
+      '--out',
+      outDir,
+      '--publication',
+      'claude',
+    );
     expect(withoutNative.exitCode).toBe(0);
     expect(existsSync(argsPath)).toBe(false);
 
@@ -315,6 +406,7 @@ describe('check command', () => {
         PATH: `${binDir}:${process.env.PATH ?? ''}`,
         AGENTFORGE_CLAUDE_ARGS: argsPath,
       },
+      'marketplace',
       'check',
       MARKETPLACE,
       '--out',
@@ -327,13 +419,35 @@ describe('check command', () => {
     expect(readFileSync(argsPath, 'utf8')).toBe(
       `plugin\nvalidate\n--strict\n${join(outDir, 'claude')}\n`,
     );
+
+    writeFileSync(
+      claude,
+      '#!/bin/sh\nprintf "native validation stdout\\n"\nprintf "native validation stderr\\n" >&2\n',
+    );
+    const json = runCliWithEnv(
+      { PATH: `${binDir}:${process.env.PATH ?? ''}` },
+      'marketplace',
+      'check',
+      MARKETPLACE,
+      '--out',
+      outDir,
+      '--publication',
+      'claude',
+      '--claude-native',
+      '--json',
+    );
+    expect(json.exitCode).toBe(0);
+    expect(() => JSON.parse(json.stdout)).not.toThrow();
+    expect(json.stderr).toContain('native validation stdout');
+    expect(json.stderr).toContain('native validation stderr');
   });
 
   if (Bun.which('claude')) {
     test('passes the installed Claude native strict validator', () => {
       const outDir = join(temporaryRoot, 'claude-native-acceptance');
       expect(
-        runCli('compile', MARKETPLACE, '--out', outDir, '--publication', 'claude').exitCode,
+        runCli('marketplace', 'compile', MARKETPLACE, '--out', outDir, '--publication', 'claude')
+          .exitCode,
       ).toBe(0);
 
       const result = Bun.spawnSync({
@@ -354,7 +468,8 @@ describe('check command', () => {
     test('passes the cc-marketplace Codex native validator', () => {
       const outDir = join(temporaryRoot, 'codex-native-acceptance');
       expect(
-        runCli('compile', MARKETPLACE, '--out', outDir, '--publication', 'codex').exitCode,
+        runCli('marketplace', 'compile', MARKETPLACE, '--out', outDir, '--publication', 'codex')
+          .exitCode,
       ).toBe(0);
 
       const result = Bun.spawnSync({
@@ -395,7 +510,7 @@ describe('leaf agent commands', () => {
   const agentSource = join(import.meta.dir, 'fixtures', 'agent-basic');
 
   test('infers AGENT.md during validation', () => {
-    const result = runCli('validate', agentSource);
+    const result = runCli('artifact', 'validate', agentSource);
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
@@ -410,15 +525,36 @@ describe('leaf agent commands', () => {
       '---\ndescription: Missing an explicit identity.\n---\n\n# Agent\n',
     );
 
-    const result = runCli('validate', source);
+    const result = runCli('artifact', 'validate', source);
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('name:');
   });
 
+  for (const conflictingFlags of [
+    ['--target', 'claude', '--all-targets', '--out-base'],
+    ['--target', 'claude', '--out-base'],
+    ['--all-targets', '--out'],
+  ]) {
+    test(`rejects conflicting render flags ${conflictingFlags.join(' ')}`, () => {
+      const out = join(temporaryRoot, `conflicting-render-${conflictingFlags.join('-')}`);
+      const result = runCli('artifact', 'render', agentSource, ...conflictingFlags, out);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).not.toBe('');
+      expect(existsSync(out)).toBe(false);
+    });
+  }
+
   test('renders Claude, Codex and Pi and explicitly skips unsupported targets', () => {
     const outBase = join(temporaryRoot, 'agent-all-targets');
-    const result = runCli('render', agentSource, '--all-targets', '--out-base', outBase);
+    const result = runCli(
+      'artifact',
+      'render',
+      agentSource,
+      '--all-targets',
+      '--out-base',
+      outBase,
+    );
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
@@ -450,7 +586,7 @@ describe('leaf agent commands', () => {
     );
     const outBase = join(temporaryRoot, 'agent-pi-refused-out');
 
-    const result = runCli('render', source, '--all-targets', '--out-base', outBase);
+    const result = runCli('artifact', 'render', source, '--all-targets', '--out-base', outBase);
 
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
@@ -462,7 +598,7 @@ describe('leaf agent commands', () => {
   });
 
   test('lists sibling-preserving agent install scopes', () => {
-    const result = runCli('list-targets');
+    const result = runCli('targets', 'list');
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('claude       agent          install: user, project, plugin');

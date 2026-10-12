@@ -16,7 +16,7 @@ import { getArtifactConfig } from '../src/targets/index.ts';
 import { PI_SUBAGENTS_PACKAGE, PI_SUBAGENTS_VERSION } from '../src/targets/pi.ts';
 import { INSTALL_SCOPES, TARGET_NAMES } from '../src/types.ts';
 
-// Pi leaf agent install and check-install (Fibery #140; ndr:hjnabw,
+// Pi leaf agent artifact install and artifact check-install (Fibery #140; ndr:hjnabw,
 // ndr:d17fnt, ndr:f1s7gm, ndr:jybfry). Every case uses a temporary home and
 // project root: nothing here may touch the real `~/.pi`.
 
@@ -198,6 +198,7 @@ describe('Pi agent install: $PI_CODING_AGENT_DIR at user scope', () => {
     const home = join(temporaryRoot, 'empty-env-home');
     const result = runCli(
       { HOME: home, PI_CODING_AGENT_DIR: '' },
+      'artifact',
       'install',
       FIXTURE_AGENT,
       '--target',
@@ -239,16 +240,25 @@ describe('Pi agent install: $PI_CODING_AGENT_DIR at user scope', () => {
       join(temporaryRoot, 'cli-project'),
     ];
 
-    const set = runCli({ HOME: home, PI_CODING_AGENT_DIR: piAgentDirectory }, 'install', ...args);
+    const set = runCli(
+      { HOME: home, PI_CODING_AGENT_DIR: piAgentDirectory },
+      'artifact',
+      'install',
+      ...args,
+    );
     expect(set.exitCode).toBe(0);
     expect(existsSync(join(piAgentDirectory, 'agents/vault-reader.md'))).toBe(true);
     expect(existsSync(join(home, '.pi'))).toBe(false);
     expect(
-      runCli({ HOME: home, PI_CODING_AGENT_DIR: piAgentDirectory }, 'check-install', ...args)
-        .stdout,
+      runCli(
+        { HOME: home, PI_CODING_AGENT_DIR: piAgentDirectory },
+        'artifact',
+        'check-install',
+        ...args,
+      ).stdout,
     ).toContain(`ok: 1 managed files at ${join(piAgentDirectory, 'agents')}`);
 
-    const unset = runCli({ HOME: home }, 'install', ...args);
+    const unset = runCli({ HOME: home }, 'artifact', 'install', ...args);
     expect(unset.exitCode).toBe(0);
     expect(existsSync(join(home, '.pi/agent/agents/vault-reader.md'))).toBe(true);
   });
@@ -308,7 +318,7 @@ describe('Pi agent install: cross-target destinations', () => {
   });
 });
 
-describe('Pi agent install CLI', () => {
+describe('Pi agent artifact install CLI', () => {
   test('installs and checks a project agent, then reports drift and absence', () => {
     const projectRoot = join(temporaryRoot, 'cli-project');
     const agentsRoot = join(projectRoot, '.pi/agents');
@@ -322,20 +332,20 @@ describe('Pi agent install CLI', () => {
       projectRoot,
     ];
 
-    const installed = runCli({}, 'install', ...args);
+    const installed = runCli({}, 'artifact', 'install', ...args);
     expect(installed.exitCode).toBe(0);
     expect(installed.stdout).toContain(`installed 1 files at ${agentsRoot}`);
-    expect(runCli({}, 'check-install', ...args).stdout).toContain(
+    expect(runCli({}, 'artifact', 'check-install', ...args).stdout).toContain(
       `ok: 1 managed files at ${agentsRoot}`,
     );
 
     writeFileSync(join(agentsRoot, 'vault-reader.md'), 'changed\n');
-    const drifted = runCli({}, 'check-install', ...args);
+    const drifted = runCli({}, 'artifact', 'check-install', ...args);
     expect(drifted.exitCode).toBe(1);
     expect(drifted.stderr).toContain('changed-output: vault-reader.md');
 
     rmSync(join(agentsRoot, 'vault-reader.md'));
-    const absent = runCli({}, 'check-install', ...args);
+    const absent = runCli({}, 'artifact', 'check-install', ...args);
     expect(absent.exitCode).toBe(1);
     expect(absent.stderr).toContain('missing-output: vault-reader.md');
   });
@@ -344,6 +354,7 @@ describe('Pi agent install CLI', () => {
     const home = join(temporaryRoot, 'cli-home');
     const result = runCli(
       { HOME: home },
+      'artifact',
       'install',
       FIXTURE_AGENT,
       '--target',
@@ -361,6 +372,7 @@ describe('Pi agent install CLI', () => {
   test('plugin scope fails with the reason', () => {
     const result = runCli(
       {},
+      'artifact',
       'install',
       FIXTURE_AGENT,
       '--target',
@@ -388,7 +400,7 @@ describe('Pi agent install CLI', () => {
       '--project-root',
       projectRoot,
     ];
-    expect(runCli({}, 'install', ...okArgs).exitCode).toBe(0);
+    expect(runCli({}, 'artifact', 'install', ...okArgs).exitCode).toBe(0);
     const earlier = readFileSync(join(agentsRoot, 'vault-reader.md'));
 
     const args = [
@@ -400,7 +412,7 @@ describe('Pi agent install CLI', () => {
       '--project-root',
       projectRoot,
     ];
-    const installed = runCli({}, 'install', ...args);
+    const installed = runCli({}, 'artifact', 'install', ...args);
     expect(installed.exitCode).toBe(1);
     expect(installed.stdout).not.toContain('installed');
     expect(installed.stderr).toContain('refusing to render agent "vault-reader" for pi');
@@ -409,7 +421,7 @@ describe('Pi agent install CLI', () => {
     );
     expect(readFileSync(join(agentsRoot, 'vault-reader.md')).equals(earlier)).toBe(true);
 
-    const checked = runCli({}, 'check-install', ...args);
+    const checked = runCli({}, 'artifact', 'check-install', ...args);
     expect(checked.exitCode).toBe(1);
     expect(checked.stdout).not.toContain('ok:');
     expect(checked.stdout).toContain('failed: pi refuses to project this source');

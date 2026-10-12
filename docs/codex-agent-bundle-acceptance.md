@@ -27,8 +27,8 @@ cat > /private/tmp/agentforge-jun439-runtime-final/codex-home/config.toml <<'EOF
 [projects."/private/tmp/agentforge-jun439-runtime-final/project"]
 trust_level = "trusted"
 EOF
-bun run src/cli.ts compile-codex-agent tests/fixtures/dispatch-probe --package-id agentforge --out /private/tmp/agentforge-jun439-runtime-final/bundle
-CODEX_HOME=/private/tmp/agentforge-jun439-runtime-final/codex-home bun run src/cli.ts install-codex-agent /private/tmp/agentforge-jun439-runtime-final/bundle --scope project --project-root /private/tmp/agentforge-jun439-runtime-final/project
+bun run src/cli.ts codex-bundle compile tests/fixtures/dispatch-probe --package-id agentforge --out /private/tmp/agentforge-jun439-runtime-final/bundle
+CODEX_HOME=/private/tmp/agentforge-jun439-runtime-final/codex-home bun run src/cli.ts codex-bundle install /private/tmp/agentforge-jun439-runtime-final/bundle --scope project --project-root /private/tmp/agentforge-jun439-runtime-final/project
 CODEX_HOME=/private/tmp/agentforge-jun439-runtime-final/codex-home codex exec --json --sandbox read-only -C /private/tmp/agentforge-jun439-runtime-final/project 'Use the collaboration spawn_agent tool once with agent_type "agentforge:dispatch-probe". Ask the child to follow its role instructions. Wait for it to finish, then reply with exactly the child final response and no other text.' > /private/tmp/agentforge-jun439-runtime-final/codex-events.jsonl
 ```
 
@@ -45,7 +45,7 @@ project runtime files outside `/private/tmp` were changed.
 | Installation | Passed | The project install wrote `agents/dispatch-probe.toml`, an owner/hash receipt at `agents/.agentforge/agentforge--dispatch-probe.json`, and the required role registration in `.codex/config.toml`. The focused fixture deletes its canonical source before installing. A sibling TOML and an existing `model = "existing-model"` config line remain byte-for-byte retained. |
 | Discovery and behavior | Passed | A fresh parent selected `agent_type: "agentforge:dispatch-probe"`; the spawned child trace identifies that exact role and returned `DISPATCH_PROBE_OK`. The saved events are `/private/tmp/agentforge-jun439-runtime-final/codex-events.jsonl` and the child rollout at `/private/tmp/agentforge-jun439-runtime-final/codex-home/sessions/2026/09/28/rollout-2026-09-28T14-06-58-01a0e932-d961-73f1-aedf-d081cacbc77a.jsonl`. |
 | Settings application | Observed | The child rollout's `thread_settings_applied` records `model: gpt-5.6-terra` and `reasoning_effort: high`. This trace, not the child marker, establishes the applied settings. |
-| User root | Passed in focused CLI coverage | `preview-codex-agent --scope user` resolves `$CODEX_HOME/agents/dispatch-probe.toml`; `install-codex-agent --scope user` installs there. With `CODEX_HOME` absent it falls back to `~/.codex`, as documented by Codex. |
+| User root | Passed in focused CLI coverage | `codex-bundle install --scope user --dry-run` resolves `$CODEX_HOME/agents/dispatch-probe.toml`; `codex-bundle install --scope user` installs there. With `CODEX_HOME` absent it falls back to `~/.codex`, as documented by Codex. |
 
 No other child setting was observed in the saved run metadata; those settings
 remain unknown.
@@ -98,7 +98,7 @@ settings remain unknown.
 
 ## JUN-441 owned installation contract
 
-`install-codex-agent` uses a scope-local package receipt under
+`codex-bundle install` uses a scope-local package receipt under
 `agents/.agentforge/`. The receipt records the package identity and version,
 each emitted role name and destination, and the hash of its installed TOML.
 This ownership format is `agentforge.codex-agent-receipt/v3`; earlier v2
@@ -110,7 +110,7 @@ including when user scope uses a custom `CODEX_HOME`. The installer preserves
 unrelated agent definitions and refuses to replace an unowned definition or
 one owned by another package. An unchanged reinstall has no filesystem effect.
 
-`check-codex-agent <bundle-dir> --scope user|project` reads a compiled bundle
+`codex-bundle check <bundle-dir> --scope user|project` reads a compiled bundle
 and the selected installation root without writing. It reports `current`,
 `missing`, `edited`, `conflicted`, or `unsupported` with an actionable path for
 each issue. `current` exits 0; every other state exits 1. A wholly missing
@@ -144,16 +144,16 @@ separate work.
 
 ## JUN-442 managed lifecycle
 
-Use `preview-codex-agent-update <bundle-dir> --scope user|project` before
-`update-codex-agent <bundle-dir> --scope user|project`. The update reads the
+Use `codex-bundle update <bundle-dir> --scope user|project --dry-run` before
+`codex-bundle update <bundle-dir> --scope user|project`. The update reads the
 scope-local receipt as the record of previously owned definitions, compares it
 with the new compiled bundle, and previews creates, replacements, removals, and
 preserved edits. A renamed agent is a removal of the old role and an addition
 of the new one. Both commands accept `--project-root <dir>` for project scope;
 user scope honors `CODEX_HOME` when set.
 
-Use `preview-codex-agent-remove <package-id> --scope user|project` before
-`remove-codex-agent <package-id> --scope user|project`. Removal needs only the
+Use `codex-bundle remove <package-id> --scope user|project --dry-run` before
+`codex-bundle remove <package-id> --scope user|project`. Removal needs only the
 package identity and the installed receipt. The compiled bundle, plugin cache,
 and original source directory may already be gone. A repeated removal of a
 fully removed package is safe. Edited definitions are preserved and stay
@@ -172,8 +172,8 @@ repair refuses them. The journal and managed `config.toml` are written with mode
 `0600`.
 While that record exists, normal update and removal refuse to mutate the scope.
 Inspect preview output and the named paths, then run
-`repair-codex-agent-update <bundle-dir> --scope user|project` or
-`repair-codex-agent-remove <package-id> --scope user|project` for the recorded
+`codex-bundle repair update <bundle-dir> --scope user|project` or
+`codex-bundle repair remove <package-id> --scope user|project` for the recorded
 operation. Repair proceeds only when the installed files match an unambiguous
 before or after state; ambiguous edits require manual resolution and retain the
 pending record. No plugin enable/disable event invokes these commands.
@@ -273,7 +273,7 @@ still a local-binary probe.
 
 ## Installed-plugin sync and session check
 
-`sync-codex-agents --scope user|project [--project-root <dir>] [--dry-run]`
+`codex-bundle sync --scope user|project [--project-root <dir>] [--dry-run]`
 registers or updates the roles of every enabled Codex plugin that ships a
 bundle, in one command. It reads the user Codex home only to discover plugins:
 each `[plugins."<name>@<marketplace>"]` entry with `enabled = true` in
@@ -296,8 +296,8 @@ checks user scope and the nearest project receipt found by walking up from the
 working directory. It prints nothing when any checked scope is current;
 otherwise it prints one `{"systemMessage": ...}` object, which Codex surfaces
 as a UI warning (plain stdout would reach only the model as developer
-context). Missing or stale roles point at `sync-codex-agents`; edited,
-conflicted, or unsupported roles point at `check-codex-agent` for review. It
+context). Missing or stale roles point at `codex-bundle sync`; edited,
+conflicted, or unsupported roles point at `codex-bundle check` for review. It
 always exits 0 and never writes. Codex asks the user to trust the hook once.
 
 ## Fibery #137 role-scoped policy runtime acceptance
@@ -306,8 +306,8 @@ Fibery #137. Question: does Codex apply a role's `sandbox_mode` and
 `approval_policy` to a spawned child? Result: **no**. Last exercised
 2026-10-07 on codex-cli 0.160.0, Bun 1.4.2. See L-014.
 
-Fixtures (canonical `AGENT.md`, compiled with `compile-codex-agent` and
-installed with `install-codex-agent --scope project` into a throwaway project;
+Fixtures (canonical `AGENT.md`, compiled with `codex-bundle compile` and
+installed with `codex-bundle install --scope project` into a throwaway project;
 isolated `CODEX_HOME` with a trusted-project entry and a linked `auth.json`
 that was neither printed nor copied; `~/.codex` untouched):
 

@@ -52,7 +52,7 @@ function runCli(...args: string[]) {
 }
 
 const sync = (...extra: string[]) =>
-  runCli('sync-codex-agents', '--scope', 'user', '--project-root', project, ...extra);
+  runCli('codex-bundle', 'sync', '--scope', 'user', '--project-root', project, ...extra);
 
 /** Compile the demo fixture under a package id and version, returning its bundle directory. */
 async function compileBundle(
@@ -261,7 +261,7 @@ describe('sync-codex-agents', () => {
     cachePlugin('demo@market', '1.0.0', await compileBundle('demo-roles', '2.3.4'));
     writeConfig({ 'demo@market': true });
 
-    const result = runCli('sync-codex-agents', '--scope', 'project', '--project-root', project);
+    const result = runCli('codex-bundle', 'sync', '--scope', 'project', '--project-root', project);
     expect(result.exitCode).toBe(0);
     expect(existsSync(join(project, '.codex/agents/demo-roles/alpha.toml'))).toBe(true);
     expect(existsSync(alphaRole('demo-roles'))).toBe(false);
@@ -284,7 +284,8 @@ describe('sync-codex-agents', () => {
       expect(existsSync(join(codexHome, 'agents'))).toBe(false);
 
       const projectRun = runCli(
-        'sync-codex-agents',
+        'codex-bundle',
+        'sync',
         '--scope',
         'project',
         '--project-root',

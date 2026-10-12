@@ -45,8 +45,8 @@ a paraphrase.
 
 ## Generated artifact findings
 
-`agentforge compile` of the acceptance marketplace wrote 11 files for the Codex
-publication, and `agentforge check` reported `ok: 11 managed files`. The
+`agentforge marketplace compile` of the acceptance marketplace wrote 11 files for the Codex
+publication, and `agentforge marketplace check` reported `ok: 11 managed files`. The
 compiled `hooks/hooks.json` carries one entry:
 
 ```json
@@ -326,8 +326,8 @@ root, so `--out` stays inside it (the `root-manifest` precondition).
    with one Codex publication (`destination: .agents/plugins/marketplace.json`,
    `root-manifest: true`, `enrollment.mode: all-compatible`) over
    `src/commit/PACKAGE.yaml`.
-2. `agentforge compile $A/MARKETPLACE.yaml --out $A/out`, then
-   `agentforge check $A/MARKETPLACE.yaml --out $A/out` (expect `ok: 11 managed files`).
+2. `agentforge marketplace compile $A/MARKETPLACE.yaml --out $A/out`, then
+   `agentforge marketplace check $A/MARKETPLACE.yaml --out $A/out` (expect `ok: 11 managed files`).
 3. Create `$A/codex-home` with `config.toml` setting
    `cli_auth_credentials_store = "file"`, `[features] hooks = true` and a
    trusted `[projects."$A/project"]`; link or provide `auth.json` (never print it).
@@ -358,8 +358,8 @@ matcher `Bash`, command `${CLAUDE_PLUGIN_ROOT}/hooks/probe.sh`, `timeout: 5`) an
 an executable `hooks/probe.sh`, declared with an `artifacts` entry of type
 `hook` and a `targets.codex.payloads.include` entry for the script.
 
-1. Add `src/hookprobe/PACKAGE.yaml` to `MARKETPLACE.yaml`, then `agentforge compile`
-   and `agentforge check` (expect `ok: 14 managed files`; the compiled command is
+1. Add `src/hookprobe/PACKAGE.yaml` to `MARKETPLACE.yaml`, then `agentforge marketplace compile`
+   and `agentforge marketplace check` (expect `ok: 14 managed files`; the compiled command is
    `${PLUGIN_ROOT}/hooks/probe.sh`).
 2. `CODEX_HOME=$A/codex-home codex plugin add hookprobe@commit-accept`.
 3. Run the interactive trust step again and trust only the `hookprobe` entry.

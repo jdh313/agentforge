@@ -23,7 +23,13 @@ describe('root-manifest publications', () => {
   test('writes a root copy whose plugin sources point into the compiled output', () => {
     const root = stageMarketplace('writes-root-copy', { rootManifest: true });
 
-    const result = runCli('compile', join(root, 'MARKETPLACE.yaml'), '--out', join(root, 'out'));
+    const result = runCli(
+      'marketplace',
+      'compile',
+      join(root, 'MARKETPLACE.yaml'),
+      '--out',
+      join(root, 'out'),
+    );
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(
@@ -60,7 +66,8 @@ describe('root-manifest publications', () => {
     const root = stageMarketplace('codex-root-copy', { rootManifest: true, publication: 'codex' });
 
     expect(
-      runCli('compile', join(root, 'MARKETPLACE.yaml'), '--out', join(root, 'out')).exitCode,
+      runCli('marketplace', 'compile', join(root, 'MARKETPLACE.yaml'), '--out', join(root, 'out'))
+        .exitCode,
     ).toBe(0);
 
     const document = JSON.parse(
@@ -79,7 +86,13 @@ describe('root-manifest publications', () => {
     const root = stageMarketplace('out-outside', { rootManifest: true });
     const outside = join(temporaryRoot, 'out-outside-target');
 
-    const result = runCli('compile', join(root, 'MARKETPLACE.yaml'), '--out', outside);
+    const result = runCli(
+      'marketplace',
+      'compile',
+      join(root, 'MARKETPLACE.yaml'),
+      '--out',
+      outside,
+    );
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain(
@@ -89,12 +102,14 @@ describe('root-manifest publications', () => {
     expect(existsSync(join(root, '.claude-plugin', 'marketplace.json'))).toBe(false);
   });
 
-  test('check counts the root copy and reports drift in it', () => {
+  test('marketplace check counts the root copy and reports drift in it', () => {
     const root = stageMarketplace('check-drift', { rootManifest: true });
     const out = join(root, 'out');
-    expect(runCli('compile', join(root, 'MARKETPLACE.yaml'), '--out', out).exitCode).toBe(0);
+    expect(
+      runCli('marketplace', 'compile', join(root, 'MARKETPLACE.yaml'), '--out', out).exitCode,
+    ).toBe(0);
 
-    const clean = runCli('check', join(root, 'MARKETPLACE.yaml'), '--out', out);
+    const clean = runCli('marketplace', 'check', join(root, 'MARKETPLACE.yaml'), '--out', out);
     expect(clean.exitCode).toBe(0);
     expect(clean.stdout).toContain('[claude] ok:');
 
@@ -104,9 +119,11 @@ describe('root-manifest publications', () => {
     // silently excluded from the tally.
     const plain = stageMarketplace('check-drift-plain', { rootManifest: false });
     expect(
-      runCli('compile', join(plain, 'MARKETPLACE.yaml'), '--out', join(plain, 'out')).exitCode,
+      runCli('marketplace', 'compile', join(plain, 'MARKETPLACE.yaml'), '--out', join(plain, 'out'))
+        .exitCode,
     ).toBe(0);
     const plainCheck = runCli(
+      'marketplace',
       'check',
       join(plain, 'MARKETPLACE.yaml'),
       '--out',
@@ -118,14 +135,14 @@ describe('root-manifest publications', () => {
     drifted.name = 'hand-edited';
     writeFileSync(rootManifest, `${JSON.stringify(drifted, null, 2)}\n`);
 
-    const dirty = runCli('check', join(root, 'MARKETPLACE.yaml'), '--out', out);
+    const dirty = runCli('marketplace', 'check', join(root, 'MARKETPLACE.yaml'), '--out', out);
     expect(dirty.exitCode).toBe(1);
     expect(dirty.stderr).toContain(
       'error [claude] changed-output: <root>/.claude-plugin/marketplace.json: managed root manifest differs from the compilation plan',
     );
 
     rmSync(rootManifest);
-    const missing = runCli('check', join(root, 'MARKETPLACE.yaml'), '--out', out);
+    const missing = runCli('marketplace', 'check', join(root, 'MARKETPLACE.yaml'), '--out', out);
     expect(missing.exitCode).toBe(1);
     expect(missing.stderr).toContain(
       'error [claude] missing-output: <root>/.claude-plugin/marketplace.json: managed root manifest is missing',
@@ -135,14 +152,21 @@ describe('root-manifest publications', () => {
   test('writes no root copy when the flag is absent', () => {
     const root = stageMarketplace('flag-absent', { rootManifest: false });
 
-    const result = runCli('compile', join(root, 'MARKETPLACE.yaml'), '--out', join(root, 'out'));
+    const result = runCli(
+      'marketplace',
+      'compile',
+      join(root, 'MARKETPLACE.yaml'),
+      '--out',
+      join(root, 'out'),
+    );
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).not.toContain('root manifest');
     expect(existsSync(join(root, '.claude-plugin', 'marketplace.json'))).toBe(false);
     expect(existsSync(join(root, '.agents', 'plugins', 'marketplace.json'))).toBe(false);
     expect(
-      runCli('check', join(root, 'MARKETPLACE.yaml'), '--out', join(root, 'out')).exitCode,
+      runCli('marketplace', 'check', join(root, 'MARKETPLACE.yaml'), '--out', join(root, 'out'))
+        .exitCode,
     ).toBe(0);
   });
 
@@ -152,6 +176,7 @@ describe('root-manifest publications', () => {
 
     expect(
       runCli(
+        'marketplace',
         'compile',
         join(root, 'MARKETPLACE.yaml'),
         '--out',
@@ -184,7 +209,13 @@ describe('root-manifest publications', () => {
 `,
     );
 
-    const result = runCli('compile', join(root, 'MARKETPLACE.yaml'), '--out', join(root, 'out'));
+    const result = runCli(
+      'marketplace',
+      'compile',
+      join(root, 'MARKETPLACE.yaml'),
+      '--out',
+      join(root, 'out'),
+    );
 
     expect(result.exitCode).toBe(0);
     const document = JSON.parse(
@@ -214,7 +245,13 @@ describe('root-manifest publications', () => {
 `,
     );
 
-    const result = runCli('compile', join(root, 'MARKETPLACE.yaml'), '--out', join(root, 'out'));
+    const result = runCli(
+      'marketplace',
+      'compile',
+      join(root, 'MARKETPLACE.yaml'),
+      '--out',
+      join(root, 'out'),
+    );
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain(
