@@ -1,5 +1,5 @@
-import { lstatSync, realpathSync } from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
+import { lstatSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import {
   CompilationError,
   type CompilationPlan,
@@ -8,7 +8,7 @@ import {
 } from './compiler.ts';
 import type { LoadedPackage } from './definitions.ts';
 import { MaterializationError, materializeCompilation } from './materializer.ts';
-import { isContainedPath } from './paths.ts';
+import { pathsOverlap, physicalPath } from './publication-paths.ts';
 import type { TargetAdapter } from './target-adapter.ts';
 
 /** Pure standalone compilation: the source definition itself is the provenance anchor. */
@@ -62,6 +62,12 @@ export function compilePackage(loaded: LoadedPackage, adapter: TargetAdapter): C
 
 /** Refuse lexical and physical aliases before the materializer creates its staging directory. */
 export function materializePackage(plan: CompilationPlan, outputRoot: string): void {
+  validatePackageOutput(plan, outputRoot);
+  materializeCompilation(plan, resolve(outputRoot));
+}
+
+/** Read-only and reusable by whole-repository preflight. Rechecked at publication time. */
+export function validatePackageOutput(plan: CompilationPlan, outputRoot: string): void {
   if (plan.rootOutputs.length)
     throw new MaterializationError('standalone package plans cannot write root-anchored outputs');
   const output = resolve(outputRoot);
@@ -78,27 +84,10 @@ export function materializePackage(plan: CompilationPlan, outputRoot: string): v
     ]),
   );
   for (const source of sources) {
-    if (overlaps(source, output) || overlaps(physicalPath(source), physicalPath(output))) {
+    if (pathsOverlap(source, output) || pathsOverlap(physicalPath(source), physicalPath(output))) {
       throw new MaterializationError(
         `refusing source/output overlap between ${source} and ${output}`,
       );
     }
-  }
-  materializeCompilation(plan, output);
-}
-
-function overlaps(a: string, b: string): boolean {
-  return a === b || isContainedPath(a, b) || isContainedPath(b, a);
-}
-
-// Resolve the closest existing ancestor, including symlinked parents of a new --out.
-function physicalPath(path: string): string {
-  try {
-    return realpathSync(path);
-  } catch (cause) {
-    if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause;
-    const parent = dirname(path);
-    if (parent === path) throw cause;
-    return resolve(physicalPath(parent), basename(path));
   }
 }

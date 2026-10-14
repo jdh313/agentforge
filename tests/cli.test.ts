@@ -38,7 +38,7 @@ afterAll(() => {
 });
 
 describe('grouped command contract', () => {
-  test('top-level help exposes exactly the five command groups', () => {
+  test('top-level help exposes repository commands and the five legacy command groups', () => {
     const result = runCli('--help');
     expect(result.exitCode).toBe(0);
     const commands = result.stdout.split('Commands:')[1];
@@ -46,7 +46,15 @@ describe('grouped command contract', () => {
     const groups = [...commands.matchAll(/^ {2}([\w-]+)/gm)]
       .map((match) => match[1])
       .filter((name) => name !== 'help');
-    expect(groups.toSorted()).toEqual(['artifact', 'codex', 'marketplace', 'package', 'targets']);
+    expect(groups.toSorted()).toEqual([
+      'artifact',
+      'check',
+      'codex',
+      'compile',
+      'marketplace',
+      'package',
+      'targets',
+    ]);
   });
 
   test('package help exposes only compile and check', () => {
@@ -111,8 +119,6 @@ describe('grouped command contract', () => {
     'validate',
     'install',
     'check-install',
-    'compile',
-    'check',
     'list-targets',
     'compile-codex-agent',
     'preview-codex-agent',

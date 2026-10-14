@@ -7,6 +7,7 @@ import {
   mkdirSync,
   mkdtempSync,
   openSync,
+  readFileSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -361,6 +362,20 @@ function writeStagedOutput(
       : requireContainedRegularSource(output.sourceRoot, output.sourcePath);
   copyFileSync(source, destination);
   chmodSync(destination, output.executable ? 0o755 : 0o644);
+}
+
+/** Read-only source preflight. Copying still revalidates each source before publication. */
+export function validateCompilationSources(plan: CompilationPlan): void {
+  for (const output of plan.outputs) {
+    if (output.kind !== 'copy') continue;
+    const source =
+      output.sourceRoot === undefined
+        ? output.sourcePath
+        : requireContainedRegularSource(output.sourceRoot, output.sourcePath);
+    if (!lstatSync(source).isFile())
+      throw new MaterializationError(`copy source must be a regular file: ${source}`);
+    readFileSync(source);
+  }
 }
 
 function requireContainedRegularSource(sourceRoot: string, sourcePath: string): string {

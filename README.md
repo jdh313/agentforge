@@ -12,6 +12,8 @@ AgentForge has two layers:
 
 - Collection definitions (`PACKAGE.yaml`, `MARKETPLACE.yaml`) describe package
   identity, artifact projections, target support, and marketplace publication.
+  Lowercase `agentforge.yaml` orchestrates explicit repository publications using
+  those same compilers, with config-relative owned output roots.
 - Leaf artifact rendering turns canonical files such as `SKILL.md` into
   harness-native outputs.
 
@@ -60,6 +62,31 @@ bun run src/cli.ts marketplace check tests/fixtures/definitions/cc-marketplace/M
 bun run src/cli.ts artifact install tests/fixtures/common-subset --target pi --scope project --project-root /tmp/example-project
 bun run src/cli.ts artifact check-install tests/fixtures/common-subset --target pi --scope project --project-root /tmp/example-project
 ```
+
+### Repository compile and check
+
+Use a lowercase `agentforge.yaml` with `schema: agentforge.repository/v1` to
+publish Claude/Codex marketplaces and standalone Pi packages from one explicit
+canonical package universe:
+
+```sh
+agentforge compile ./agentforge.yaml
+agentforge check ./agentforge.yaml
+agentforge check ./agentforge.yaml --json
+```
+
+Each publication declares its own `out`; no implicit publication-ID prefix is
+added. Compile preflights the whole repository before writing, then publishes
+recoverable snapshots sequentially. It is **not** a whole-repository transaction:
+a later publication failure leaves earlier successes in place. Check aggregates
+planning and drift errors without writes or source execution. Its JSON is a
+versioned repository envelope nesting existing check reports per entry.
+
+Existing marketplace and package commands are unchanged. There is no repository
+`--out` override or report-file option initially, no new target capability, and
+no automatic consumer migration. See [Repository publication](docs/repository-publication.md)
+for the strict schema, per-target artifact replacement, path and ownership guards,
+root registries, failure boundaries, and the separate pending consumer migration.
 
 ### Compilation reports
 
@@ -294,6 +321,11 @@ targets:
 - `id` is the stable AgentForge identity and cannot be changed by target data.
 - `defaults` is the normalized shared metadata set: `name`, `version`,
   `description`, `author`, `license`, and `keywords`.
+- `targets.<name>.artifacts`, when present, **replaces** the top-level artifact
+  list for that target; it is not additive. Omission inherits the shared list,
+  while `[]` explicitly selects none. Selected declarations retain normal
+  projection and validation rules; this does not silently filter unsupported
+  artifacts or add target capabilities. See [per-target artifact selection](docs/repository-publication.md#per-target-artifact-selection).
 - `artifacts` declares open package-level projection types and patterns. Use an
   explicit `artifacts: []` for a native-only package with producing payload
   declarations; metadata-only packages are rejected. Leaf
@@ -641,7 +673,8 @@ See [decision gf2904](decisions/gf2904-accept-target-suffixed-definitions-only-t
 
 ## CLI
 
-Commands are grouped by the resource they manage:
+Repository orchestration uses top-level `compile <config>` and `check <config>`
+(with `check --json`); all other commands are grouped by the resource they manage:
 
 - `artifact`: `render`, `validate`, `install`, and `check-install` for one
   canonical artifact.
@@ -652,14 +685,18 @@ Commands are grouped by the resource they manage:
   compilation, installed-plugin sync, and repair of interrupted updates or
   removals. Install, check, and update take a compiled agent bundle as input.
 
-**Breaking migration:** the former flat commands are removed; there are no
-compatibility aliases. Update scripts and CI to use the groups below. Preview
-commands become `codex agents install`, `update`, or `remove` with `--dry-run`.
+**Earlier resource-command migration:** the former flat resource commands are
+removed; there are no compatibility aliases for them. The new repository
+`compile` and `check` are additive and do not replace any marketplace or package
+commands. Update older scripts and CI to use the groups below. Preview commands become `codex agents install`, `update`, or `remove` with `--dry-run`.
 Regenerate compiled marketplace output so its bundle-management wrappers,
 setup skills, and session-start check hooks invoke the new commands; upgrading
 only the CLI leaves previously generated commands incompatible.
 
 ```sh
+agentforge compile <agentforge.yaml>
+agentforge check <agentforge.yaml>
+agentforge check <agentforge.yaml> --json
 agentforge marketplace compile <MARKETPLACE.yaml> --out <out-dir>
 agentforge marketplace compile <MARKETPLACE.yaml> --out <out-dir> --publication <id>
 agentforge marketplace check <MARKETPLACE.yaml> --out <out-dir>
@@ -685,9 +722,9 @@ agentforge codex agents repair remove <package-id> --scope <user|project> [--pro
 
 - `marketplace compile` builds every publication when no filter is provided. Repeat
   `--publication <id>` to select a deterministic subset.
-- Each publication is isolated under `<out-dir>/<publication-id>/`, preserving
-  its compiled relative destinations without allowing cross-target package
-  projections to collide.
+- With the legacy `marketplace` commands, each publication is isolated under
+  `<out-dir>/<publication-id>/`, preserving its compiled relative destinations
+  without allowing cross-target package projections to collide.
 - The output directory is a complete snapshot. AgentForge stages every
   generated document and copied artifact before replacing an existing build;
   planning or staging failures leave the prior output intact.
@@ -771,6 +808,10 @@ agentforge codex agents repair remove <package-id> --scope <user|project> [--pro
   visible script with authorized directory access and rerun its read-only check.
 
 ### `root-manifest` publications
+
+This section describes the legacy `MARKETPLACE.yaml` / `marketplace` interface.
+Repository publications use the config root and actual explicit `out` instead;
+see [explicit outputs and ownership](docs/repository-publication.md#explicit-outputs-and-ownership).
 
 A publication may declare `root-manifest: true`:
 

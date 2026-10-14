@@ -400,6 +400,16 @@ export function resolvePackageInput(
     throw new CompilationError(
       `package "${loaded.definition.id}" does not declare target "${targetName}"`,
     );
+  const artifacts =
+    target.artifacts === undefined
+      ? loaded.artifacts
+      : (loaded.targetArtifacts?.[targetName] ??
+        (target.artifacts.length === 0 ? new Map<string, readonly LoadedArtifact[]>() : undefined));
+  if (!artifacts) {
+    throw new CompilationError(
+      `package "${loaded.definition.id}" has no loaded artifact selection for target "${targetName}"; reload the package definition`,
+    );
+  }
   return {
     id: loaded.definition.id,
     path: loaded.path,
@@ -408,10 +418,10 @@ export function resolvePackageInput(
       { ...(target.overrides ?? {}) },
     ) as PackageMetadata,
     native: target.native ?? {},
-    artifacts: loaded.artifacts,
+    artifacts,
     files: loaded.files,
     fileModes: loaded.fileModes,
-    resources: loaded.resources,
+    resources: loaded.targetResources?.[targetName] ?? loaded.resources,
     exemptDocuments: loaded.exemptDocuments,
     authoringKeys: new Set(loaded.definition['authoring-keys'] ?? []),
     payloads: loaded.payloads[targetName] ?? [],

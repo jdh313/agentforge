@@ -197,6 +197,37 @@ artifacts, and behavior verified in a fresh harness.
 
 ## After 1.0
 
+### Repository publication orchestration
+
+The approved repository slice introduces lowercase `agentforge.yaml`
+(`agentforge.repository/v1`) and additive top-level `compile <config>` /
+`check <config>` (`check --json`). It reuses existing Claude/Codex marketplace and
+Pi standalone capabilities rather than adding a Pi marketplace or new target
+semantics. See [Repository publication](repository-publication.md) for the full
+contract and examples.
+
+- Canonical packages are an explicit config-relative `PACKAGE.yaml` universe,
+  with no globs. Per-target artifact lists replace shared defaults when present;
+  omission inherits, and `[]` selects none subject to existing producing-payload
+  and native-resource rules.
+- Each publication owns an explicit `out`, without an implicit ID prefix. Optional
+  marketplace root registries point into actual declared outputs and own only
+  their exact config-root file. Legacy marketplace/package commands, their
+  output layout, and explicit standalone alternate-definition support remain.
+- Compile preflights the whole repository before any write, then materializes
+  deterministic sequential recoverable snapshots. A runtime publication failure
+  stops later writes but does not roll back earlier successes. No whole-repository
+  transaction, receipts, or orphan-output deletion is promised.
+- Check aggregates planning/drift failures read-only; JSON wraps existing reports
+  in a versioned repository envelope. Neither command executes supplied source,
+  evaluates extensions, or runs package managers. No repository `--out` override
+  or report-file option is included initially.
+- **Consumer migration is separate and pending.** No consumer definitions, CI,
+  generated trees, installation paths, or registrations change in this slice.
+  Adoption and authorized runtime acceptance require their own reviewed scope.
+
+### Previously tracked work
+
 Open work lives in Fibery Project Tracking tasks, ordered by their `Sequence`
 field. As of 2026-10-07 the AgentForge tasks still open are:
 

@@ -36,6 +36,7 @@ export function buildRootManifestOutput(
   registry: DesiredOutput,
   marketplaceRoot: string,
   outputRoot: string,
+  publicationRoot?: string,
 ): RootAnchoredOutput {
   if (registry.kind !== 'generated') {
     throw new RootManifestError(
@@ -49,7 +50,7 @@ export function buildRootManifestOutput(
     );
   }
 
-  const prefix = rootRelativePrefix(publication, marketplaceRoot, outputRoot);
+  const prefix = rootRelativePrefix(publication, marketplaceRoot, outputRoot, publicationRoot);
   let document: unknown;
   try {
     document = JSON.parse(registry.content);
@@ -80,15 +81,18 @@ function rootRelativePrefix(
   publication: PublicationDefinition,
   marketplaceRoot: string,
   outputRoot: string,
+  publicationRoot?: string,
 ): string {
   const root = resolve(marketplaceRoot);
-  const out = resolve(outputRoot);
+  const out = resolve(publicationRoot ?? outputRoot);
   if (!isContainedPath(root, out)) {
     throw new RootManifestError(
       `publication ${JSON.stringify(publication.id)} declares root-manifest, which requires --out to be inside the marketplace directory ${marketplaceRoot}; got ${out}`,
     );
   }
-  return `./${portableRelative(root, out)}/${publication.id}`;
+  return publicationRoot === undefined
+    ? `./${portableRelative(root, out)}/${publication.id}`
+    : `./${portableRelative(root, out)}`;
 }
 
 /**

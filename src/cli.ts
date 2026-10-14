@@ -40,6 +40,13 @@ import { materializeCompilation } from './materializer.ts';
 import { compilePackage, materializePackage } from './package-compiler.ts';
 import { render } from './render.ts';
 import { buildCheckReport, formatFromPath, type ReportFormat, renderReport } from './report.ts';
+import {
+  checkRepository,
+  materializeRepository,
+  planRepository,
+  type RepositoryReport,
+  repositoryFailureReport,
+} from './repository.ts';
 import { rootDisplayPath } from './root-manifest.ts';
 import { ARTIFACT_DEFS } from './schema.ts';
 import { ProjectionRefusedError } from './target-adapter.ts';
@@ -61,6 +68,68 @@ program
   .description('Render canonical AI agent artifacts for multiple harnesses')
   // semantic-release bumps package.json; the binary reports the same number.
   .version(pkg.version);
+
+const printRepositoryReport = (report: RepositoryReport, json = false): void => {
+  if (json) {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    for (const publication of report.publications) {
+      console.log(`[${publication.id}] ${publication.status}: ${publication.out}`);
+      for (const diagnostic of publication.report?.diagnostics ?? [])
+        console.log(
+          `${diagnostic.severity} [${publication.id}] ${diagnostic.code}: ${diagnostic.message}`,
+        );
+      for (const issue of publication.report?.issues ?? [])
+        console.error(`[${publication.id}] ${issue.code} ${issue.path}: ${issue.message}`);
+    }
+    for (const issue of report.errors)
+      console.error(
+        `${issue.publicationId ? `[${issue.publicationId}] ` : ''}${issue.code}: ${issue.message}`,
+      );
+    console.log(`${report.status}: ${report.publications.length} repository publications`);
+  }
+  if (report.status === 'failed') process.exitCode = 1;
+};
+
+program
+  .command('compile <repository>')
+  .description(
+    'Build all publications declared in agentforge.yaml after whole-repository preflight',
+  )
+  .action(async (path: string) => {
+    try {
+      const plan = await planRepository(path);
+      const report = materializeRepository(plan);
+      printRepositoryReport(report);
+      for (const publication of plan.publications) {
+        if (
+          report.publications.find(({ id }) => id === publication.definition.id)?.status !==
+          'published'
+        )
+          continue;
+        for (const diagnostic of publication.plan?.diagnostics ?? [])
+          console.log(
+            `${diagnostic.severity} [${publication.definition.id}] ${diagnostic.code}: ${diagnostic.message}`,
+          );
+      }
+    } catch (cause) {
+      printRepositoryReport(repositoryFailureReport(path, cause));
+    }
+  });
+
+program
+  .command('check <repository>')
+  .description(
+    'Check all publications declared in agentforge.yaml without writing or executing code',
+  )
+  .option('--json', 'emit one versioned repository report on stdout')
+  .action(async (path: string, opts: { json?: boolean }) => {
+    try {
+      printRepositoryReport(checkRepository(await planRepository(path)), opts.json);
+    } catch (cause) {
+      printRepositoryReport(repositoryFailureReport(path, cause), opts.json);
+    }
+  });
 
 const artifactCommands = program
   .command('artifact')

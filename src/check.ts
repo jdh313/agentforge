@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import matter from 'gray-matter';
 import type {
@@ -144,13 +144,21 @@ export function checkCompilationSnapshot(
   issues.push(...validateManifestParity(plan, outputRoot));
   issues.push(...validateNativeResources(plan, outputRoot));
   issues.push(...validateArtifactFrontmatter(plan, outputRoot));
+  issues.push(...validatePluginPaths(plan, outputRoot, false));
+  const rootFilesChecked = plan.rootOutputs.map((output) => {
+    issues.push(...checkManagedOutput(output, marketplaceRootAnchor(output), plan.redactions));
+    return {
+      publicationId: output.provenance.publicationId,
+      path: rootDisplayPath(output.destination),
+    };
+  });
   issues.sort(
     (left, right) => compareStrings(left.path, right.path) || compareStrings(left.code, right.code),
   );
   return {
     outputRoot,
     filesChecked: [...expected.keys()].toSorted(compareStrings),
-    rootFilesChecked: [],
+    rootFilesChecked,
     issues,
   };
 }
@@ -489,11 +497,15 @@ function validateNativeResources(
   return issues;
 }
 
-function validatePluginPaths(plan: CompilationPlan, outputRoot: string): MarketplaceCheckIssue[] {
+function validatePluginPaths(
+  plan: CompilationPlan,
+  outputRoot: string,
+  publicationPrefixed = true,
+): MarketplaceCheckIssue[] {
   const issues: MarketplaceCheckIssue[] = [];
   for (const registry of plan.outputs.filter(isMarketplaceRegistry)) {
     const actualPath = join(outputRoot, ...registry.destination.split('/'));
-    if (!isRegularFile(actualPath)) continue;
+    if (!isContainedRegularFile(outputRoot, registry.destination)) continue;
     const schema = registry.nativeDocument.schema;
     let document: unknown;
     try {
@@ -528,9 +540,12 @@ function validatePluginPaths(plan: CompilationPlan, outputRoot: string): Marketp
                 output.provenance.packageId === packageId,
             )
         : undefined;
-      const rootedManifestPath = `${registry.provenance.publicationId}/${registry.nativeDocument.manifestPath(directory)}`;
+      const nativeManifestPath = registry.nativeDocument.manifestPath(directory);
+      const rootedManifestPath = publicationPrefixed
+        ? `${registry.provenance.publicationId}/${nativeManifestPath}`
+        : nativeManifestPath;
       const manifestFile = join(outputRoot, ...rootedManifestPath.split('/'));
-      if (!isRegularFile(manifestFile)) {
+      if (!isContainedRegularFile(outputRoot, rootedManifestPath)) {
         issues.push({
           code: 'broken-plugin-reference',
           publicationId: registry.provenance.publicationId,
@@ -694,10 +709,6 @@ function expectedOutputMode(output: DesiredOutput): number {
 
 function formatMode(mode: number): string {
   return mode.toString(8).padStart(4, '0');
-}
-
-function isRegularFile(path: string): boolean {
-  return existsSync(path) && lstatSync(path).isFile();
 }
 
 function isContainedRegularFile(root: string, destination: string): boolean {

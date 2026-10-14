@@ -96,6 +96,41 @@ shell, OS, and global preferences; only narrows or extends here.
 - Releases are automated (semantic-release + per-platform binaries; see
   § Releases).
 
+## Repository publication contract
+
+- Lowercase `agentforge.yaml` uses the strict `agentforge.repository/v1` schema.
+  Top-level `compile <config>` and `check <config>` (`check --json`) orchestrate
+  existing compilers; they do not replace legacy marketplace/package commands.
+- Declare explicit config-relative canonical `PACKAGE.yaml` paths (no globs or
+  alternate filenames) and per-publication `out` snapshot roots. No implicit
+  publication-ID prefix, `--out` override, or report-file option is added here.
+- Marketplace publications retain existing metadata/enrollment/native fields;
+  repository `defaults` uses marketplace defaults and is required for any
+  marketplace entry. Package entries select a canonical package ID. Claude/Codex
+  marketplace and Pi standalone remain the only supported publication capabilities.
+- `targets.<target>.artifacts` replaces the shared artifact list; omission inherits
+  and `[]` explicitly selects none. Existing projection, producing-payload,
+  compatibility, and native-resource rules still apply.
+- Compile preflights every package/plan/source/output boundary read-only before
+  writing, including overlaps, aliases, duplicate/nested paths, root-registry
+  named-file collisions, protected config input, traversal, portability, and
+  symlink paths beneath config root. Then publish sequential deterministic recoverable snapshots, stopping at
+  the first runtime publication failure. Earlier successes remain; there is no
+  whole-repository atomicity, receipt tracking, or orphan-output deletion.
+- Repository `root-manifest` manages only the exact config-root registry and
+  points its local sources into the actual `out`. Legacy `<out>/<id>` layout and
+  marketplace root-manifest behavior remain unchanged.
+- Check aggregates planning and drift failures without writes, source evaluation,
+  extension execution, or package-manager processes. JSON is a versioned repository
+  envelope nesting existing check reports per entry, not a changed legacy report.
+- Standalone adjacent package definitions remain supported through their explicit
+  loader (ndr:gf2904); repository and marketplace loading remain canonical-only.
+  No Pi registry is invented (ndr:nt12pb). Consumer migration is separate, pending,
+  and must not be performed as part of this implementation.
+
+Full schema examples and ownership/failure boundaries:
+[docs/repository-publication.md](docs/repository-publication.md).
+
 ## Stack
 
 - **Runtime/test:** Bun 1.3+ (`bun test`, `bun run src/cli.ts …`).
@@ -134,6 +169,12 @@ src/
                       install locations, optional marketplace and package compilation
   package-compiler.ts — standalone package plans and source/output overlap guard;
                       reuses the shared materializer, without a runtime registry
+  repository-definition.ts — strict lowercase agentforge.yaml authoring schema;
+                      explicit canonical package universe and publication roots
+  repository.ts     — whole-repository preflight, independent snapshot publication,
+                      and aggregated checks wrapping existing compiler/check reports
+  publication-paths.ts — config-relative path, physical alias, portability,
+                      and cross-publication ownership helpers
   paths.ts          — `portableRelative` (POSIX-separated relative paths, for
                       values that ship inside documents) and `isContainedPath`
                       (strict containment test); shared by the materializer,
@@ -161,7 +202,8 @@ src/
   report.ts         — builds the `marketplace compile --report` output (JSON/MD),
                       grouping compiler diagnostics by disposition (what
                       became of the thing) rather than severity
-  cli.ts            — commander groups: artifact, marketplace, package, codex, targets;
+  cli.ts            — top-level repository compile/check; commander groups:
+                      artifact, marketplace, package, codex, targets;
                       codex nests agents; artifact inferred from canonical
                       filename, or passed via `--artifact`
   targets/
@@ -305,6 +347,9 @@ bunx biome check . --write        # auto-fix (re-run tests after)
 bunx tsc --noEmit                 # typecheck only
 
 bun run src/cli.ts targets list
+bun run src/cli.ts compile <agentforge.yaml>
+bun run src/cli.ts check <agentforge.yaml>
+bun run src/cli.ts check <agentforge.yaml> --json
 bun run src/cli.ts artifact render <source-dir> --target <name> --out <dir>
 bun run src/cli.ts artifact render <source-dir> --all-targets --out-base <dir>
 bun run src/cli.ts artifact install <source-dir> --target <name> --scope <user|project|plugin>
@@ -428,6 +473,11 @@ class is orthogonal to artifact type, and overloading `artifacts` would emit a
 spurious `unsupported-artifact-projection` for a file never meant to translate.
 
 ## Root manifest
+
+This section describes the legacy marketplace interface. Repository publications
+anchor the exact registry at config root and re-anchor local sources into each
+explicit `out`, without adding an ID prefix; see
+[docs/repository-publication.md](docs/repository-publication.md).
 
 `MARKETPLACE.yaml` publications may declare `root-manifest: true` (kebab, on the
 `authoring-keys` precedent). It adds one output anchored to the **marketplace

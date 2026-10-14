@@ -1,4 +1,4 @@
-import { lstat, readFile } from 'node:fs/promises';
+import { lstat, readFile, realpath } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { z } from 'zod';
 import {
@@ -6,6 +6,7 @@ import {
   PackagePayloadPlanError,
   type PackagePayloadPlans,
 } from './package-payload-plan.ts';
+import { isContainedPath } from './paths.ts';
 import { TARGET_NAMES, type TargetName as TargetNameT } from './types.ts';
 
 export const PACKAGE_FILENAME = 'PACKAGE.yaml';
@@ -84,9 +85,16 @@ const DeclaredLoss = z.strictObject({
   note: z.string().min(1).optional(),
 });
 
+const ArtifactPattern = z.strictObject({
+  type: Slug,
+  pattern: z.string().min(1),
+});
+
 const PackageTarget = z
   .strictObject({
     overrides: PackageDefaults.partial().optional(),
+    // An explicit list replaces the shared defaults, including when empty.
+    artifacts: z.array(ArtifactPattern).optional(),
     native: JsonObject.optional(),
     payloads: PayloadDeclaration.optional(),
     // A marketplace package still ships its reusable Markdown procedures.
@@ -96,17 +104,19 @@ const PackageTarget = z
     losses: z.array(DeclaredLoss).min(1).optional(),
   })
   .superRefine((target, context) => {
+    reportDuplicates(
+      target.artifacts ?? [],
+      ({ type, pattern }) => `${type}:${pattern}`,
+      context,
+      'artifact projection',
+      ['artifacts'],
+    );
     reportDuplicates(target.losses ?? [], ({ construct }) => construct, context, 'declared loss', [
       'losses',
     ]);
   });
 
 export type DeclaredLossDefinition = z.infer<typeof DeclaredLoss>;
-
-const ArtifactPattern = z.strictObject({
-  type: Slug,
-  pattern: z.string().min(1),
-});
 
 // Document class is orthogonal to artifact type: it says whether a file's
 // Claude-only constructs are being *described* or *invoked*, not whether the
@@ -153,13 +163,25 @@ export const CanonicalPackage = z
     if (
       definition.artifacts.length === 0 &&
       !definition.payloads &&
-      !Object.values(definition.targets).some((target) => target?.payloads)
+      !Object.values(definition.targets).some(
+        (target) => target?.payloads || (target?.artifacts?.length ?? 0) > 0,
+      )
     ) {
       context.addIssue({
         code: 'custom',
         path: ['artifacts'],
         message: 'empty artifacts requires a producing payload declaration',
       });
+    }
+    for (const [name, target] of Object.entries(definition.targets)) {
+      if (target.artifacts?.length === 0 && !definition.payloads && !target.payloads) {
+        context.addIssue({
+          code: 'custom',
+          path: ['targets', name, 'artifacts'],
+          message:
+            'empty artifacts override requires a producing payload declaration for this target',
+        });
+      }
     }
     reportDuplicates(
       definition.artifacts,
@@ -283,8 +305,12 @@ export interface LoadedPackage {
   path: string;
   definition: PackageDefinition;
   artifacts: ReadonlyMap<string, readonly LoadedArtifact[]>;
+  /** Explicit replacement selections, resolved while loading; absent for legacy fixtures. */
+  targetArtifacts?: Partial<Record<TargetNameT, ReadonlyMap<string, readonly LoadedArtifact[]>>>;
   files: readonly string[];
   resources: readonly LoadedArtifact[];
+  /** Resource scans for effective target selections; optional for legacy fixtures. */
+  targetResources?: Partial<Record<TargetNameT, readonly LoadedArtifact[]>>;
   // Absolute paths of files declared reference-or-diagnostic. Their Claude-only
   // constructs are documentation about Claude, not instructions to a model, so
   // they are exempt from body scanning.
@@ -394,24 +420,13 @@ export async function loadStandalonePackageDefinition(
 async function loadPackageSource(path: string): Promise<LoadedPackage> {
   const definition = parsePackageDefinition(await readFile(path, 'utf8'), path);
   const root = dirname(resolve(path));
-  const artifacts = new Map<string, LoadedArtifact[]>();
-
-  for (const projection of definition.artifacts) {
-    const matches = await expandPattern(root, projection.pattern);
-    if (matches.length === 0) {
-      throw new DefinitionError(
-        `artifact pattern "${projection.pattern}" for type "${projection.type}" matched no files`,
-        path,
-      );
+  const artifacts = await loadArtifactPatterns(root, definition.artifacts, path);
+  const targetArtifacts: NonNullable<LoadedPackage['targetArtifacts']> = {};
+  for (const name of TARGET_NAMES) {
+    const patterns = definition.targets[name]?.artifacts;
+    if (patterns !== undefined) {
+      targetArtifacts[name] = await loadArtifactPatterns(root, patterns, path);
     }
-    const current = artifacts.get(projection.type) ?? [];
-    const loaded = await Promise.all(
-      matches.map(async (artifactPath) => ({
-        path: artifactPath,
-        content: await readFile(artifactPath, 'utf8'),
-      })),
-    );
-    artifacts.set(projection.type, [...current, ...loaded]);
   }
 
   const resolvedPath = resolve(path);
@@ -438,7 +453,10 @@ async function loadPackageSource(path: string): Promise<LoadedPackage> {
 
   // Artifacts are already loaded above; skip them so a file declared as an
   // artifact is not scanned twice under two identities.
-  const artifactPaths = new Set([...artifacts.values()].flat().map(({ path: each }) => each));
+  const selections = [artifacts, ...Object.values(targetArtifacts)];
+  const artifactPaths = new Set(
+    selections.flatMap((selection) => [...selection.values()].flat().map(({ path: each }) => each)),
+  );
   const resources = await Promise.all(
     files
       .filter(
@@ -450,16 +468,78 @@ async function loadPackageSource(path: string): Promise<LoadedPackage> {
       .map(async (file) => ({ path: file, content: await readFile(file, 'utf8') })),
   );
 
+  // A source omitted as an artifact can still ship beneath a selected skill's
+  // resource directories or via supplied payloads. Scan it in that target's resource context, without
+  // reviving unrelated omitted artifacts as package-wide diagnostics.
+  const targetResources: NonNullable<LoadedPackage['targetResources']> = {};
+  const declaredSources = new Map(
+    selections.flatMap((selection) =>
+      [...selection.values()].flat().map((artifact) => [artifact.path, artifact] as const),
+    ),
+  );
+  for (const name of TARGET_NAMES) {
+    if (!definition.targets[name]) continue;
+    const selection = targetArtifacts[name] ?? artifacts;
+    const selectedPaths = new Set([...selection.values()].flat().map((artifact) => artifact.path));
+    const skillRoots = (selection.get('skill') ?? []).map((artifact) => dirname(artifact.path));
+    const suppliedSources = new Set((payloads[name] ?? []).map((payload) => payload.sourcePath));
+    const shippedResources = [...declaredSources.values()].filter(
+      (artifact) =>
+        !selectedPaths.has(artifact.path) &&
+        ((suppliedSources.has(artifact.path) && isResourcePath(root, artifact.path)) ||
+          skillRoots.some((skillRoot) => {
+            const relative = portableRelativePath(skillRoot, artifact.path);
+            return (
+              isContainedPath(skillRoot, artifact.path) &&
+              RESOURCE_SUBDIRS.includes(relative.split('/')[0] ?? '') &&
+              isResourcePath(skillRoot, artifact.path)
+            );
+          })),
+    );
+    targetResources[name] = [...resources, ...shippedResources];
+  }
+
   return {
     path: resolvedPath,
     definition,
     artifacts,
+    targetArtifacts,
     files,
     resources,
+    targetResources,
     exemptDocuments,
     payloads,
     fileModes,
   };
+}
+
+async function loadArtifactPatterns(
+  root: string,
+  patterns: PackageDefinition['artifacts'],
+  sourcePath: string,
+): Promise<Map<string, LoadedArtifact[]>> {
+  const artifacts = new Map<string, LoadedArtifact[]>();
+  for (const projection of patterns) {
+    const matches = await expandPattern(root, projection.pattern, false, sourcePath);
+    if (matches.length === 0) {
+      throw new DefinitionError(
+        `artifact pattern "${projection.pattern}" for type "${projection.type}" matched no files`,
+        sourcePath,
+      );
+    }
+    const current = artifacts.get(projection.type) ?? [];
+    const seen = new Set(current.map((artifact) => artifact.path));
+    const loaded = await Promise.all(
+      matches
+        .filter((path) => !seen.has(path))
+        .map(async (path) => ({
+          path,
+          content: await readFile(path, 'utf8'),
+        })),
+    );
+    artifacts.set(projection.type, [...current, ...loaded]);
+  }
+  return artifacts;
 }
 
 export async function loadMarketplaceDefinition(path: string): Promise<LoadedMarketplace> {
@@ -535,16 +615,34 @@ async function expandPattern(
   root: string,
   pattern: string,
   includeSymlinkCandidates = false,
+  artifactDefinitionPath?: string,
 ): Promise<string[]> {
   const glob = new Bun.Glob(pattern);
   const matches: string[] = [];
+  const physicalRoot = artifactDefinitionPath ? await realpath(root) : undefined;
   for await (const match of glob.scan({ cwd: root, absolute: true, onlyFiles: false })) {
+    if (artifactDefinitionPath && !isContainedPath(root, resolve(match))) {
+      throw new DefinitionError(
+        `artifact pattern "${pattern}" escapes the package root`,
+        artifactDefinitionPath,
+      );
+    }
     const info = await lstat(match);
     // Only the payload file inventory retains symlinks, so its validator can
     // refuse them rather than disguise them as a no-match. Artifact/document
     // collection must never read a symlink's target as canonical source.
     if (info.isFile() || (includeSymlinkCandidates && info.isSymbolicLink())) {
       if (!includeSymlinkCandidates && (await traversesSymlink(root, match))) continue;
+      if (
+        artifactDefinitionPath &&
+        physicalRoot &&
+        !isContainedPath(physicalRoot, await realpath(match))
+      ) {
+        throw new DefinitionError(
+          `artifact pattern "${pattern}" escapes the physical package root`,
+          artifactDefinitionPath,
+        );
+      }
       matches.push(resolve(match));
     }
   }
